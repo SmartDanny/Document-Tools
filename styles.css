@@ -1,3 +1,13 @@
+/**
+ * Document Tools - styles.css
+ * Version: 1.0.0
+ * Last Updated: 2026-01-08
+ * 
+ * Copyright (c) 2026 Smart Danny. All rights reserved.
+ * 이 소프트웨어는 저작권법의 보호를 받습니다.
+ * 무단 복제, 배포, 수정을 금지합니다.
+ */
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -25,7 +35,9 @@ body {
     margin-bottom: 0;
 }
 .tab-btn {
-    padding: 14px 40px;
+    flex: 1;
+    max-width: 180px;
+    padding: 14px 10px;
     background: #fff;
     border: 1px solid #ddd;
     border-bottom: none;
@@ -35,6 +47,7 @@ body {
     color: #333;
     transition: all 0.2s ease;
     font-family: inherit;
+    text-align: center;
 }
 .tab-btn:first-child { border-radius: 8px 0 0 0; }
 .tab-btn:last-child { border-radius: 0 8px 0 0; }
@@ -820,7 +833,7 @@ textarea.drag-over {
 ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
 
 @media (max-width: 768px) {
-    .tab-btn { padding: 12px 20px; font-size: 0.85em; }
+    .tab-btn { padding: 12px 8px; font-size: 0.8em; max-width: none; }
     .btn-group { flex-direction: column; }
     .btn { width: 100%; justify-content: center; }
 }
@@ -1059,4 +1072,18 @@ textarea.drag-over {
     border: none;
     border-top: 1px solid #ddd;
     margin: 15px 0;
+}
+
+/* Footer 스타일 */
+.app-footer {
+    background: #1e3a5f;
+    color: #a0aec0;
+    text-align: center;
+    padding: 15px 20px;
+    font-size: 0.85em;
+    margin-top: 40px;
+}
+.app-footer .footer-separator {
+    margin: 0 10px;
+    color: #4a5568;
 }

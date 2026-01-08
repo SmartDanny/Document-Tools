@@ -1,6 +1,12 @@
 /**
- * 문서 도구 모음 - 공통 유틸리티 함수
- * utils.js
+ * Document Tools - utils.js
+ * 공통 유틸리티 함수 모음
+ * Version: 1.0.0
+ * Last Updated: 2026-01-08
+ * 
+ * Copyright (c) 2026 Smart Danny. All rights reserved.
+ * 이 소프트웨어는 저작권법의 보호를 받습니다.
+ * 무단 복제, 배포, 수정을 금지합니다.
  */
 
 // ============================================
