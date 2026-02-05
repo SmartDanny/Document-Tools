@@ -4523,86 +4523,125 @@ def fibonacci(n):
                     return;
                 }
                 
-                // 청구항 섹션: 국문 청구항 그룹 + 영문 청구항 그룹 번갈아 배치
+                // 청구항 섹션: 국문 청구항 그룹 + 영문 청구항 그룹 번갈아 배치 (청구항 번호 기반 매칭)
                 if (sectionKey === 'claims') {
                     // 국문 청구항 그룹화: 【청구항 X】 또는 [청구항 X]로 시작 → 마침표(.)로 끝나는 줄까지
                     function groupKoreanClaims(paragraphs) {
-                        const claims = [];
+                        const claims = {}; // 청구항 번호를 키로 사용
+                        const preContent = []; // 청구항 시작 전 내용
                         let currentClaim = [];
+                        let currentClaimNum = null;
                         let inClaim = false;
                         
                         for (const line of paragraphs) {
                             const trimmed = removeParaNum(line).trim();
                             // 청구항 시작: 【청구항 X】 또는 [청구항 X]
-                            if (/^[【\[]청구항\s*\d+[】\]]/.test(trimmed)) {
-                                if (currentClaim.length > 0) {
-                                    claims.push(currentClaim);
+                            const claimMatch = trimmed.match(/^[【\[]청구항\s*(\d+)[】\]]/);
+                            if (claimMatch) {
+                                // 이전 청구항 저장
+                                if (currentClaimNum !== null && currentClaim.length > 0) {
+                                    claims[currentClaimNum] = currentClaim;
+                                } else if (currentClaim.length > 0 && !inClaim) {
+                                    preContent.push(...currentClaim);
                                 }
+                                currentClaimNum = parseInt(claimMatch[1]);
                                 currentClaim = [line];
                                 inClaim = true;
                             } else if (inClaim) {
                                 currentClaim.push(line);
                                 // 마침표로 끝나면 그룹 종료
                                 if (/\.\s*$/.test(trimmed)) {
-                                    claims.push(currentClaim);
+                                    if (currentClaimNum !== null) {
+                                        claims[currentClaimNum] = currentClaim;
+                                    }
                                     currentClaim = [];
+                                    currentClaimNum = null;
                                     inClaim = false;
                                 }
                             } else {
-                                // 청구항 시작 전의 내용은 별도 처리
-                                currentClaim.push(line);
+                                // 청구항 시작 전의 내용
+                                preContent.push(line);
                             }
                         }
-                        if (currentClaim.length > 0) {
-                            claims.push(currentClaim);
+                        // 마지막 청구항 저장
+                        if (currentClaimNum !== null && currentClaim.length > 0) {
+                            claims[currentClaimNum] = currentClaim;
+                        } else if (currentClaim.length > 0 && !inClaim) {
+                            preContent.push(...currentClaim);
                         }
-                        return claims;
+                        
+                        return { claims, preContent };
                     }
                     
                     // 영문 청구항 그룹화: 숫자로 시작 → 마침표(.)로 끝나는 줄까지
                     function groupEnglishClaims(paragraphs) {
-                        const claims = [];
+                        const claims = {}; // 청구항 번호를 키로 사용
+                        const preContent = []; // 청구항 시작 전 내용
                         let currentClaim = [];
+                        let currentClaimNum = null;
                         let inClaim = false;
                         
                         for (const line of paragraphs) {
                             const trimmed = removeParaNum(line).trim();
                             // 청구항 시작: 숫자. 로 시작
-                            if (/^\d+\.\s/.test(trimmed)) {
-                                if (currentClaim.length > 0) {
-                                    claims.push(currentClaim);
+                            const claimMatch = trimmed.match(/^(\d+)\.\s/);
+                            if (claimMatch) {
+                                // 이전 청구항 저장
+                                if (currentClaimNum !== null && currentClaim.length > 0) {
+                                    claims[currentClaimNum] = currentClaim;
+                                } else if (currentClaim.length > 0 && !inClaim) {
+                                    preContent.push(...currentClaim);
                                 }
+                                currentClaimNum = parseInt(claimMatch[1]);
                                 currentClaim = [line];
                                 inClaim = true;
                             } else if (inClaim) {
                                 currentClaim.push(line);
                                 // 마침표로 끝나면 그룹 종료
                                 if (/\.\s*$/.test(trimmed)) {
-                                    claims.push(currentClaim);
+                                    if (currentClaimNum !== null) {
+                                        claims[currentClaimNum] = currentClaim;
+                                    }
                                     currentClaim = [];
+                                    currentClaimNum = null;
                                     inClaim = false;
                                 }
                             } else {
                                 // 청구항 시작 전의 내용
-                                currentClaim.push(line);
+                                preContent.push(line);
                             }
                         }
-                        if (currentClaim.length > 0) {
-                            claims.push(currentClaim);
+                        // 마지막 청구항 저장
+                        if (currentClaimNum !== null && currentClaim.length > 0) {
+                            claims[currentClaimNum] = currentClaim;
+                        } else if (currentClaim.length > 0 && !inClaim) {
+                            preContent.push(...currentClaim);
                         }
-                        return claims;
+                        
+                        return { claims, preContent };
                     }
                     
-                    const korClaims = groupKoreanClaims(korParas);
-                    const engClaims = groupEnglishClaims(engParas);
+                    const korResult = groupKoreanClaims(korParas);
+                    const engResult = groupEnglishClaims(engParas);
                     
-                    const maxClaimCount = Math.max(korClaims.length, engClaims.length);
-                    for (let i = 0; i < maxClaimCount; i++) {
-                        if (i < korClaims.length) {
-                            korClaims[i].forEach(line => addKorLine(line));
+                    // 청구항 시작 전 내용 먼저 출력 (국문 → 영문)
+                    korResult.preContent.forEach(line => addKorLine(line));
+                    engResult.preContent.forEach(line => addEngLine(removeParaNum(line)));
+                    
+                    // 청구항 번호 목록 (모든 번호 수집 후 정렬)
+                    const allClaimNums = new Set([
+                        ...Object.keys(korResult.claims).map(Number),
+                        ...Object.keys(engResult.claims).map(Number)
+                    ]);
+                    const sortedClaimNums = Array.from(allClaimNums).sort((a, b) => a - b);
+                    
+                    // 청구항 번호순으로 국문 → 영문 배치
+                    for (const num of sortedClaimNums) {
+                        if (korResult.claims[num]) {
+                            korResult.claims[num].forEach(line => addKorLine(line));
                         }
-                        if (i < engClaims.length) {
-                            engClaims[i].forEach(line => addEngLine(removeParaNum(line)));
+                        if (engResult.claims[num]) {
+                            engResult.claims[num].forEach(line => addEngLine(removeParaNum(line)));
                         }
                     }
                     return;
