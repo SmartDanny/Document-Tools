@@ -4525,14 +4525,14 @@ def fibonacci(n):
                 
                 // 청구항 섹션: 국문 청구항 그룹 + 영문 청구항 그룹 번갈아 배치 (청구항 번호 기반 매칭)
                 if (sectionKey === 'claims') {
-                    // 국문 청구항 그룹화: 【청구항 X】 또는 [청구항 X]로 시작 → 마침표(.)로 끝나는 줄까지
+                    // 국문 청구항 그룹화: 【청구항 X】 또는 [청구항 X] 헤더 기준으로 그룹 구분
+                    // (다음 청구항 헤더가 나올 때까지 모든 줄을 현재 청구항 그룹에 포함)
                     function groupKoreanClaims(paragraphs) {
                         const claims = {}; // 청구항 번호를 키로 사용
                         const preContent = []; // 청구항 시작 전 내용
                         let currentClaim = [];
                         let currentClaimNum = null;
-                        let inClaim = false;
-                        
+
                         for (const line of paragraphs) {
                             const trimmed = removeParaNum(line).trim();
                             // 청구항 시작: 【청구항 X】 또는 [청구항 X]
@@ -4541,23 +4541,12 @@ def fibonacci(n):
                                 // 이전 청구항 저장
                                 if (currentClaimNum !== null && currentClaim.length > 0) {
                                     claims[currentClaimNum] = currentClaim;
-                                } else if (currentClaim.length > 0 && !inClaim) {
-                                    preContent.push(...currentClaim);
                                 }
                                 currentClaimNum = parseInt(claimMatch[1]);
                                 currentClaim = [line];
-                                inClaim = true;
-                            } else if (inClaim) {
+                            } else if (currentClaimNum !== null) {
+                                // 현재 청구항에 속하는 줄 추가
                                 currentClaim.push(line);
-                                // 마침표로 끝나면 그룹 종료
-                                if (/\.\s*$/.test(trimmed)) {
-                                    if (currentClaimNum !== null) {
-                                        claims[currentClaimNum] = currentClaim;
-                                    }
-                                    currentClaim = [];
-                                    currentClaimNum = null;
-                                    inClaim = false;
-                                }
                             } else {
                                 // 청구항 시작 전의 내용
                                 preContent.push(line);
@@ -4566,21 +4555,19 @@ def fibonacci(n):
                         // 마지막 청구항 저장
                         if (currentClaimNum !== null && currentClaim.length > 0) {
                             claims[currentClaimNum] = currentClaim;
-                        } else if (currentClaim.length > 0 && !inClaim) {
-                            preContent.push(...currentClaim);
                         }
-                        
+
                         return { claims, preContent };
                     }
-                    
-                    // 영문 청구항 그룹화: 숫자로 시작 → 마침표(.)로 끝나는 줄까지
+
+                    // 영문 청구항 그룹화: 숫자. 헤더 기준으로 그룹 구분
+                    // (다음 청구항 헤더가 나올 때까지 모든 줄을 현재 청구항 그룹에 포함)
                     function groupEnglishClaims(paragraphs) {
                         const claims = {}; // 청구항 번호를 키로 사용
                         const preContent = []; // 청구항 시작 전 내용
                         let currentClaim = [];
                         let currentClaimNum = null;
-                        let inClaim = false;
-                        
+
                         for (const line of paragraphs) {
                             const trimmed = removeParaNum(line).trim();
                             // 청구항 시작: 숫자. 로 시작
@@ -4589,23 +4576,12 @@ def fibonacci(n):
                                 // 이전 청구항 저장
                                 if (currentClaimNum !== null && currentClaim.length > 0) {
                                     claims[currentClaimNum] = currentClaim;
-                                } else if (currentClaim.length > 0 && !inClaim) {
-                                    preContent.push(...currentClaim);
                                 }
                                 currentClaimNum = parseInt(claimMatch[1]);
                                 currentClaim = [line];
-                                inClaim = true;
-                            } else if (inClaim) {
+                            } else if (currentClaimNum !== null) {
+                                // 현재 청구항에 속하는 줄 추가
                                 currentClaim.push(line);
-                                // 마침표로 끝나면 그룹 종료
-                                if (/\.\s*$/.test(trimmed)) {
-                                    if (currentClaimNum !== null) {
-                                        claims[currentClaimNum] = currentClaim;
-                                    }
-                                    currentClaim = [];
-                                    currentClaimNum = null;
-                                    inClaim = false;
-                                }
                             } else {
                                 // 청구항 시작 전의 내용
                                 preContent.push(line);
@@ -4614,10 +4590,8 @@ def fibonacci(n):
                         // 마지막 청구항 저장
                         if (currentClaimNum !== null && currentClaim.length > 0) {
                             claims[currentClaimNum] = currentClaim;
-                        } else if (currentClaim.length > 0 && !inClaim) {
-                            preContent.push(...currentClaim);
                         }
-                        
+
                         return { claims, preContent };
                     }
                     
