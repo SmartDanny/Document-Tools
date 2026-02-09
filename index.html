@@ -4499,11 +4499,26 @@ def fibonacci(n):
             
             // 섹션 내용 병합 함수
             function mergeSectionContent(korSection, engSection, sectionKey) {
-                // 국문 부제 출력 (있는 경우)
-                if (korSection && korSection.header) {
-                    addKorLine(korSection.header);
-                } else if (engSection && engSection.header && !korSection) {
-                    // 국문에 없고 영문만 있으면 영문 부제도 출력
+                // 부제 출력: 영문부제는 영문 색상, 국문부제는 국문 색상
+                if (korSection && korSection.header && engSection && engSection.header) {
+                    // 양쪽 모두 부제 있음
+                    if (/[가-힣]/.test(korSection.header)) {
+                        // 국문 섹션의 부제가 한글 → 영문부제 먼저, 국문부제 다음
+                        addEngLine(engSection.header);
+                        addKorLine(korSection.header);
+                    } else {
+                        // 국문 섹션의 부제가 영문 → 영문 색상으로 한 번만 출력
+                        addEngLine(korSection.header);
+                    }
+                } else if (korSection && korSection.header) {
+                    // 국문 섹션만 있음
+                    if (/[가-힣]/.test(korSection.header)) {
+                        addKorLine(korSection.header);
+                    } else {
+                        addEngLine(korSection.header);
+                    }
+                } else if (engSection && engSection.header) {
+                    // 영문 섹션만 있음
                     addEngLine(engSection.header);
                 }
                 
@@ -4512,8 +4527,14 @@ def fibonacci(n):
                 
                 // symbols 섹션: 국문 전체 배치 후 영문 전체 배치
                 if (sectionKey === 'symbols') {
-                    // 국문 단락 전체 출력
-                    korParas.forEach(line => addKorLine(line));
+                    // 국문 단락 전체 출력 (영문부제는 영문 색상)
+                    korParas.forEach(line => {
+                        if (isAnySubtitle(line) && !/[가-힣]/.test(removeParaNum(line))) {
+                            addEngLine(removeParaNum(line));
+                        } else {
+                            addKorLine(line);
+                        }
+                    });
                     // 영문 단락 전체 출력 (부제 제외, 단락번호 제거)
                     engParas.forEach(line => {
                         if (isContentParagraph(line)) {
@@ -4525,14 +4546,14 @@ def fibonacci(n):
                 
                 // 청구항 섹션: 국문 청구항 그룹 + 영문 청구항 그룹 번갈아 배치 (청구항 번호 기반 매칭)
                 if (sectionKey === 'claims') {
-                    // 국문 청구항 그룹화: 【청구항 X】 또는 [청구항 X]로 시작 → 마침표(.)로 끝나는 줄까지
+                    // 국문 청구항 그룹화: 【청구항 X】 또는 [청구항 X] 헤더 기준으로 그룹 구분
+                    // (다음 청구항 헤더가 나올 때까지 모든 줄을 현재 청구항 그룹에 포함)
                     function groupKoreanClaims(paragraphs) {
                         const claims = {}; // 청구항 번호를 키로 사용
                         const preContent = []; // 청구항 시작 전 내용
                         let currentClaim = [];
                         let currentClaimNum = null;
-                        let inClaim = false;
-                        
+
                         for (const line of paragraphs) {
                             const trimmed = removeParaNum(line).trim();
                             // 청구항 시작: 【청구항 X】 또는 [청구항 X]
@@ -4541,23 +4562,12 @@ def fibonacci(n):
                                 // 이전 청구항 저장
                                 if (currentClaimNum !== null && currentClaim.length > 0) {
                                     claims[currentClaimNum] = currentClaim;
-                                } else if (currentClaim.length > 0 && !inClaim) {
-                                    preContent.push(...currentClaim);
                                 }
                                 currentClaimNum = parseInt(claimMatch[1]);
                                 currentClaim = [line];
-                                inClaim = true;
-                            } else if (inClaim) {
+                            } else if (currentClaimNum !== null) {
+                                // 현재 청구항에 속하는 줄 추가
                                 currentClaim.push(line);
-                                // 마침표로 끝나면 그룹 종료
-                                if (/\.\s*$/.test(trimmed)) {
-                                    if (currentClaimNum !== null) {
-                                        claims[currentClaimNum] = currentClaim;
-                                    }
-                                    currentClaim = [];
-                                    currentClaimNum = null;
-                                    inClaim = false;
-                                }
                             } else {
                                 // 청구항 시작 전의 내용
                                 preContent.push(line);
@@ -4566,21 +4576,19 @@ def fibonacci(n):
                         // 마지막 청구항 저장
                         if (currentClaimNum !== null && currentClaim.length > 0) {
                             claims[currentClaimNum] = currentClaim;
-                        } else if (currentClaim.length > 0 && !inClaim) {
-                            preContent.push(...currentClaim);
                         }
-                        
+
                         return { claims, preContent };
                     }
-                    
-                    // 영문 청구항 그룹화: 숫자로 시작 → 마침표(.)로 끝나는 줄까지
+
+                    // 영문 청구항 그룹화: 숫자. 헤더 기준으로 그룹 구분
+                    // (다음 청구항 헤더가 나올 때까지 모든 줄을 현재 청구항 그룹에 포함)
                     function groupEnglishClaims(paragraphs) {
                         const claims = {}; // 청구항 번호를 키로 사용
                         const preContent = []; // 청구항 시작 전 내용
                         let currentClaim = [];
                         let currentClaimNum = null;
-                        let inClaim = false;
-                        
+
                         for (const line of paragraphs) {
                             const trimmed = removeParaNum(line).trim();
                             // 청구항 시작: 숫자. 로 시작
@@ -4589,23 +4597,12 @@ def fibonacci(n):
                                 // 이전 청구항 저장
                                 if (currentClaimNum !== null && currentClaim.length > 0) {
                                     claims[currentClaimNum] = currentClaim;
-                                } else if (currentClaim.length > 0 && !inClaim) {
-                                    preContent.push(...currentClaim);
                                 }
                                 currentClaimNum = parseInt(claimMatch[1]);
                                 currentClaim = [line];
-                                inClaim = true;
-                            } else if (inClaim) {
+                            } else if (currentClaimNum !== null) {
+                                // 현재 청구항에 속하는 줄 추가
                                 currentClaim.push(line);
-                                // 마침표로 끝나면 그룹 종료
-                                if (/\.\s*$/.test(trimmed)) {
-                                    if (currentClaimNum !== null) {
-                                        claims[currentClaimNum] = currentClaim;
-                                    }
-                                    currentClaim = [];
-                                    currentClaimNum = null;
-                                    inClaim = false;
-                                }
                             } else {
                                 // 청구항 시작 전의 내용
                                 preContent.push(line);
@@ -4614,10 +4611,8 @@ def fibonacci(n):
                         // 마지막 청구항 저장
                         if (currentClaimNum !== null && currentClaim.length > 0) {
                             claims[currentClaimNum] = currentClaim;
-                        } else if (currentClaim.length > 0 && !inClaim) {
-                            preContent.push(...currentClaim);
                         }
-                        
+
                         return { claims, preContent };
                     }
                     
@@ -4668,8 +4663,12 @@ def fibonacci(n):
                 
                 // 국문 라인을 순서대로 처리
                 for (const korLine of korParas) {
-                    // 국문 라인 출력 (부제든 본문이든 모두 출력)
-                    addKorLine(korLine);
+                    // 영문부제는 영문 색상으로 출력, 나머지는 국문 색상
+                    if (isAnySubtitle(korLine) && !/[가-힣]/.test(removeParaNum(korLine))) {
+                        addEngLine(removeParaNum(korLine));
+                    } else {
+                        addKorLine(korLine);
+                    }
                     
                     // 본문 단락이면 대응하는 영문 찾기
                     if (isContentParagraph(korLine)) {
