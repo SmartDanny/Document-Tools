@@ -4638,7 +4638,12 @@ def fibonacci(n):
                             korResult.claims[num].forEach(line => addKorLine(line));
                         }
                         if (engResult.claims[num]) {
-                            engResult.claims[num].forEach(line => addEngLine(removeParaNum(line)));
+                            engResult.claims[num].forEach(line => {
+                                const cleaned = removeParaNum(line);
+                                // 영문청구항 번호(X.)와 첫 단어 사이에 탭 삽입
+                                const formatted = cleaned.replace(/^(\d+\.)\s*/, '$1\t');
+                                addEngLine(formatted);
+                            });
                         }
                     }
                     return;
