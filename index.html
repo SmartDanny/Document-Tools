@@ -4393,7 +4393,7 @@ def fibonacci(n):
             // 청구항 시작 패턴 감지
             function isClaimStart(line) {
                 const trimmed = removeParaNum(line).trim();
-                if (/^\d+\.\s/.test(trimmed)) return true;
+                if (/^\d+\./.test(trimmed)) return true;
                 if (/^【청구항\s*\d+】/.test(trimmed)) return true;
                 if (/^【Claim\s*\d+】/i.test(trimmed)) return true;
                 return false;
@@ -4486,9 +4486,17 @@ def fibonacci(n):
             
             // 단락 추가 헬퍼 함수
             function addKorLine(line) {
+                const cleaned = removeParaNum(line).trim();
+                // 한글이 포함된 줄만 국문(갈색)으로, 한글이 없는 줄(영문부제 등)은 영문(검정)으로 처리
+                const hasKorean = /[가-힣]/.test(cleaned);
                 resultLines.push(line);
-                mergeResultPairs.push({ text: line, type: 'kor' });
-                resultHtml += `<div style="background:#e8f5e9;padding:8px 12px;margin:4px 0;border-radius:4px;border-left:3px solid #4caf50;">${escapeHtml(line)}</div>`;
+                if (hasKorean) {
+                    mergeResultPairs.push({ text: line, type: 'kor' });
+                    resultHtml += `<div style="background:#e8f5e9;padding:8px 12px;margin:4px 0;border-radius:4px;border-left:3px solid #4caf50;">${escapeHtml(line)}</div>`;
+                } else {
+                    mergeResultPairs.push({ text: line, type: 'eng' });
+                    resultHtml += `<div style="background:#e3f2fd;padding:8px 12px;margin:4px 0;border-radius:4px;border-left:3px solid #2196f3;">${escapeHtml(line)}</div>`;
+                }
             }
             
             function addEngLine(line) {
@@ -4527,14 +4535,8 @@ def fibonacci(n):
                 
                 // symbols 섹션: 국문 전체 배치 후 영문 전체 배치
                 if (sectionKey === 'symbols') {
-                    // 국문 단락 전체 출력 (영문부제는 영문 색상)
-                    korParas.forEach(line => {
-                        if (isAnySubtitle(line) && !/[가-힣]/.test(removeParaNum(line))) {
-                            addEngLine(removeParaNum(line));
-                        } else {
-                            addKorLine(line);
-                        }
-                    });
+                    // 국문 단락 전체 출력 (addKorLine이 한글 유무로 색상 자동 판별)
+                    korParas.forEach(line => addKorLine(line));
                     // 영문 단락 전체 출력 (부제 제외, 단락번호 제거)
                     engParas.forEach(line => {
                         if (isContentParagraph(line)) {
@@ -4591,8 +4593,8 @@ def fibonacci(n):
 
                         for (const line of paragraphs) {
                             const trimmed = removeParaNum(line).trim();
-                            // 청구항 시작: 숫자. 로 시작
-                            const claimMatch = trimmed.match(/^(\d+)\.\s/);
+                            // 청구항 시작: 숫자. 로 시작 (공백 유무 무관)
+                            const claimMatch = trimmed.match(/^(\d+)\./);
                             if (claimMatch) {
                                 // 이전 청구항 저장
                                 if (currentClaimNum !== null && currentClaim.length > 0) {
@@ -4663,12 +4665,8 @@ def fibonacci(n):
                 
                 // 국문 라인을 순서대로 처리
                 for (const korLine of korParas) {
-                    // 영문부제는 영문 색상으로 출력, 나머지는 국문 색상
-                    if (isAnySubtitle(korLine) && !/[가-힣]/.test(removeParaNum(korLine))) {
-                        addEngLine(removeParaNum(korLine));
-                    } else {
-                        addKorLine(korLine);
-                    }
+                    // addKorLine이 한글 유무로 색상 자동 판별 (영문부제는 자동으로 영문 색상)
+                    addKorLine(korLine);
                     
                     // 본문 단락이면 대응하는 영문 찾기
                     if (isContentParagraph(korLine)) {
