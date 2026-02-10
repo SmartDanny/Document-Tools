@@ -2974,7 +2974,10 @@ def fibonacci(n):
             
             // 영문본: subtitle + english
             const enLines = lines3.filter(l => l.type === 'subtitle' || l.type === 'english');
-            const en = enLines.map(l => l.text);
+            const en = enLines.map(l => {
+                // 영문청구항 번호(X.)와 첫 단어 사이에 탭 삽입
+                return l.text.replace(/^(\d+\.)\s*/, '$1\t');
+            });
             const enText = en.length ? en.join('\n') : '영문본에 포함될 내용이 없습니다';
             
             // 원본 텍스트 저장 (복사용)
