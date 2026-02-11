@@ -2284,9 +2284,16 @@ def fibonacci(n):
                 
                 // WHAT IS CLAIMED IS: 이후, 영문 단락이 마침표로 끝나면 다음에 빈줄 추가
                 if (inClaims) {
-                    resultLines.push(line);
-                    // 영문 단락(한글이 없는)이고 마침표로 끝나는 경우에만 빈줄 추가
+                    // 영문청구항 번호(X.)와 첫 단어 사이에 탭 삽입
                     const isKorean = /[가-힣]/.test(trimmed);
+                    if (!isKorean && /^\d+\./.test(trimmed)) {
+                        const modifiedLine = line.replace(/^(\s*)(\d+\.)\s*/, '$1$2\t');
+                        if (modifiedLine !== line) changeCount++;
+                        resultLines.push(modifiedLine);
+                    } else {
+                        resultLines.push(line);
+                    }
+                    // 영문 단락(한글이 없는)이고 마침표로 끝나는 경우에만 빈줄 추가
                     if (!isKorean && /\.\s*$/.test(trimmed)) {
                         // 다음 줄이 빈줄이 아니고, 마지막이 아닌 경우에만 빈줄 추가
                         if (i + 1 < lines.length && lines[i + 1].trim() !== '') {
