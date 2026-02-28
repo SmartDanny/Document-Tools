@@ -468,17 +468,23 @@
                 <div id="merge3StatsSection" class="section hidden">
                     <div class="section-title">병합 통계</div>
                     <div class="stats-row">
-                        <div class="stat-card green"><div class="stat-number" id="mergeKorCount">0</div><div class="stat-label">국문 단락</div></div>
-                        <div class="stat-card blue"><div class="stat-number" id="mergeEngCount">0</div><div class="stat-label">영문 단락</div></div>
-                        <div class="stat-card purple"><div class="stat-number" id="mergeTotalCount">0</div><div class="stat-label">총 단락</div></div>
+                        <div class="stat-card green"><div class="stat-number" id="mergeKorCount">0</div><div class="stat-label">국문 단락수</div></div>
+                        <div class="stat-card blue"><div class="stat-number" id="mergeEngCount">0</div><div class="stat-label">영문 단락수</div></div>
+                        <div class="stat-card purple"><div class="stat-number" id="mergeTotalCount">0</div><div class="stat-label">병합 라인수</div></div>
                     </div>
                 </div>
                 <div id="merge3ResultSection" class="section hidden">
                     <div class="section-title">3단계: 한영혼합본 결과</div>
-                    <div class="btn-group" style="margin-bottom:15px;">
+                    <div class="btn-group" style="margin-bottom:10px;">
                         <button class="btn btn-success" onclick="copyMergeResult3()">📋 결과 복사</button>
                         <button class="btn btn-primary" onclick="downloadMergeDocx3()">📥 DOCX 다운로드</button>
                         <button class="btn btn-secondary" onclick="standardizeFormatMerge3()">📐 양식표준화</button>
+                    </div>
+                    <div style="margin-bottom:12px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #dee2e6;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                            <input type="checkbox" id="stripParaNumsOption" style="width:16px;height:16px;cursor:pointer;">
+                            <span>🖨️ <strong>인쇄 옵션:</strong> 단락번호([XXXX])를 삭제하여 출력</span>
+                        </label>
                     </div>
                     <div class="filename-input" style="margin-bottom:15px;">
                         <input type="text" id="mergeFileName3" placeholder="한영혼합본">
@@ -4399,7 +4405,42 @@ def fibonacci(n):
                 if (isAnySubtitle(line)) return false;
                 return true;
             }
-            
+
+            // 본문 단락 개수 카운트 (부제 및 빈 줄 제외)
+            function countContentParagraphs(lines) {
+                return lines.filter(line => {
+                    if (!line.trim()) return false;
+                    if (isAnySubtitle(line)) return false;
+                    return true;
+                }).length;
+            }
+
+            // 단락번호가 없는 본문 단락에 순서대로 단락번호 추가
+            function ensureParaNumbers(lines) {
+                const hasAnyParaNum = lines.some(line => extractParaNum(line) !== null);
+                let counter = 0;
+                if (hasAnyParaNum) {
+                    // 기존 단락번호 중 최대값 찾기
+                    lines.forEach(line => {
+                        const num = extractParaNum(line);
+                        if (num) counter = Math.max(counter, parseInt(num));
+                    });
+                    return lines.map(line => {
+                        if (!line.trim() || isAnySubtitle(line)) return line;
+                        if (extractParaNum(line)) return line; // 이미 번호 있음
+                        counter++;
+                        return `[${String(counter).padStart(4, '0')}] ${line}`;
+                    });
+                } else {
+                    // 단락번호 없음: 모든 본문 단락에 순서대로 번호 추가
+                    return lines.map(line => {
+                        if (!line.trim() || isAnySubtitle(line)) return line;
+                        counter++;
+                        return `[${String(counter).padStart(4, '0')}] ${line}`;
+                    });
+                }
+            }
+
             // 청구항 시작 패턴 감지
             function isClaimStart(line) {
                 const trimmed = removeParaNum(line).trim();
@@ -4438,9 +4479,26 @@ def fibonacci(n):
                 return sections;
             }
             
+            // 단락개수 카운트 (부제/빈 줄 제외한 본문 단락)
+            const korParaCount = countContentParagraphs(korLines);
+            const engParaCount = countContentParagraphs(engLines);
+
+            // 단락개수 불일치 시 경고 및 병합 중단
+            if (korParaCount !== engParaCount) {
+                msg.innerHTML = `❌ 단락 개수 불일치로 병합을 중단합니다.<br>` +
+                    `국문 단락: <strong>${korParaCount}개</strong>, 영문 단락: <strong>${engParaCount}개</strong><br>` +
+                    `단락 수를 일치시킨 후 다시 시도하세요.`;
+                msg.className = 'message error';
+                return;
+            }
+
+            // 단락번호 확보: 없는 단락에 순서대로 [XXXX] 번호 추가
+            const korLinesNumbered = ensureParaNumbers(korLines);
+            const engLinesNumbered = ensureParaNumbers(engLines);
+
             // 섹션 분리
-            const korSections = splitByMainSections(korLines);
-            const engSections = splitByMainSections(engLines);
+            const korSections = splitByMainSections(korLinesNumbered);
+            const engSections = splitByMainSections(engLinesNumbered);
             
             // 섹션 키로 매핑
             const korSectionMap = new Map();
@@ -4547,10 +4605,10 @@ def fibonacci(n):
                 if (sectionKey === 'symbols') {
                     // 국문 단락 전체 출력 (addKorLine이 한글 유무로 색상 자동 판별)
                     korParas.forEach(line => addKorLine(line));
-                    // 영문 단락 전체 출력 (부제 제외, 단락번호 제거)
+                    // 영문 단락 전체 출력 (부제 제외, 단락번호 유지)
                     engParas.forEach(line => {
                         if (isContentParagraph(line)) {
-                            addEngLine(removeParaNum(line));
+                            addEngLine(line);
                         }
                     });
                     return;
@@ -4631,9 +4689,9 @@ def fibonacci(n):
                     const korResult = groupKoreanClaims(korParas);
                     const engResult = groupEnglishClaims(engParas);
                     
-                    // 청구항 시작 전 내용 먼저 출력 (국문 → 영문)
+                    // 청구항 시작 전 내용 먼저 출력 (국문 → 영문, 단락번호 유지)
                     korResult.preContent.forEach(line => addKorLine(line));
-                    engResult.preContent.forEach(line => addEngLine(removeParaNum(line)));
+                    engResult.preContent.forEach(line => addEngLine(line));
                     
                     // 청구항 번호 목록 (모든 번호 수집 후 정렬)
                     const allClaimNums = new Set([
@@ -4649,10 +4707,11 @@ def fibonacci(n):
                         }
                         if (engResult.claims[num]) {
                             engResult.claims[num].forEach(line => {
+                                // 단락번호([XXXX])는 유지하고 영문청구항 번호(X.) 뒤에 탭 삽입
+                                const paraNum = extractParaNum(line);
                                 const cleaned = removeParaNum(line);
-                                // 영문청구항 번호(X.)와 첫 단어 사이에 탭 삽입
                                 const formatted = cleaned.replace(/^(\d+\.)\s*/, '$1\t');
-                                addEngLine(formatted);
+                                addEngLine(paraNum ? `[${paraNum}] ${formatted}` : formatted);
                             });
                         }
                     }
@@ -4688,32 +4747,32 @@ def fibonacci(n):
                         const korNum = extractParaNum(korLine);
                         
                         if (korNum && engByNum.has(korNum) && !usedEngNums.has(korNum)) {
-                            // 단락번호 기반 매칭
+                            // 단락번호 기반 매칭 (영문 단락번호 유지)
                             const engLinesForNum = engByNum.get(korNum);
-                            engLinesForNum.forEach(line => addEngLine(removeParaNum(line)));
+                            engLinesForNum.forEach(line => addEngLine(line));
                             usedEngNums.add(korNum);
                         } else if (!korNum && engNoNumIdx < engNoNum.length) {
-                            // 단락번호 없는 경우 순서 매칭
-                            addEngLine(removeParaNum(engNoNum[engNoNumIdx]));
+                            // 단락번호 없는 경우 순서 매칭 (영문 단락번호 유지)
+                            addEngLine(engNoNum[engNoNumIdx]);
                             engNoNumIdx++;
                         } else if (korNum) {
                             // 단락번호가 있지만 영문에 해당 번호가 없으면 순서 매칭 시도
                             if (engNoNumIdx < engNoNum.length) {
-                                addEngLine(removeParaNum(engNoNum[engNoNumIdx]));
+                                addEngLine(engNoNum[engNoNumIdx]);
                                 engNoNumIdx++;
                             }
                         }
                     }
                 }
                 
-                // 남은 영문 단락 출력 (매칭되지 않은 것들)
+                // 남은 영문 단락 출력 (매칭되지 않은 것들, 단락번호 유지)
                 engByNum.forEach((lines, num) => {
                     if (!usedEngNums.has(num)) {
-                        lines.forEach(line => addEngLine(removeParaNum(line)));
+                        lines.forEach(line => addEngLine(line));
                     }
                 });
                 while (engNoNumIdx < engNoNum.length) {
-                    addEngLine(removeParaNum(engNoNum[engNoNumIdx]));
+                    addEngLine(engNoNum[engNoNumIdx]);
                     engNoNumIdx++;
                 }
             }
@@ -4739,9 +4798,9 @@ def fibonacci(n):
             
             mergeResult = resultLines.join('\n');
             
-            // 통계 업데이트
-            document.getElementById('mergeKorCount').textContent = korLines.length;
-            document.getElementById('mergeEngCount').textContent = engLines.length;
+            // 통계 업데이트 (단락 개수 기준)
+            document.getElementById('mergeKorCount').textContent = korParaCount;
+            document.getElementById('mergeEngCount').textContent = engParaCount;
             document.getElementById('mergeTotalCount').textContent = resultLines.length;
             document.getElementById('merge3StatsSection').classList.remove('hidden');
             
@@ -4761,14 +4820,23 @@ def fibonacci(n):
         
         // escapeHtml은 utils.js에서 로드됨
         
+        // 단락번호 제거 헬퍼 (출력용)
+        function stripParaNumsFromText(text) {
+            return text.split('\n').map(line =>
+                line.replace(/^\[(\d{4,5})\]\s*/, '').replace(/^【(\d{4,5})】\s*/, '')
+            ).join('\n');
+        }
+
         // 결과 복사
         function copyMergeResult3() {
             if (!mergeResult) {
                 alert('병합 결과가 없습니다.');
                 return;
             }
-            navigator.clipboard.writeText(mergeResult).then(() => {
-                alert('✅ 한영혼합본이 클립보드에 복사되었습니다.');
+            const stripNums = document.getElementById('stripParaNumsOption').checked;
+            const text = stripNums ? stripParaNumsFromText(mergeResult) : mergeResult;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('✅ 한영혼합본이 클립보드에 복사되었습니다.' + (stripNums ? ' (단락번호 삭제됨)' : ''));
             });
         }
         
@@ -4813,29 +4881,34 @@ def fibonacci(n):
 </w:styles>`);
                 
                 // word/document.xml 생성 (mergeResultPairs 사용)
+                const stripNums = document.getElementById('stripParaNumsOption').checked;
                 let bodyContent = '';
-                
+
                 mergeResultPairs.forEach(item => {
-                    const trimmed = item.text.trim();
-                    
+                    // 단락번호 삭제 옵션 적용
+                    const lineText = stripNums
+                        ? item.text.replace(/^\[(\d{4,5})\]\s*/, '').replace(/^【(\d{4,5})】\s*/, '')
+                        : item.text;
+                    const trimmed = lineText.trim();
+
                     // 페이지 나누기 마커 처리
                     if (trimmed === '<pagebreak/>') {
                         bodyContent += '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
                         return;
                     }
-                    
+
                     // 빈 줄 처리
                     if (!trimmed) {
                         bodyContent += '<w:p><w:pPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:pPr></w:p>';
                         return;
                     }
-                    
+
                     // 국문 단락 - 갈색(993300) 폰트 적용
                     if (item.type === 'kor') {
-                        bodyContent += `<w:p><w:pPr><w:rPr><w:color w:val="993300"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:pPr><w:r><w:rPr><w:color w:val="993300"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>${convertRunToDocxColor3(item.text, '993300')}</w:r></w:p>`;
+                        bodyContent += `<w:p><w:pPr><w:rPr><w:color w:val="993300"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:pPr><w:r><w:rPr><w:color w:val="993300"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>${convertRunToDocxColor3(lineText, '993300')}</w:r></w:p>`;
                     } else {
                         // 영문 단락 - 기본 검정색
-                        bodyContent += `<w:p><w:pPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:pPr><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>${convertRunToDocx3(item.text)}</w:r></w:p>`;
+                        bodyContent += `<w:p><w:pPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:pPr><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>${convertRunToDocx3(lineText)}</w:r></w:p>`;
                     }
                 });
                 
@@ -4958,6 +5031,7 @@ ${bodyContent}
             document.getElementById('merge3ResultSection').classList.add('hidden');
             document.getElementById('merge3Message').classList.add('hidden');
             document.getElementById('mergeMessage3').classList.add('hidden');
+            document.getElementById('stripParaNumsOption').checked = false;
             mergeKorParagraphs = [];
             mergeEngParagraphs = [];
             mergeResult = '';
