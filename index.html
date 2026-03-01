@@ -1535,7 +1535,17 @@ def fibonacci(n):
             }
             
             const lines = currentText.split('\n');
-            
+
+            // CROSS-REFERENCE 시작 위치 찾기 (이전 줄은 단락번호 부여 안함)
+            let crossRefIndex = -1;
+            for (let i = 0; i < lines.length; i++) {
+                const t = lines[i].trim().toUpperCase();
+                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION') {
+                    crossRefIndex = i;
+                    break;
+                }
+            }
+
             // 종료 지점 찾기 (WHAT IS CLAIMED IS: 또는 【CLAIMS】)
             let stopIndex = -1;
             for (let i = 0; i < lines.length; i++) {
@@ -1544,15 +1554,15 @@ def fibonacci(n):
                     break;
                 }
             }
-            
+
             let counter = 1;
             let insideTable = false;
             const resultLines = [];
-            
+
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
                 const trimmed = line.trim();
-                
+
                 // 표 시작/종료 감지
                 if (trimmed.startsWith('<table')) {
                     insideTable = true;
@@ -1562,9 +1572,9 @@ def fibonacci(n):
                     resultLines.push(line);
                     continue;
                 }
-                
-                // 종료 지점 도달 시 번호 추가 중단
-                let stopNumbering = (stopIndex >= 0 && i >= stopIndex);
+
+                // 종료 지점 도달 시, 또는 CROSS-REFERENCE 이전이면 번호 추가 중단
+                let stopNumbering = (stopIndex >= 0 && i >= stopIndex) || (crossRefIndex >= 0 && i < crossRefIndex);
                 
                 // 번호 붙이기 로직 (표 내용에는 번호 부여하지 않음, 마침표로 끝나는 단락만)
                 if (!stopNumbering && trimmed && !isSubtitle(line) && !insideTable && /[.。]["']?$/.test(trimmed)) {
@@ -2395,7 +2405,17 @@ def fibonacci(n):
             }
             
             const lines = text.split('\n');
-            
+
+            // CROSS-REFERENCE 시작 위치 찾기 (이전 줄은 단락번호 부여 안함)
+            let crossRefIndex = -1;
+            for (let i = 0; i < lines.length; i++) {
+                const t = lines[i].trim().toUpperCase();
+                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION') {
+                    crossRefIndex = i;
+                    break;
+                }
+            }
+
             // 종료 지점 찾기 (WHAT IS CLAIMED IS: 또는 【CLAIMS】)
             let stopIndex = -1;
             for (let i = 0; i < lines.length; i++) {
@@ -2404,15 +2424,15 @@ def fibonacci(n):
                     break;
                 }
             }
-            
+
             let counter = 1;
             let insideTable = false;
             const resultLines = [];
-            
+
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
                 const trimmed = line.trim();
-                
+
                 // 표 시작/종료 감지
                 if (trimmed.startsWith('<table')) {
                     insideTable = true;
@@ -2422,10 +2442,10 @@ def fibonacci(n):
                     resultLines.push(line);
                     continue;
                 }
-                
-                // 종료 지점 도달 시 번호 추가 중단
-                let stopNumbering = (stopIndex >= 0 && i >= stopIndex);
-                
+
+                // 종료 지점 도달 시, 또는 CROSS-REFERENCE 이전이면 번호 추가 중단
+                let stopNumbering = (stopIndex >= 0 && i >= stopIndex) || (crossRefIndex >= 0 && i < crossRefIndex);
+
                 // 번호 붙이기 로직 (마침표로 끝나는 단락만)
                 if (!stopNumbering && trimmed && !isSubtitle2(line) && !insideTable && /[.。]["']?$/.test(trimmed)) {
                     if (!/^\[\d{4,5}\]\s/.test(trimmed)) {
@@ -3432,32 +3452,45 @@ def fibonacci(n):
             let insideTable = false;
             let afterClaimsSection = false;
             let addedCount = 0;
-            
-            const resultLines = window.colorLines3.map(l => {
+
+            // CROSS-REFERENCE 시작 위치 찾기 (이전 줄은 단락번호 부여 안함)
+            let crossRefIndex = -1;
+            for (let ci = 0; ci < window.colorLines3.length; ci++) {
+                const t = window.colorLines3[ci].text.trim().toUpperCase();
+                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION') {
+                    crossRefIndex = ci;
+                    break;
+                }
+            }
+
+            const resultLines = window.colorLines3.map((l, idx) => {
                 const trimmed = l.text.trim();
-                
+
                 // 청구항 시작 이후는 번호 부여 중단
                 if (trimmed === 'WHAT IS CLAIMED IS:' || trimmed === 'WHAT IS CLAIMED IS' ||
                     trimmed === '특허청구범위' || trimmed === '청구범위') {
                     afterClaimsSection = true;
                 }
-                
+
                 // 표 내부 감지
                 if (trimmed.startsWith('<table')) insideTable = true;
                 if (trimmed.endsWith('</table>')) {
                     insideTable = false;
                     return l.text;
                 }
-                
+
+                // CROSS-REFERENCE 이전이면 번호 부여 안함
+                if (crossRefIndex >= 0 && idx < crossRefIndex) return l.text;
+
                 // 국문단락이고, 표 밖이고, 청구항 이전이고, 마침표로 끝나는 경우에만 번호 추가
-                if (l.type === 'korean' && !insideTable && !afterClaimsSection && 
+                if (l.type === 'korean' && !insideTable && !afterClaimsSection &&
                     trimmed && /[.。]["']?$/.test(trimmed)) {
                     const numStr = String(paragraphNum).padStart(4, '0');
                     paragraphNum++;
                     addedCount++;
                     return `[${numStr}] ${l.text}`;
                 }
-                
+
                 return l.text;
             });
             
@@ -3826,7 +3859,17 @@ def fibonacci(n):
             let counter = 1;
             let stopIndex = -1;
             let insideTable = false;
-            
+
+            // CROSS-REFERENCE 시작 위치 찾기 (이전 줄은 단락번호 부여 안함)
+            let crossRefIndex = -1;
+            for (let i = 0; i < lines.length; i++) {
+                const t = lines[i].trim().toUpperCase();
+                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION') {
+                    crossRefIndex = i;
+                    break;
+                }
+            }
+
             // 청구항 시작 위치 찾기
             for (let i = 0; i < lines.length; i++) {
                 if (isClaimsStart(lines[i])) {
@@ -3834,12 +3877,12 @@ def fibonacci(n):
                     break;
                 }
             }
-            
+
             const resultLines = [];
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
                 const trimmed = line.trim();
-                
+
                 // 표 내부 감지
                 if (trimmed.toLowerCase().startsWith('<table')) insideTable = true;
                 if (trimmed.toLowerCase().includes('</table>')) {
@@ -3847,8 +3890,9 @@ def fibonacci(n):
                     resultLines.push(line);
                     continue;
                 }
-                
-                let stopNumbering = (stopIndex >= 0 && i >= stopIndex);
+
+                // 종료 지점 도달 시, 또는 CROSS-REFERENCE 이전이면 번호 추가 중단
+                let stopNumbering = (stopIndex >= 0 && i >= stopIndex) || (crossRefIndex >= 0 && i < crossRefIndex);
                 
                 // 번호 붙이기 로직 (마침표로 끝나는 단락만)
                 if (!stopNumbering && trimmed && !isSubtitle(line) && !insideTable && /[.。]["']?$/.test(trimmed)) {
