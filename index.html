@@ -1540,7 +1540,8 @@ def fibonacci(n):
             let crossRefIndex = -1;
             for (let i = 0; i < lines.length; i++) {
                 const t = lines[i].trim().toUpperCase();
-                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION') {
+                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
+                    t === 'CROSS REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS REFERENCE TO RELATED APPLICATION') {
                     crossRefIndex = i;
                     break;
                 }
@@ -2410,7 +2411,8 @@ def fibonacci(n):
             let crossRefIndex = -1;
             for (let i = 0; i < lines.length; i++) {
                 const t = lines[i].trim().toUpperCase();
-                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION') {
+                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
+                    t === 'CROSS REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS REFERENCE TO RELATED APPLICATION') {
                     crossRefIndex = i;
                     break;
                 }
@@ -3457,7 +3459,8 @@ def fibonacci(n):
             let crossRefIndex = -1;
             for (let ci = 0; ci < window.colorLines3.length; ci++) {
                 const t = window.colorLines3[ci].text.trim().toUpperCase();
-                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION') {
+                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
+                    t === 'CROSS REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS REFERENCE TO RELATED APPLICATION') {
                     crossRefIndex = ci;
                     break;
                 }
@@ -3864,7 +3867,8 @@ def fibonacci(n):
             let crossRefIndex = -1;
             for (let i = 0; i < lines.length; i++) {
                 const t = lines[i].trim().toUpperCase();
-                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION') {
+                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
+                    t === 'CROSS REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS REFERENCE TO RELATED APPLICATION') {
                     crossRefIndex = i;
                     break;
                 }
@@ -4385,7 +4389,7 @@ def fibonacci(n):
             // 사무소표준US 메인 부제 목록 (섹션 구분용)
             const mainSectionHeaders = [
                 { key: 'title', patterns: ['TITLE OF THE INVENTION', '【발명의 명칭】'] },
-                { key: 'crossref', patterns: ['CROSS-REFERENCE TO RELATED APPLICATIONS', 'CROSS-REFERENCE TO RELATED APPLICATION'] },
+                { key: 'crossref', patterns: ['CROSS-REFERENCE TO RELATED APPLICATIONS', 'CROSS-REFERENCE TO RELATED APPLICATION', 'CROSS REFERENCE TO RELATED APPLICATIONS', 'CROSS REFERENCE TO RELATED APPLICATION'] },
                 { key: 'background', patterns: ['BACKGROUND OF THE INVENTION', '【기술분야】', '【배경기술】'] },
                 { key: 'summary', patterns: ['SUMMARY OF THE INVENTION', '【발명의 내용】'] },
                 { key: 'drawings', patterns: ['BRIEF DESCRIPTION OF THE DRAWINGS', '【도면의 간단한 설명】'] },
@@ -4459,25 +4463,15 @@ def fibonacci(n):
 
             // 단락번호가 없는 본문 단락에 순서대로 단락번호 추가
             function ensureParaNumbers(lines) {
-                const hasAnyParaNum = lines.some(line => extractParaNum(line) !== null);
-                if (!hasAnyParaNum) {
-                    // 단락번호 없음: 단락번호 추가 로직에 따라 부여
-                    // (마침표로 끝나는 단락만, CROSS-REFERENCE 이전 제외)
-                    const result = addParagraphNumbersToText(lines.join('\n'));
-                    return result.text.split('\n');
-                }
-                // 일부 단락번호 있음: 없는 부분만 순서대로 채우기
-                let counter = 0;
-                lines.forEach(line => {
-                    const num = extractParaNum(line);
-                    if (num) counter = Math.max(counter, parseInt(num));
-                });
-                return lines.map(line => {
-                    if (!line.trim() || isAnySubtitle(line)) return line;
-                    if (extractParaNum(line)) return line; // 이미 번호 있음
-                    counter++;
-                    return `[${String(counter).padStart(4, '0')}] ${line}`;
-                });
+                // 기존 단락번호를 모두 제거한 뒤 addParagraphNumbersToText 기준으로 재번호 부여.
+                // 이렇게 해야 국문(기존 번호 있음)과 영문(번호 없음) 모두 동일한 기준
+                // (마침표로 끝나는 단락만, CROSS-REFERENCE 이전 제외)으로 번호가 매겨져
+                // 단락번호 기반 매칭이 정확하게 이루어진다.
+                const stripped = lines.map(line =>
+                    line.replace(paraNumPattern, '').replace(paraNumPatternAlt, '')
+                );
+                const result = addParagraphNumbersToText(stripped.join('\n'));
+                return result.text.split('\n');
             }
 
             // 청구항 시작 패턴 감지
