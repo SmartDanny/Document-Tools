@@ -4460,27 +4460,24 @@ def fibonacci(n):
             // 단락번호가 없는 본문 단락에 순서대로 단락번호 추가
             function ensureParaNumbers(lines) {
                 const hasAnyParaNum = lines.some(line => extractParaNum(line) !== null);
-                let counter = 0;
-                if (hasAnyParaNum) {
-                    // 기존 단락번호 중 최대값 찾기
-                    lines.forEach(line => {
-                        const num = extractParaNum(line);
-                        if (num) counter = Math.max(counter, parseInt(num));
-                    });
-                    return lines.map(line => {
-                        if (!line.trim() || isAnySubtitle(line)) return line;
-                        if (extractParaNum(line)) return line; // 이미 번호 있음
-                        counter++;
-                        return `[${String(counter).padStart(4, '0')}] ${line}`;
-                    });
-                } else {
-                    // 단락번호 없음: 모든 본문 단락에 순서대로 번호 추가
-                    return lines.map(line => {
-                        if (!line.trim() || isAnySubtitle(line)) return line;
-                        counter++;
-                        return `[${String(counter).padStart(4, '0')}] ${line}`;
-                    });
+                if (!hasAnyParaNum) {
+                    // 단락번호 없음: 단락번호 추가 로직에 따라 부여
+                    // (마침표로 끝나는 단락만, CROSS-REFERENCE 이전 제외)
+                    const result = addParagraphNumbersToText(lines.join('\n'));
+                    return result.text.split('\n');
                 }
+                // 일부 단락번호 있음: 없는 부분만 순서대로 채우기
+                let counter = 0;
+                lines.forEach(line => {
+                    const num = extractParaNum(line);
+                    if (num) counter = Math.max(counter, parseInt(num));
+                });
+                return lines.map(line => {
+                    if (!line.trim() || isAnySubtitle(line)) return line;
+                    if (extractParaNum(line)) return line; // 이미 번호 있음
+                    counter++;
+                    return `[${String(counter).padStart(4, '0')}] ${line}`;
+                });
             }
 
             // 청구항 시작 패턴 감지
