@@ -4406,13 +4406,11 @@ def fibonacci(n):
                 return true;
             }
 
-            // 본문 단락 개수 카운트 (부제 및 빈 줄 제외)
-            function countContentParagraphs(lines) {
-                return lines.filter(line => {
-                    if (!line.trim()) return false;
-                    if (isAnySubtitle(line)) return false;
-                    return true;
-                }).length;
+            // 단락 개수 카운트 (단락번호 추가 기준과 동일: 마침표로 끝나는 본문 단락, 청구항 이전, 표 제외)
+            function countParagraphsForMerge(text) {
+                // 기존 단락번호([XXXX], 【XXXX】) 제거 후 addParagraphNumbersToText 방식 그대로 적용
+                const stripped = text.replace(/^\[(\d{4,5})\]\s*/gm, '').replace(/^【(\d{4,5})】\s*/gm, '');
+                return addParagraphNumbersToText(stripped).count;
             }
 
             // 단락번호가 없는 본문 단락에 순서대로 단락번호 추가
@@ -4479,9 +4477,9 @@ def fibonacci(n):
                 return sections;
             }
             
-            // 단락개수 카운트 (부제/빈 줄 제외한 본문 단락)
-            const korParaCount = countContentParagraphs(korLines);
-            const engParaCount = countContentParagraphs(engLines);
+            // 단락개수 카운트 (단락번호 추가 기준: 마침표로 끝나는 본문 단락, 청구항 이전, 표 제외)
+            const korParaCount = countParagraphsForMerge(korText);
+            const engParaCount = countParagraphsForMerge(engText);
 
             // 단락개수 불일치 시 경고 및 병합 중단
             if (korParaCount !== engParaCount) {
