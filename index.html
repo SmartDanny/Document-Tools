@@ -3018,6 +3018,7 @@ def fibonacci(n):
             // 원본 텍스트 저장 (복사용)
             window.koreanRawText3 = krText;
             window.englishRawText3 = enText;
+            window.englishFormatStandardized = false; // 재분석 시 양식표준화 플래그 초기화
             
             // 국문본 단락/청구항 개수 계산
             const krStats = countParagraphsAndClaims(krLines, true);
@@ -3644,25 +3645,26 @@ def fibonacci(n):
         function standardizeFormatEng3() {
             const msg = document.getElementById('engParagraphNumMessage3');
             msg.classList.add('hidden');
-            
+
             let text = window.englishRawText3 || '';
             if (!text || text.includes('없습니다')) {
                 msg.textContent = '❌ 영문본이 없습니다.';
                 msg.className = 'message error';
                 return;
             }
-            
+
             const result = applyFormatStandardization(text);
-            
+
             if (result.changeCount === 0) {
                 msg.textContent = '❌ 적용할 양식 변경이 없습니다.';
                 msg.className = 'message error';
                 return;
             }
-            
+
             window.englishRawText3 = result.text;
+            window.englishFormatStandardized = true; // US 특허출원 양식 적용 플래그
             updateEnglishDisplay3();
-            
+
             msg.textContent = `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`;
             msg.className = 'message success';
             setTimeout(() => msg.classList.add('hidden'), 3000);
@@ -3956,13 +3958,14 @@ def fibonacci(n):
         }
         
         // 텍스트를 DOCX로 변환하여 다운로드 (HTML 태그 렌더링)
-        // 영문본: US 특허출원 양식 (A4, Arial 12pt, 줄간격 2배, 자동 단락번호, 행번호, 페이지번호)
+        // 영문본 + 양식표준화 실행: US 특허출원 양식 (A4, Arial 12pt, SEQ 단락번호, 행번호, 페이지번호)
+        // 영문본 + 양식표준화 미실행: 기본 양식 (국문본과 동일)
         // 국문본: 기본 양식 (Letter, 12pt, 기본 줄간격)
         async function generateDocxFromText3(text, filename) {
             try {
                 const isEnglish = filename.toLowerCase().includes('english');
 
-                if (isEnglish) {
+                if (isEnglish && window.englishFormatStandardized) {
                     await generateDocxUSPatent(text, filename);
                 } else {
                     await generateDocxBasic(text, filename);
@@ -4604,6 +4607,7 @@ def fibonacci(n):
             // 원본 텍스트 변수 초기화
             window.koreanRawText3 = '';
             window.englishRawText3 = '';
+            window.englishFormatStandardized = false;
             window.colorLines3 = null;
             window.originalText3 = '';
             ['stats3Section','preview3Section','result3Section','colorResult3Section'].forEach(x => document.getElementById(x).classList.add('hidden'));
