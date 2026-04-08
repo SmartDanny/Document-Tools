@@ -342,6 +342,7 @@
                         <div class="btn-group" style="margin-bottom:10px;display:flex;align-items:center;gap:10px;">
                             <button class="btn btn-success" onclick="downloadEngDocx3()">📥 영문본 DOCX 다운로드</button>
                             <button class="btn btn-primary" onclick="standardizeFormatEng3()" style="font-size:0.75em;padding:4px 8px;">📐 양식표준화</button>
+                            <button class="btn btn-primary" onclick="applyUSFormatEng3()" style="font-size:0.75em;padding:4px 8px;background:#1565c0;">🇺🇸 US양식</button>
                             <button class="btn btn-success" onclick="addParagraphNumbersEng3()" style="font-size:0.75em;padding:4px 8px;">🔢 단락번호 추가</button>
                             <button class="btn btn-danger" onclick="removeParagraphNumbersEng3()" style="font-size:0.75em;padding:4px 8px;">🗑️ 단락번호 제거</button>
                         </div>
@@ -2247,11 +2248,24 @@ def fibonacci(n):
         
         // 양식표준화 공통 로직 (텍스트 입력, 결과 반환)
         function applyFormatStandardization(text) {
+            // 1단계: 단락 뒤 불필요한 공백(trailing spaces) 제거
+            const rawLines = text.split('\n');
+            let trailingSpaceRemoved = 0;
+            const cleanedLines = rawLines.map(line => {
+                const trimmedRight = line.replace(/\s+$/, '');
+                if (trimmedRight !== line && line.trim() !== '') {
+                    trailingSpaceRemoved++;
+                }
+                return trimmedRight;
+            });
+            text = cleanedLines.join('\n');
+
+            // 2단계: 양식표준화 규칙 적용
             const lines = text.split('\n');
             const resultLines = [];
             let inClaims = false;
-            let changeCount = 0;
-            
+            let changeCount = trailingSpaceRemoved;
+
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
                 const trimmed = line.trim();
@@ -3641,7 +3655,7 @@ def fibonacci(n):
             document.getElementById('colorTableCount3').textContent = tableCount;
         }
         
-        // 영문본 양식표준화
+        // 영문본 양식표준화 (국문과 동일 조건)
         function standardizeFormatEng3() {
             const msg = document.getElementById('engParagraphNumMessage3');
             msg.classList.add('hidden');
@@ -3662,12 +3676,38 @@ def fibonacci(n):
             }
 
             window.englishRawText3 = result.text;
-            window.englishFormatStandardized = true; // US 특허출원 양식 적용 플래그
             updateEnglishDisplay3();
 
             msg.textContent = `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`;
             msg.className = 'message success';
             setTimeout(() => msg.classList.add('hidden'), 3000);
+        }
+
+        // 영문본 US양식 적용 (양식표준화 + US 특허출원 DOCX 양식 활성화)
+        function applyUSFormatEng3() {
+            const msg = document.getElementById('engParagraphNumMessage3');
+            msg.classList.add('hidden');
+
+            let text = window.englishRawText3 || '';
+            if (!text || text.includes('없습니다')) {
+                msg.textContent = '❌ 영문본이 없습니다.';
+                msg.className = 'message error';
+                return;
+            }
+
+            // 양식표준화가 아직 안 되어 있으면 먼저 적용
+            const result = applyFormatStandardization(text);
+            if (result.changeCount > 0) {
+                window.englishRawText3 = result.text;
+            }
+
+            window.englishFormatStandardized = true; // US 특허출원 DOCX 양식 플래그
+            updateEnglishDisplay3();
+
+            const changes = result.changeCount > 0 ? ` 양식표준화 ${result.changeCount}개 변경 포함.` : '';
+            msg.textContent = `✅ US양식 적용 완료!${changes} DOCX 다운로드 시 US 특허출원 양식이 적용됩니다.`;
+            msg.className = 'message success';
+            setTimeout(() => msg.classList.add('hidden'), 5000);
         }
         
         // 국문본 양식표준화
