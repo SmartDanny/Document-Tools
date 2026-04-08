@@ -4046,8 +4046,9 @@ def fibonacci(n):
 
         // US 특허출원 양식 DOCX 생성 (영문본용)
         // - A4, 여백(top=1440, bottom=1701, left/right=1701), 줄간격 2배, Arial 12pt
-        // - 자동 단락번호 [0001], [0002]... (numbering.xml, 중간 삭제 시 자동 갱신)
+        // - SEQ 필드 단락번호 [0001]~ (4자리 고정, 단락 삭제/추가 시 재열기로 자동 갱신)
         // - 5행마다 행번호, 페이지번호 (푸터), docGrid
+        // - settings.xml updateFields=1 → Word 열 때 SEQ 자동 재계산
         async function generateDocxUSPatent(text, filename) {
             const zip = new JSZip();
 
@@ -4055,16 +4056,12 @@ def fibonacci(n):
             function isSubtitleLine(line) {
                 const t = line.trim();
                 if (!t) return false;
-                // 【】 또는 [] 로 묶인 타이틀
                 if (/^【[^】]+】$/.test(t)) return true;
                 if (/^\[[^\]]+\]$/.test(t) && t.length <= 30) return true;
-                // 영어 대문자로만 이루어진 부제목
                 const uc = (t.match(/[A-Z]/g)||[]).length;
                 const lc = (t.match(/[a-z]/g)||[]).length;
                 if (uc >= 2 && lc === 0 && /^[A-Z0-9\s\-:\/,]+$/.test(t)) return true;
-                // Description of Symbols
                 if (/^<?\s*Description\s+of\s+Symbols\s*>?$/i.test(t)) return true;
-                // 서브헤딩 (1. Field, 2. Description of the Related Art 등)
                 if (/^\d+\.\s+[A-Z]/.test(t) && t.length <= 60 && !/\.$/.test(t)) return true;
                 return false;
             }
@@ -4080,12 +4077,10 @@ def fibonacci(n):
                        t === 'CROSS-REFERENCE TO RELATED APPLICATION';
             }
 
-            // 텍스트에서 기존 텍스트 단락번호 [XXXX] 제거 (자동번호로 대체하므로)
             function stripTextParagraphNumber(line) {
                 return line.replace(/^\[\d+\]\s?/, '');
             }
 
-            // 단락번호를 부여할 본문 단락인지 판별
             function isNumberedBodyParagraph(line, inClaims, inTable, beforeCrossRef) {
                 const t = line.trim();
                 if (!t) return false;
@@ -4095,14 +4090,40 @@ def fibonacci(n):
                 if (beforeCrossRef) return false;
                 if (isSubtitleLine(line)) return false;
                 if (line.includes('<table')) return false;
-                // 마침표로 끝나는 본문 단락만 번호 부여
                 if (/[.。]["']?$/.test(t)) return true;
                 return false;
             }
 
+            // === SEQ 필드 단락번호 XML 생성 ===
+            // { SEQ ParagraphNum \# "0000" } → 4자리 고정 (0001~0999)
+            let seqCounter = 1;
+            function makeSeqFieldXml() {
+                const cacheVal = String(seqCounter).padStart(4, '0');
+                seqCounter++;
+                const seqRPr = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr>';
+                return '' +
+                    // [
+                    `<w:r>${seqRPr}<w:t>[</w:t></w:r>` +
+                    // SEQ begin
+                    `<w:r>${seqRPr}<w:fldChar w:fldCharType="begin"/></w:r>` +
+                    // instrText
+                    `<w:r>${seqRPr}<w:instrText xml:space="preserve"> SEQ ParagraphNum \\# "0000" </w:instrText></w:r>` +
+                    // separate
+                    `<w:r>${seqRPr}<w:fldChar w:fldCharType="separate"/></w:r>` +
+                    // cache value
+                    `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:color w:val="000000"/><w:sz w:val="24"/><w:noProof/></w:rPr><w:t>${cacheVal}</w:t></w:r>` +
+                    // end
+                    `<w:r>${seqRPr}<w:fldChar w:fldCharType="end"/></w:r>` +
+                    // ]
+                    `<w:r>${seqRPr}<w:t>]</w:t></w:r>` +
+                    // 공백 2개
+                    `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">  </w:t></w:r>`;
+            }
+
             // === pPr/rPr 공통 XML 조각 ===
-            const rPrBase = '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:color w:val="000000"/>';
-            const pPrSpacing = '<w:spacing w:line="480" w:lineRule="auto" w:before="0" w:after="0"/>';
+            const rPrBody = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr>';
+            const rPrHeading = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:szCs w:val="24"/></w:rPr>';
+            const pPrSpacing = '<w:spacing w:after="0" w:line="480" w:lineRule="auto"/>';
 
             // === 본문 생성 ===
             let bodyContent = '';
@@ -4110,7 +4131,6 @@ def fibonacci(n):
             let inClaims = false;
             let inTable = false;
 
-            // CROSS-REFERENCE 위치 찾기 (그 이전은 발명의 명칭이므로 번호 미부여)
             let crossRefIndex = -1;
             for (let i = 0; i < lines.length; i++) {
                 if (isCrossRefBefore(lines[i])) { crossRefIndex = i; break; }
@@ -4128,7 +4148,7 @@ def fibonacci(n):
 
                 // 빈 줄
                 if (!trimmed) {
-                    bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:rPr>${rPrBase}</w:rPr></w:pPr></w:p>`;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr></w:p>`;
                     continue;
                 }
 
@@ -4147,46 +4167,35 @@ def fibonacci(n):
                 // 청구항 시작 감지
                 if (isClaimsStartLine(para)) {
                     inClaims = true;
-                    // 청구항 헤딩 (번호 없음)
-                    bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:rPr>${rPrBase}</w:rPr></w:pPr><w:r><w:rPr>${rPrBase}</w:rPr>${convertRunToDocx3(trimmed)}</w:r></w:p>`;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
                     continue;
                 }
 
                 // 청구항 내부 단락
                 if (inClaims) {
-                    // ABSTRACT 도달 시 청구항 종료
                     const upperTrimmed = trimmed.toUpperCase();
                     if (upperTrimmed === 'ABSTRACT' || upperTrimmed === 'ABSTRACT OF DISCLOSURE') {
                         inClaims = false;
-                    }
-
-                    if (!inClaims && (upperTrimmed === 'ABSTRACT' || upperTrimmed === 'ABSTRACT OF DISCLOSURE')) {
-                        // ABSTRACT 헤딩
-                        bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:rPr>${rPrBase}</w:rPr></w:pPr><w:r><w:rPr>${rPrBase}</w:rPr>${convertRunToDocx3(trimmed)}</w:r></w:p>`;
+                        bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
                         continue;
                     }
 
-                    // 청구항 번호 행 (예: "1.", "2.") 또는 청구항 본문
                     const isClaimNum = /^\d+\.\s*$/.test(trimmed);
                     if (isClaimNum) {
-                        // 청구항 번호 단독행 (들여쓰기 없음)
-                        bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:rPr>${rPrBase}</w:rPr></w:pPr><w:r><w:rPr>${rPrBase}</w:rPr>${convertRunToDocx3(trimmed)}</w:r></w:p>`;
+                        bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrBody}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
                     } else {
-                        // 청구항 본문 (firstLine=799 들여쓰기)
                         const claimText = stripTextParagraphNumber(trimmed);
-                        // 탭으로 시작하는 경우 (기존 "1.\t..." 형식) 탭 제거
                         const cleanText = claimText.replace(/^\d+\.\t/, (m) => m);
-                        bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:ind w:firstLine="799"/><w:rPr>${rPrBase}</w:rPr></w:pPr><w:r><w:rPr>${rPrBase}</w:rPr>${convertRunToDocx3(cleanText)}</w:r></w:p>`;
+                        bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:ind w:firstLine="799"/></w:pPr><w:r>${rPrBody}${convertRunToDocx3(cleanText)}</w:r></w:p>`;
                     }
                     continue;
                 }
 
-                // CROSS-REFERENCE 이전 (발명의 명칭 등) → 번호 없음
                 let beforeCrossRef = (crossRefIndex >= 0 && i < crossRefIndex);
 
-                // 부제목 → 번호 없음
+                // 부제목 → 번호 없음, 헤딩 서식
                 if (isSubtitleLine(para)) {
-                    bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:rPr>${rPrBase}</w:rPr></w:pPr><w:r><w:rPr>${rPrBase}</w:rPr>${convertRunToDocx3(trimmed)}</w:r></w:p>`;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
                     continue;
                 }
 
@@ -4196,15 +4205,13 @@ def fibonacci(n):
                     continue;
                 }
 
-                // 본문 단락: 자동 단락번호 적용 여부 판별
+                // 본문 단락: SEQ 필드 단락번호 적용 여부 판별
                 if (isNumberedBodyParagraph(para, inClaims, inTable, beforeCrossRef)) {
-                    // 기존 텍스트 단락번호 제거 후 자동번호 적용
                     const cleanPara = stripTextParagraphNumber(trimmed);
-                    bodyContent += `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>${pPrSpacing}<w:rPr>${rPrBase}</w:rPr></w:pPr><w:r><w:rPr>${rPrBase}</w:rPr>${convertRunToDocx3(cleanPara)}</w:r></w:p>`;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:ind w:leftChars="0"/></w:pPr>${makeSeqFieldXml()}<w:r>${rPrBody}${convertRunToDocx3(cleanPara)}</w:r></w:p>`;
                 } else {
-                    // 번호 없는 일반 단락
                     const cleanPara = stripTextParagraphNumber(trimmed);
-                    bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:rPr>${rPrBase}</w:rPr></w:pPr><w:r><w:rPr>${rPrBase}</w:rPr>${convertRunToDocx3(cleanPara)}</w:r></w:p>`;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrBody}${convertRunToDocx3(cleanPara)}</w:r></w:p>`;
                 }
             }
 
@@ -4214,29 +4221,31 @@ def fibonacci(n):
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <w:body>${bodyContent}
 <w:sectPr>
-<w:headerReference w:type="default" r:id="rId7"/>
-<w:headerReference w:type="first" r:id="rId8"/>
-<w:headerReference w:type="even" r:id="rId9"/>
-<w:footerReference w:type="default" r:id="rId10"/>
-<w:footerReference w:type="first" r:id="rId11"/>
+<w:headerReference w:type="even" r:id="rId10"/>
+<w:headerReference w:type="default" r:id="rId11"/>
 <w:footerReference w:type="even" r:id="rId12"/>
-<w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/>
+<w:footerReference w:type="default" r:id="rId13"/>
+<w:headerReference w:type="first" r:id="rId14"/>
+<w:footerReference w:type="first" r:id="rId15"/>
+<w:pgSz w:w="11906" w:h="16838"/>
 <w:pgMar w:top="1440" w:right="1701" w:bottom="1701" w:left="1701" w:header="1134" w:footer="1134" w:gutter="0"/>
-<w:cols w:space="720" w:num="1"/>
 <w:lnNumType w:countBy="5"/>
+<w:cols w:space="720"/>
 <w:docGrid w:type="lines" w:linePitch="326"/>
 </w:sectPr>
 </w:body></w:document>`;
 
-            // === numbering.xml (자동 단락번호 [0001] 형식) ===
+            // === numbering.xml (호환성 유지, 본문 번호는 SEQ 필드 사용) ===
             const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
              xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="w15">
 <w:abstractNum w:abstractNumId="0" w15:restartNumberingAfterBreak="0">
+<w:nsid w:val="639059B6"/>
 <w:multiLevelType w:val="hybridMultilevel"/>
-<w:lvl w:ilvl="0">
+<w:tmpl w:val="DD9A07EC"/>
+<w:lvl w:ilvl="0" w:tplc="A6E64738">
 <w:start w:val="1"/>
 <w:numFmt w:val="decimalZero"/>
 <w:lvlRestart w:val="0"/>
@@ -4249,27 +4258,62 @@ def fibonacci(n):
 <w:i w:val="0"/>
 <w:caps w:val="0"/>
 <w:strike w:val="0"/>
+<w:dstrike w:val="0"/>
+<w:outline w:val="0"/>
+<w:shadow w:val="0"/>
+<w:emboss w:val="0"/>
+<w:imprint w:val="0"/>
 <w:vanish w:val="0"/>
 <w:color w:val="000000"/>
 <w:sz w:val="24"/>
-<w:szCs w:val="24"/>
 <w:u w:val="none"/>
+<w:effect w:val="none"/>
+<w:vertAlign w:val="baseline"/>
 </w:rPr>
 </w:lvl>
-<w:lvl w:ilvl="1">
+<w:lvl w:ilvl="1" w:tplc="ADA413E2">
 <w:start w:val="1"/>
 <w:numFmt w:val="decimal"/>
 <w:lvlText w:val="%2."/>
 <w:lvlJc w:val="left"/>
 <w:pPr><w:ind w:left="1160" w:hanging="360"/></w:pPr>
+<w:rPr><w:rFonts w:hint="default"/></w:rPr>
 </w:lvl>
-<w:lvl w:ilvl="2"><w:start w:val="1"/><w:numFmt w:val="lowerRoman"/><w:lvlText w:val="%3."/><w:lvlJc w:val="right"/><w:pPr><w:ind w:left="2160" w:hanging="180"/></w:pPr></w:lvl>
-<w:lvl w:ilvl="3"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%4."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="2880" w:hanging="360"/></w:pPr></w:lvl>
-<w:lvl w:ilvl="4"><w:start w:val="1"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="%5."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="3600" w:hanging="360"/></w:pPr></w:lvl>
-<w:lvl w:ilvl="5"><w:start w:val="1"/><w:numFmt w:val="lowerRoman"/><w:lvlText w:val="%6."/><w:lvlJc w:val="right"/><w:pPr><w:ind w:left="4320" w:hanging="180"/></w:pPr></w:lvl>
-<w:lvl w:ilvl="6"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%7."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="5040" w:hanging="360"/></w:pPr></w:lvl>
-<w:lvl w:ilvl="7"><w:start w:val="1"/><w:numFmt w:val="lowerLetter"/><w:lvlText w:val="%8."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="5760" w:hanging="360"/></w:pPr></w:lvl>
-<w:lvl w:ilvl="8"><w:start w:val="1"/><w:numFmt w:val="lowerRoman"/><w:lvlText w:val="%9."/><w:lvlJc w:val="right"/><w:pPr><w:ind w:left="6480" w:hanging="180"/></w:pPr></w:lvl>
+<w:lvl w:ilvl="2" w:tplc="0409001B" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="lowerRoman"/>
+<w:lvlText w:val="%3."/><w:lvlJc w:val="right"/>
+<w:pPr><w:ind w:left="1600" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="3" w:tplc="0409000F" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="decimal"/>
+<w:lvlText w:val="%4."/><w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="2000" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="4" w:tplc="04090019" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="upperLetter"/>
+<w:lvlText w:val="%5."/><w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="2400" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="5" w:tplc="0409001B" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="lowerRoman"/>
+<w:lvlText w:val="%6."/><w:lvlJc w:val="right"/>
+<w:pPr><w:ind w:left="2800" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="6" w:tplc="0409000F" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="decimal"/>
+<w:lvlText w:val="%7."/><w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="3200" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="7" w:tplc="04090019" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="upperLetter"/>
+<w:lvlText w:val="%8."/><w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="3600" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="8" w:tplc="0409001B" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="lowerRoman"/>
+<w:lvlText w:val="%9."/><w:lvlJc w:val="right"/>
+<w:pPr><w:ind w:left="4000" w:hanging="400"/></w:pPr>
+</w:lvl>
 </w:abstractNum>
 <w:num w:numId="1">
 <w:abstractNumId w:val="0"/>
@@ -4281,33 +4325,86 @@ def fibonacci(n):
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:docDefaults>
 <w:rPrDefault><w:rPr>
-<w:rFonts w:ascii="바탕체" w:eastAsia="바탕체" w:hAnsi="바탕체" w:cs="바탕체"/>
-<w:sz w:val="24"/><w:szCs w:val="24"/>
-<w:lang w:val="en-US" w:eastAsia="ko-KR"/>
+<w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi" w:cstheme="minorBidi"/>
+<w:kern w:val="2"/>
+<w:szCs w:val="22"/>
+<w:lang w:val="en-US" w:eastAsia="ko-KR" w:bidi="ar-SA"/>
 </w:rPr></w:rPrDefault>
 <w:pPrDefault><w:pPr>
-<w:spacing w:line="480" w:lineRule="auto" w:before="0" w:after="0"/>
+<w:spacing w:after="160" w:line="259" w:lineRule="auto"/>
+<w:jc w:val="both"/>
 </w:pPr></w:pPrDefault>
 </w:docDefaults>
 <w:style w:type="paragraph" w:default="1" w:styleId="a">
-<w:name w:val="Normal"/><w:qFormat/>
-<w:rPr><w:rFonts w:ascii="바탕체" w:eastAsia="바탕체" w:hAnsi="바탕체" w:cs="바탕체"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
+<w:name w:val="Normal"/>
+<w:pPr>
+<w:widowControl w:val="0"/>
+<w:wordWrap w:val="0"/>
+<w:autoSpaceDE w:val="0"/>
+<w:autoSpaceDN w:val="0"/>
+</w:pPr>
+<w:rPr>
+<w:rFonts w:ascii="바탕체" w:eastAsia="바탕체" w:hAnsi="바탕체"/>
+<w:sz w:val="24"/>
+</w:rPr>
+</w:style>
+<w:style w:type="character" w:default="1" w:styleId="a0">
+<w:name w:val="Default Paragraph Font"/>
+</w:style>
+<w:style w:type="table" w:default="1" w:styleId="a1">
+<w:name w:val="Normal Table"/>
+</w:style>
+<w:style w:type="numbering" w:default="1" w:styleId="a2">
+<w:name w:val="No List"/>
 </w:style>
 <w:style w:type="paragraph" w:styleId="a3">
-<w:name w:val="header"/><w:basedOn w:val="a"/>
-<w:pPr><w:tabs><w:tab w:val="center" w:pos="4513"/><w:tab w:val="right" w:pos="9026"/></w:tabs></w:pPr>
+<w:name w:val="header"/>
+<w:basedOn w:val="a"/>
+<w:pPr>
+<w:tabs/>
+<w:snapToGrid w:val="0"/>
+</w:pPr>
 </w:style>
 <w:style w:type="paragraph" w:styleId="a4">
-<w:name w:val="footer"/><w:basedOn w:val="a"/>
-<w:pPr><w:tabs><w:tab w:val="center" w:pos="4513"/><w:tab w:val="right" w:pos="9026"/></w:tabs></w:pPr>
+<w:name w:val="footer"/>
+<w:basedOn w:val="a"/>
+<w:pPr>
+<w:tabs/>
+<w:snapToGrid w:val="0"/>
+</w:pPr>
 </w:style>
-<w:style w:type="character" w:styleId="a5"><w:name w:val="line number"/></w:style>
-<w:style w:type="character" w:styleId="a6"><w:name w:val="page number"/></w:style>
+<w:style w:type="character" w:styleId="a5">
+<w:name w:val="line number"/>
+<w:basedOn w:val="a0"/>
+</w:style>
+<w:style w:type="character" w:styleId="a6">
+<w:name w:val="page number"/>
+<w:basedOn w:val="a0"/>
+</w:style>
 <w:style w:type="paragraph" w:styleId="a7">
-<w:name w:val="List Paragraph"/><w:basedOn w:val="a"/><w:qFormat/>
-<w:pPr><w:ind w:left="800"/></w:pPr>
+<w:name w:val="List Paragraph"/>
+<w:basedOn w:val="a"/>
+<w:pPr>
+<w:ind w:leftChars="400" w:left="800"/>
+</w:pPr>
 </w:style>
 </w:styles>`;
+
+            // === settings.xml (updateFields=1 → SEQ 자동 재계산) ===
+            const settingsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+            xmlns:o="urn:schemas-microsoft-com:office:office">
+<w:zoom w:percent="100"/>
+<w:updateFields w:val="1"/>
+<w:bordersDoNotSurroundHeader/>
+<w:bordersDoNotSurroundFooter/>
+<w:defaultTabStop w:val="800"/>
+<w:characterSpacingControl w:val="doNotCompress"/>
+<w:themeFontLang w:val="en-US" w:eastAsia="ko-KR"/>
+<w:decimalSymbol w:val="."/>
+<w:listSeparator w:val=","/>
+</w:settings>`;
 
             // === 헤더 (빈 내용) ===
             const headerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -4315,21 +4412,26 @@ def fibonacci(n):
 <w:p><w:pPr><w:pStyle w:val="a3"/></w:pPr></w:p>
 </w:hdr>`;
 
-            // === 푸터 (PAGE 필드, framePr로 float 처리) ===
-            const footerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+            // === 푸터 (footer1/footer2 — PAGE 필드 + 빈 단락) ===
+            const footerWithPageXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:p>
 <w:pPr>
 <w:pStyle w:val="a4"/>
 <w:framePr w:wrap="around" w:vAnchor="text" w:hAnchor="margin" w:xAlign="center" w:y="1"/>
-<w:jc w:val="center"/>
+<w:rPr><w:rStyle w:val="a6"/></w:rPr>
 </w:pPr>
 <w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>
 <w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
-<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>
-<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:t>1</w:t></w:r>
 <w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>
 </w:p>
+<w:p><w:pPr><w:pStyle w:val="a4"/></w:pPr></w:p>
+</w:ftr>`;
+
+            // === 푸터 (footer3 — 첫 페이지, 빈 단락만) ===
+            const footerFirstPageXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:p><w:pPr><w:pStyle w:val="a4"/></w:pPr></w:p>
 </w:ftr>`;
 
             // === [Content_Types].xml ===
@@ -4339,6 +4441,7 @@ def fibonacci(n):
 <Default Extension="xml" ContentType="application/xml"/>
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
 <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
 <Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
 <Override PartName="/word/header2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
@@ -4358,25 +4461,27 @@ def fibonacci(n):
             zip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
-<Relationship Id="rId7" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>
-<Relationship Id="rId8" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/>
-<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header3.xml"/>
-<Relationship Id="rId10" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>
-<Relationship Id="rId11" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>
-<Relationship Id="rId12" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer3.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+<Relationship Id="rId10" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>
+<Relationship Id="rId11" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/>
+<Relationship Id="rId12" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>
+<Relationship Id="rId13" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>
+<Relationship Id="rId14" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header3.xml"/>
+<Relationship Id="rId15" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer3.xml"/>
 </Relationships>`);
 
             // === 파일 생성 ===
             zip.file('word/document.xml', documentXml);
             zip.file('word/numbering.xml', numberingXml);
             zip.file('word/styles.xml', stylesXml);
+            zip.file('word/settings.xml', settingsXml);
             zip.file('word/header1.xml', headerXml);
             zip.file('word/header2.xml', headerXml);
             zip.file('word/header3.xml', headerXml);
-            zip.file('word/footer1.xml', footerXml);
-            zip.file('word/footer2.xml', footerXml);
-            zip.file('word/footer3.xml', footerXml);
+            zip.file('word/footer1.xml', footerWithPageXml);
+            zip.file('word/footer2.xml', footerWithPageXml);
+            zip.file('word/footer3.xml', footerFirstPageXml);
 
             const blob = await zip.generateAsync({ type: 'blob' });
             const url = URL.createObjectURL(blob);
@@ -4388,7 +4493,7 @@ def fibonacci(n):
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            alert('✅ US 특허출원 양식 DOCX 파일이 다운로드되었습니다!\n\n• 자동 단락번호 [0001]~ 적용\n• 단락 삭제 시 번호 자동 갱신\n• 행번호(5행마다), 페이지번호 포함');
+            alert('✅ US 특허출원 양식 DOCX 파일이 다운로드되었습니다!\n\n• SEQ 필드 단락번호 [0001]~ (4자리 고정)\n• 단락 삭제 후 저장→재열기 시 번호 자동 갱신\n• 행번호(5행마다), 페이지번호 포함');
         }
         
         // 텍스트를 DOCX run으로 변환 (sub, sup 처리) - font size 12pt
