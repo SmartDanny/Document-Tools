@@ -38,7 +38,8 @@ function makeSeqFieldXml() {
 
 const rPrBody = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr>';
 const rPrHeading = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:szCs w:val="24"/></w:rPr>';
-const pPrSpacing = '<w:spacing w:after="0" w:line="480" w:lineRule="auto"/>';
+// 25라인/페이지: 본문영역(16838-1440-1701=13697) / 25 = 548 DXA
+const pPrSpacing = '<w:spacing w:after="0" w:line="548" w:lineRule="exact"/>';
 
 function numberedParagraph(text) {
     return `<w:p><w:pPr>${pPrSpacing}<w:ind w:leftChars="0"/></w:pPr>${makeSeqFieldXml()}<w:r>${rPrBody}<w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
@@ -148,7 +149,7 @@ async function generateTemplate() {
 <w:pgMar w:top="1440" w:right="1701" w:bottom="1701" w:left="1701" w:header="1134" w:footer="1134" w:gutter="0"/>
 <w:lnNumType w:countBy="5"/>
 <w:cols w:space="720"/>
-<w:docGrid w:type="lines" w:linePitch="326"/>
+<w:docGrid w:type="lines" w:linePitch="548"/>
 </w:sectPr>
 </w:body></w:document>`;
 
@@ -332,7 +333,7 @@ async function generateTemplate() {
     console.log("✅ sectPr pgSz (no orient):", docXml.includes('w:w="11906"') && !docXml.includes('orient'));
     console.log("✅ cols (no num):", docXml.includes('w:space="720"') && !docXml.match(/cols[^>]*num/));
     console.log("✅ lnNumType countBy=5:", docXml.includes('countBy="5"'));
-    console.log("✅ docGrid linePitch=326:", docXml.includes('linePitch="326"'));
+    console.log("✅ docGrid linePitch=548:", docXml.includes('linePitch="548"'));
 
     const seqCount = (docXml.match(/SEQ ParagraphNum/g) || []).length;
     console.log(`✅ SEQ 필드 개수: ${seqCount}`);

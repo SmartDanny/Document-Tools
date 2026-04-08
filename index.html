@@ -4081,11 +4081,12 @@ def fibonacci(n):
                 return line.replace(/^\[\d+\]\s?/, '');
             }
 
-            function isNumberedBodyParagraph(line, inClaims, inTable, beforeCrossRef) {
+            function isNumberedBodyParagraph(line, inClaims, inTable, beforeCrossRef, inAbstract) {
                 const t = line.trim();
                 if (!t) return false;
                 if (t === '<pagebreak/>') return false;
                 if (inClaims) return false;
+                if (inAbstract) return false;
                 if (inTable) return false;
                 if (beforeCrossRef) return false;
                 if (isSubtitleLine(line)) return false;
@@ -4123,12 +4124,14 @@ def fibonacci(n):
             // === pPr/rPr 공통 XML 조각 ===
             const rPrBody = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr>';
             const rPrHeading = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:szCs w:val="24"/></w:rPr>';
-            const pPrSpacing = '<w:spacing w:after="0" w:line="480" w:lineRule="auto"/>';
+            // 25라인/페이지: 본문영역(16838-1440-1701=13697) / 25 = 548 DXA
+            const pPrSpacing = '<w:spacing w:after="0" w:line="548" w:lineRule="exact"/>';
 
             // === 본문 생성 ===
             let bodyContent = '';
             const lines = text.split('\n');
             let inClaims = false;
+            let inAbstract = false;
             let inTable = false;
 
             let crossRefIndex = -1;
@@ -4176,6 +4179,7 @@ def fibonacci(n):
                     const upperTrimmed = trimmed.toUpperCase();
                     if (upperTrimmed === 'ABSTRACT' || upperTrimmed === 'ABSTRACT OF DISCLOSURE') {
                         inClaims = false;
+                        inAbstract = true;
                         bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
                         continue;
                     }
@@ -4193,6 +4197,14 @@ def fibonacci(n):
 
                 let beforeCrossRef = (crossRefIndex >= 0 && i < crossRefIndex);
 
+                // ABSTRACT 섹션 감지 (청구항 밖에서 도달한 경우)
+                const upperTrimmedBody = trimmed.toUpperCase();
+                if (!inAbstract && (upperTrimmedBody === 'ABSTRACT' || upperTrimmedBody === 'ABSTRACT OF DISCLOSURE')) {
+                    inAbstract = true;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
+                    continue;
+                }
+
                 // 부제목 → 번호 없음, 헤딩 서식
                 if (isSubtitleLine(para)) {
                     bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
@@ -4206,7 +4218,7 @@ def fibonacci(n):
                 }
 
                 // 본문 단락: SEQ 필드 단락번호 적용 여부 판별
-                if (isNumberedBodyParagraph(para, inClaims, inTable, beforeCrossRef)) {
+                if (isNumberedBodyParagraph(para, inClaims, inTable, beforeCrossRef, inAbstract)) {
                     const cleanPara = stripTextParagraphNumber(trimmed);
                     bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:ind w:leftChars="0"/></w:pPr>${makeSeqFieldXml()}<w:r>${rPrBody}${convertRunToDocx3(cleanPara)}</w:r></w:p>`;
                 } else {
@@ -4231,7 +4243,7 @@ def fibonacci(n):
 <w:pgMar w:top="1440" w:right="1701" w:bottom="1701" w:left="1701" w:header="1134" w:footer="1134" w:gutter="0"/>
 <w:lnNumType w:countBy="5"/>
 <w:cols w:space="720"/>
-<w:docGrid w:type="lines" w:linePitch="326"/>
+<w:docGrid w:type="lines" w:linePitch="548"/>
 </w:sectPr>
 </w:body></w:document>`;
 
