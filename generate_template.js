@@ -1,654 +1,376 @@
 /**
  * US Patent Application Format Template Generator
- * Generates US_patent_template.docx with auto-numbering, line numbers, headers/footers
+ * Generates US_patent_template.docx with SEQ field numbering, line numbers, headers/footers
+ *
+ * SEQ 필드 방식: { SEQ ParagraphNum \# "0000" } → 4자리 고정 (0001~0999)
+ * settings.xml updateFields=1 → Word 열 때 자동 재계산
  */
 
-const docx = require("docx");
 const fs = require("fs");
 const JSZip = require("jszip");
 
-const {
-    Document, Packer, Paragraph, TextRun, Header, Footer,
-    AlignmentType, LevelFormat, TabStopType, PageNumber, PageNumberSeparator,
-    NumberFormat
-} = docx;
-
-// ========== Helper Functions ==========
-
-function createHeadingParagraph(text) {
-    return new Paragraph({
-        spacing: { line: 480, lineRule: "auto", before: 0, after: 0 },
-        children: [
-            new TextRun({
-                text: text,
-                font: "Arial",
-                size: 24,
-                color: "000000",
-            }),
-        ],
-    });
+function escapeXml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
 }
 
-function createNumberedParagraph(text) {
-    return new Paragraph({
-        numbering: { reference: "patent-numbering", level: 0 },
-        spacing: { line: 480, lineRule: "auto", before: 0, after: 0 },
-        children: [
-            new TextRun({
-                text: text,
-                font: "Arial",
-                size: 24,
-                color: "000000",
-            }),
-        ],
-    });
+// SEQ field paragraph number XML generator
+let seqCounter = 1;
+function makeSeqFieldXml() {
+    const cacheVal = String(seqCounter).padStart(4, '0');
+    seqCounter++;
+    const rPr = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr>';
+    return '' +
+        `<w:r>${rPr}<w:t>[</w:t></w:r>` +
+        `<w:r>${rPr}<w:fldChar w:fldCharType="begin"/></w:r>` +
+        `<w:r>${rPr}<w:instrText xml:space="preserve"> SEQ ParagraphNum \\# "0000" </w:instrText></w:r>` +
+        `<w:r>${rPr}<w:fldChar w:fldCharType="separate"/></w:r>` +
+        `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:color w:val="000000"/><w:sz w:val="24"/><w:noProof/></w:rPr><w:t>${cacheVal}</w:t></w:r>` +
+        `<w:r>${rPr}<w:fldChar w:fldCharType="end"/></w:r>` +
+        `<w:r>${rPr}<w:t>]</w:t></w:r>` +
+        `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">  </w:t></w:r>`;
 }
 
-function createPlainParagraph(text) {
-    return new Paragraph({
-        spacing: { line: 480, lineRule: "auto", before: 0, after: 0 },
-        children: [
-            new TextRun({
-                text: text,
-                font: "Arial",
-                size: 24,
-                color: "000000",
-            }),
-        ],
-    });
+const rPrBody = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr>';
+const rPrHeading = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:szCs w:val="24"/></w:rPr>';
+const pPrSpacing = '<w:spacing w:after="0" w:line="480" w:lineRule="auto"/>';
+
+function numberedParagraph(text) {
+    return `<w:p><w:pPr>${pPrSpacing}<w:ind w:leftChars="0"/></w:pPr>${makeSeqFieldXml()}<w:r>${rPrBody}<w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 
-function createEmptyParagraph() {
-    return new Paragraph({
-        spacing: { line: 480, lineRule: "auto", before: 0, after: 0 },
-        children: [
-            new TextRun({
-                text: "",
-                font: "Arial",
-                size: 24,
-            }),
-        ],
-    });
+function headingParagraph(text) {
+    return `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}<w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 
-function createClaimParagraph(text) {
-    return new Paragraph({
-        spacing: { line: 480, lineRule: "auto", before: 0, after: 0 },
-        indent: { firstLine: 799 },
-        children: [
-            new TextRun({
-                text: text,
-                font: "Arial",
-                size: 24,
-                color: "000000",
-            }),
-        ],
-    });
+function plainParagraph(text) {
+    return `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrBody}<w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 
-function createClaimNumberParagraph(text) {
-    return new Paragraph({
-        spacing: { line: 480, lineRule: "auto", before: 0, after: 0 },
-        children: [
-            new TextRun({
-                text: text,
-                font: "Arial",
-                size: 24,
-                color: "000000",
-            }),
-        ],
-    });
+function emptyParagraph() {
+    return `<w:p><w:pPr>${pPrSpacing}</w:pPr></w:p>`;
 }
 
-// ========== Footer with PAGE field ==========
-function createFooterWithPageNumber() {
-    return new Footer({
-        children: [
-            new Paragraph({
-                alignment: AlignmentType.CENTER,
-                children: [
-                    new TextRun({
-                        children: [PageNumber.CURRENT],
-                        font: "Arial",
-                        size: 24,
-                    }),
-                ],
-            }),
-        ],
-    });
+function claimParagraph(text) {
+    return `<w:p><w:pPr>${pPrSpacing}<w:ind w:firstLine="799"/></w:pPr><w:r>${rPrBody}<w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 
-function createEmptyHeader() {
-    return new Header({
-        children: [
-            new Paragraph({
-                children: [],
-            }),
-        ],
-    });
+function claimNumberParagraph(text) {
+    return `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrBody}<w:t>${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 
-// ========== Main Document ==========
 async function generateTemplate() {
-    const doc = new Document({
-        numbering: {
-            config: [
-                {
-                    reference: "patent-numbering",
-                    levels: [
-                        {
-                            level: 0,
-                            format: LevelFormat.DECIMAL_ZERO,
-                            text: "[00%1]",
-                            start: 1,
-                            alignment: AlignmentType.LEFT,
-                            style: {
-                                paragraph: {
-                                    indent: { left: 0, firstLine: 0 },
-                                },
-                                run: {
-                                    font: "Arial",
-                                    bold: true,
-                                    size: 24,
-                                    color: "000000",
-                                    italics: false,
-                                },
-                            },
-                        },
-                        {
-                            level: 1,
-                            format: LevelFormat.DECIMAL,
-                            text: "%2.",
-                            start: 1,
-                            alignment: AlignmentType.LEFT,
-                            style: {
-                                paragraph: {
-                                    indent: { left: 1160, hanging: 360 },
-                                },
-                            },
-                        },
-                    ],
-                },
-            ],
-        },
-        styles: {
-            default: {
-                document: {
-                    run: {
-                        font: "바탕체",
-                        size: 24,
-                        sizeCs: 24,
-                    },
-                    paragraph: {
-                        spacing: { line: 480, lineRule: "auto", before: 0, after: 0 },
-                    },
-                },
-            },
-        },
-        sections: [
-            {
-                properties: {
-                    page: {
-                        size: {
-                            width: 11906,
-                            height: 16838,
-                            orientation: docx.PageOrientation.PORTRAIT,
-                        },
-                        margin: {
-                            top: 1440,
-                            bottom: 1701,
-                            left: 1701,
-                            right: 1701,
-                            header: 1134,
-                            footer: 1134,
-                        },
-                    },
-                    column: {
-                        space: 720,
-                        count: 1,
-                    },
-                },
-                headers: {
-                    default: createEmptyHeader(),
-                    even: createEmptyHeader(),
-                    first: createEmptyHeader(),
-                },
-                footers: {
-                    default: createFooterWithPageNumber(),
-                    even: createFooterWithPageNumber(),
-                    first: createFooterWithPageNumber(),
-                },
-                children: [
-                    // === Section 1: Title ===
-                    createPlainParagraph("[발명의 명칭 입력]"),
-                    createEmptyParagraph(),
+    const zip = new JSZip();
 
-                    // === Section 2: CROSS-REFERENCE ===
-                    createHeadingParagraph("CROSS-REFERENCE TO RELATED APPLICATIONS"),
-                    createNumberedParagraph("[Cross-reference 내용 입력]"),
-                    createEmptyParagraph(),
+    // Build body content
+    let body = '';
 
-                    // === Section 3: BACKGROUND ===
-                    createHeadingParagraph("BACKGROUND"),
-                    createHeadingParagraph("1. Field"),
-                    createNumberedParagraph("[Field 내용 입력]"),
-                    createEmptyParagraph(),
-                    createHeadingParagraph("2. Description of the Related Art"),
-                    createNumberedParagraph("[Related Art 내용 입력]"),
-                    createEmptyParagraph(),
+    // Section 1: Title
+    body += plainParagraph('[발명의 명칭]');
+    body += emptyParagraph();
 
-                    // === Section 4: SUMMARY ===
-                    createHeadingParagraph("SUMMARY"),
-                    createNumberedParagraph("[Summary 내용 입력 1]"),
-                    createNumberedParagraph("[Summary 내용 입력 2]"),
-                    createNumberedParagraph("[Summary 내용 입력 3]"),
-                    createEmptyParagraph(),
+    // Section 2: CROSS-REFERENCE
+    body += headingParagraph('CROSS-REFERENCE TO RELATED APPLICATIONS');
+    body += numberedParagraph('[Cross-reference 내용]');
+    body += emptyParagraph();
 
-                    // === Section 5: BRIEF DESCRIPTION OF THE DRAWINGS ===
-                    createHeadingParagraph("BRIEF DESCRIPTION OF THE DRAWINGS"),
-                    createNumberedParagraph("[도면 설명 입력 1]"),
-                    createNumberedParagraph("[도면 설명 입력 2]"),
-                    createNumberedParagraph("[도면 설명 입력 3]"),
-                    createEmptyParagraph(),
+    // Section 3: BACKGROUND
+    body += headingParagraph('BACKGROUND');
+    body += headingParagraph('1. Field');
+    body += numberedParagraph('[Field 내용]');
+    body += headingParagraph('2. Description of the Related Art');
+    body += numberedParagraph('[Related Art 내용 1]');
+    body += numberedParagraph('[Related Art 내용 2]');
+    body += emptyParagraph();
 
-                    // === Section 6: DETAILED DESCRIPTION ===
-                    createHeadingParagraph("DETAILED DESCRIPTION"),
-                    createNumberedParagraph("[상세한 설명 입력 1]"),
-                    createNumberedParagraph("[상세한 설명 입력 2]"),
-                    createNumberedParagraph("[상세한 설명 입력 3]"),
-                    createNumberedParagraph("[상세한 설명 입력 4]"),
-                    createNumberedParagraph("[상세한 설명 입력 5]"),
-                    createEmptyParagraph(),
+    // Section 4: SUMMARY
+    body += headingParagraph('SUMMARY');
+    body += numberedParagraph('[Summary 내용 1]');
+    body += numberedParagraph('[Summary 내용 2]');
+    body += numberedParagraph('[Summary 내용 3]');
+    body += emptyParagraph();
 
-                    // === Section 7: Description of Symbols ===
-                    createHeadingParagraph("Description of Symbols"),
-                    createPlainParagraph("[부호]: [명칭]    [부호]: [명칭]"),
-                    createPlainParagraph("[부호]: [명칭]    [부호]: [명칭]"),
-                    createEmptyParagraph(),
+    // Section 5: BRIEF DESCRIPTION OF THE DRAWINGS
+    body += headingParagraph('BRIEF DESCRIPTION OF THE DRAWINGS');
+    body += numberedParagraph('[도면 설명 1]');
+    body += numberedParagraph('[도면 설명 2]');
+    body += numberedParagraph('[도면 설명 3]');
+    body += emptyParagraph();
 
-                    // === Section 8: WHAT IS CLAIMED IS ===
-                    createHeadingParagraph("WHAT IS CLAIMED IS:"),
-                    createClaimNumberParagraph("1."),
-                    createClaimParagraph("A display device comprising:"),
-                    createClaimParagraph("a [구성요소 1]; and"),
-                    createClaimParagraph("a [구성요소 2]."),
-                    createEmptyParagraph(),
-                    createClaimNumberParagraph("2."),
-                    createClaimParagraph("The display device of claim 1, wherein [내용]."),
-                    createEmptyParagraph(),
+    // Section 6: DETAILED DESCRIPTION
+    body += headingParagraph('DETAILED DESCRIPTION');
+    body += numberedParagraph('[상세한 설명 1]');
+    body += numberedParagraph('[상세한 설명 2]');
+    body += numberedParagraph('[상세한 설명 3]');
+    body += numberedParagraph('[상세한 설명 4]');
+    body += numberedParagraph('[상세한 설명 5]');
+    body += emptyParagraph();
 
-                    // === Section 9: ABSTRACT ===
-                    createHeadingParagraph("ABSTRACT"),
-                    createPlainParagraph("[Abstract 내용 입력]"),
-                ],
-            },
-        ],
-    });
+    // Section 7: Description of Symbols
+    body += headingParagraph('Description of Symbols');
+    body += plainParagraph('[부호]: [명칭]    [부호]: [명칭]');
+    body += plainParagraph('[부호]: [명칭]    [부호]: [명칭]');
+    body += emptyParagraph();
 
-    // Step 1: Generate initial docx buffer
-    const buffer = await Packer.toBuffer(doc);
+    // Section 8: WHAT IS CLAIMED IS
+    body += headingParagraph('WHAT IS CLAIMED IS:');
+    body += claimNumberParagraph('1.');
+    body += claimParagraph('A [발명 카테고리] comprising:');
+    body += claimParagraph('a [구성요소 1]; and');
+    body += claimParagraph('a [구성요소 2].');
+    body += emptyParagraph();
+    body += claimNumberParagraph('2.');
+    body += claimParagraph('The [발명 카테고리] of claim 1, wherein [내용].');
+    body += emptyParagraph();
 
-    // Step 2: Post-process the docx to add unsupported features
-    const zip = await JSZip.loadAsync(buffer);
+    // Section 9: ABSTRACT
+    body += headingParagraph('ABSTRACT');
+    body += plainParagraph('[Abstract 내용]');
 
-    // ---- Modify word/document.xml ----
-    let documentXml = await zip.file("word/document.xml").async("string");
+    // document.xml
+    const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<w:body>${body}
+<w:sectPr>
+<w:headerReference w:type="even" r:id="rId10"/>
+<w:headerReference w:type="default" r:id="rId11"/>
+<w:footerReference w:type="even" r:id="rId12"/>
+<w:footerReference w:type="default" r:id="rId13"/>
+<w:headerReference w:type="first" r:id="rId14"/>
+<w:footerReference w:type="first" r:id="rId15"/>
+<w:pgSz w:w="11906" w:h="16838"/>
+<w:pgMar w:top="1440" w:right="1701" w:bottom="1701" w:left="1701" w:header="1134" w:footer="1134" w:gutter="0"/>
+<w:lnNumType w:countBy="5"/>
+<w:cols w:space="720"/>
+<w:docGrid w:type="lines" w:linePitch="326"/>
+</w:sectPr>
+</w:body></w:document>`;
 
-    // Add line numbering (lnNumType) to sectPr
-    documentXml = documentXml.replace(
-        /<w:sectPr([^>]*)>/g,
-        (match, attrs) => {
-            // Only add if not already present
-            if (!match.includes("lnNumType")) {
-                return match;
-            }
-            return match;
-        }
-    );
-
-    // Remove any existing docGrid elements
-    documentXml = documentXml.replace(/<w:docGrid[^\/]*\/>/g, '');
-
-    // Remove any existing lnNumType elements
-    documentXml = documentXml.replace(/<w:lnNumType[^\/]*\/>/g, '');
-
-    // Remove any existing pgNumType elements (we'll re-add properly)
-    documentXml = documentXml.replace(/<w:pgNumType[^\/]*\/>/g, '');
-
-    // Insert lnNumType + docGrid before closing </w:sectPr>
-    documentXml = documentXml.replace(
-        /<\/w:sectPr>/g,
-        '<w:lnNumType w:countBy="5"/><w:docGrid w:type="lines" w:linePitch="326"/></w:sectPr>'
-    );
-
-    zip.file("word/document.xml", documentXml);
-
-    // ---- Create/Modify word/numbering.xml ----
+    // numbering.xml
     const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:numbering xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             xmlns:o="urn:schemas-microsoft-com:office:office"
-             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-             xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
-             xmlns:v="urn:schemas-microsoft-com:vml"
-             xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"
-             xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
-             xmlns:w10="urn:schemas-microsoft-com:office:word"
-             xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-             xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
              xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"
-             xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"
-             xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk"
-             xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml"
-             xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
-             mc:Ignorable="w14 w15 wp14">
-  <w:abstractNum w:abstractNumId="0" w15:restartNumberingAfterBreak="0">
-    <w:multiLevelType w:val="hybridMultilevel"/>
-    <w:lvl w:ilvl="0">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="decimalZero"/>
-      <w:lvlRestart w:val="0"/>
-      <w:lvlText w:val="[00%1]"/>
-      <w:lvlJc w:val="left"/>
-      <w:pPr>
-        <w:ind w:left="0" w:firstLine="0"/>
-      </w:pPr>
-      <w:rPr>
-        <w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>
-        <w:b/>
-        <w:i w:val="0"/>
-        <w:caps w:val="0"/>
-        <w:strike w:val="0"/>
-        <w:vanish w:val="0"/>
-        <w:color w:val="000000"/>
-        <w:sz w:val="24"/>
-        <w:szCs w:val="24"/>
-        <w:u w:val="none"/>
-      </w:rPr>
-    </w:lvl>
-    <w:lvl w:ilvl="1">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="decimal"/>
-      <w:lvlText w:val="%2."/>
-      <w:lvlJc w:val="left"/>
-      <w:pPr>
-        <w:ind w:left="1160" w:hanging="360"/>
-      </w:pPr>
-    </w:lvl>
-    <w:lvl w:ilvl="2">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="lowerRoman"/>
-      <w:lvlText w:val="%3."/>
-      <w:lvlJc w:val="right"/>
-      <w:pPr>
-        <w:ind w:left="2160" w:hanging="180"/>
-      </w:pPr>
-    </w:lvl>
-    <w:lvl w:ilvl="3">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="decimal"/>
-      <w:lvlText w:val="%4."/>
-      <w:lvlJc w:val="left"/>
-      <w:pPr>
-        <w:ind w:left="2880" w:hanging="360"/>
-      </w:pPr>
-    </w:lvl>
-    <w:lvl w:ilvl="4">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="lowerLetter"/>
-      <w:lvlText w:val="%5."/>
-      <w:lvlJc w:val="left"/>
-      <w:pPr>
-        <w:ind w:left="3600" w:hanging="360"/>
-      </w:pPr>
-    </w:lvl>
-    <w:lvl w:ilvl="5">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="lowerRoman"/>
-      <w:lvlText w:val="%6."/>
-      <w:lvlJc w:val="right"/>
-      <w:pPr>
-        <w:ind w:left="4320" w:hanging="180"/>
-      </w:pPr>
-    </w:lvl>
-    <w:lvl w:ilvl="6">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="decimal"/>
-      <w:lvlText w:val="%7."/>
-      <w:lvlJc w:val="left"/>
-      <w:pPr>
-        <w:ind w:left="5040" w:hanging="360"/>
-      </w:pPr>
-    </w:lvl>
-    <w:lvl w:ilvl="7">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="lowerLetter"/>
-      <w:lvlText w:val="%8."/>
-      <w:lvlJc w:val="left"/>
-      <w:pPr>
-        <w:ind w:left="5760" w:hanging="360"/>
-      </w:pPr>
-    </w:lvl>
-    <w:lvl w:ilvl="8">
-      <w:start w:val="1"/>
-      <w:numFmt w:val="lowerRoman"/>
-      <w:lvlText w:val="%9."/>
-      <w:lvlJc w:val="right"/>
-      <w:pPr>
-        <w:ind w:left="6480" w:hanging="180"/>
-      </w:pPr>
-    </w:lvl>
-  </w:abstractNum>
-  <w:num w:numId="1">
-    <w:abstractNumId w:val="0"/>
-  </w:num>
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="w15">
+<w:abstractNum w:abstractNumId="0" w15:restartNumberingAfterBreak="0">
+<w:nsid w:val="639059B6"/>
+<w:multiLevelType w:val="hybridMultilevel"/>
+<w:tmpl w:val="DD9A07EC"/>
+<w:lvl w:ilvl="0" w:tplc="A6E64738">
+<w:start w:val="1"/><w:numFmt w:val="decimalZero"/><w:lvlRestart w:val="0"/>
+<w:lvlText w:val="[00%1]"/><w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="0" w:firstLine="0"/></w:pPr>
+<w:rPr>
+<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/>
+<w:i w:val="0"/><w:caps w:val="0"/><w:strike w:val="0"/><w:dstrike w:val="0"/>
+<w:outline w:val="0"/><w:shadow w:val="0"/><w:emboss w:val="0"/><w:imprint w:val="0"/>
+<w:vanish w:val="0"/><w:color w:val="000000"/><w:sz w:val="24"/>
+<w:u w:val="none"/><w:effect w:val="none"/><w:vertAlign w:val="baseline"/>
+</w:rPr>
+</w:lvl>
+<w:lvl w:ilvl="1" w:tplc="ADA413E2">
+<w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%2."/><w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="1160" w:hanging="360"/></w:pPr>
+<w:rPr><w:rFonts w:hint="default"/></w:rPr>
+</w:lvl>
+<w:lvl w:ilvl="2" w:tplc="0409001B" w:tentative="1"><w:start w:val="1"/><w:numFmt w:val="lowerRoman"/><w:lvlText w:val="%3."/><w:lvlJc w:val="right"/><w:pPr><w:ind w:left="1600" w:hanging="400"/></w:pPr></w:lvl>
+<w:lvl w:ilvl="3" w:tplc="0409000F" w:tentative="1"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%4."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="2000" w:hanging="400"/></w:pPr></w:lvl>
+<w:lvl w:ilvl="4" w:tplc="04090019" w:tentative="1"><w:start w:val="1"/><w:numFmt w:val="upperLetter"/><w:lvlText w:val="%5."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="2400" w:hanging="400"/></w:pPr></w:lvl>
+<w:lvl w:ilvl="5" w:tplc="0409001B" w:tentative="1"><w:start w:val="1"/><w:numFmt w:val="lowerRoman"/><w:lvlText w:val="%6."/><w:lvlJc w:val="right"/><w:pPr><w:ind w:left="2800" w:hanging="400"/></w:pPr></w:lvl>
+<w:lvl w:ilvl="6" w:tplc="0409000F" w:tentative="1"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%7."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="3200" w:hanging="400"/></w:pPr></w:lvl>
+<w:lvl w:ilvl="7" w:tplc="04090019" w:tentative="1"><w:start w:val="1"/><w:numFmt w:val="upperLetter"/><w:lvlText w:val="%8."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="3600" w:hanging="400"/></w:pPr></w:lvl>
+<w:lvl w:ilvl="8" w:tplc="0409001B" w:tentative="1"><w:start w:val="1"/><w:numFmt w:val="lowerRoman"/><w:lvlText w:val="%9."/><w:lvlJc w:val="right"/><w:pPr><w:ind w:left="4000" w:hanging="400"/></w:pPr></w:lvl>
+</w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
 </w:numbering>`;
 
-    zip.file("word/numbering.xml", numberingXml);
-
-    // ---- Create/Modify word/styles.xml ----
+    // styles.xml
     const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-          xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
-          xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-          mc:Ignorable="w14">
-  <w:docDefaults>
-    <w:rPrDefault>
-      <w:rPr>
-        <w:rFonts w:ascii="바탕체" w:eastAsia="바탕체" w:hAnsi="바탕체" w:cs="바탕체"/>
-        <w:sz w:val="24"/>
-        <w:szCs w:val="24"/>
-        <w:lang w:val="en-US" w:eastAsia="ko-KR"/>
-      </w:rPr>
-    </w:rPrDefault>
-    <w:pPrDefault>
-      <w:pPr>
-        <w:spacing w:line="480" w:lineRule="auto" w:before="0" w:after="0"/>
-      </w:pPr>
-    </w:pPrDefault>
-  </w:docDefaults>
-  <w:style w:type="paragraph" w:default="1" w:styleId="a">
-    <w:name w:val="Normal"/>
-    <w:qFormat/>
-    <w:rPr>
-      <w:rFonts w:ascii="바탕체" w:eastAsia="바탕체" w:hAnsi="바탕체" w:cs="바탕체"/>
-      <w:sz w:val="24"/>
-      <w:szCs w:val="24"/>
-    </w:rPr>
-  </w:style>
-  <w:style w:type="paragraph" w:styleId="a3">
-    <w:name w:val="header"/>
-    <w:basedOn w:val="a"/>
-    <w:pPr>
-      <w:tabs>
-        <w:tab w:val="center" w:pos="4513"/>
-        <w:tab w:val="right" w:pos="9026"/>
-      </w:tabs>
-    </w:pPr>
-  </w:style>
-  <w:style w:type="paragraph" w:styleId="a4">
-    <w:name w:val="footer"/>
-    <w:basedOn w:val="a"/>
-    <w:pPr>
-      <w:tabs>
-        <w:tab w:val="center" w:pos="4513"/>
-        <w:tab w:val="right" w:pos="9026"/>
-      </w:tabs>
-    </w:pPr>
-  </w:style>
-  <w:style w:type="character" w:styleId="a5">
-    <w:name w:val="line number"/>
-  </w:style>
-  <w:style w:type="character" w:styleId="a6">
-    <w:name w:val="page number"/>
-  </w:style>
-  <w:style w:type="paragraph" w:styleId="a7">
-    <w:name w:val="List Paragraph"/>
-    <w:basedOn w:val="a"/>
-    <w:qFormat/>
-    <w:pPr>
-      <w:ind w:left="800"/>
-    </w:pPr>
-  </w:style>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults>
+<w:rPrDefault><w:rPr>
+<w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi" w:cstheme="minorBidi"/>
+<w:kern w:val="2"/><w:szCs w:val="22"/>
+<w:lang w:val="en-US" w:eastAsia="ko-KR" w:bidi="ar-SA"/>
+</w:rPr></w:rPrDefault>
+<w:pPrDefault><w:pPr>
+<w:spacing w:after="160" w:line="259" w:lineRule="auto"/>
+<w:jc w:val="both"/>
+</w:pPr></w:pPrDefault>
+</w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="a">
+<w:name w:val="Normal"/>
+<w:pPr><w:widowControl w:val="0"/><w:wordWrap w:val="0"/><w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/></w:pPr>
+<w:rPr><w:rFonts w:ascii="바탕체" w:eastAsia="바탕체" w:hAnsi="바탕체"/><w:sz w:val="24"/></w:rPr>
+</w:style>
+<w:style w:type="character" w:default="1" w:styleId="a0"><w:name w:val="Default Paragraph Font"/></w:style>
+<w:style w:type="table" w:default="1" w:styleId="a1"><w:name w:val="Normal Table"/></w:style>
+<w:style w:type="numbering" w:default="1" w:styleId="a2"><w:name w:val="No List"/></w:style>
+<w:style w:type="paragraph" w:styleId="a3"><w:name w:val="header"/><w:basedOn w:val="a"/>
+<w:pPr><w:tabs/><w:snapToGrid w:val="0"/></w:pPr></w:style>
+<w:style w:type="paragraph" w:styleId="a4"><w:name w:val="footer"/><w:basedOn w:val="a"/>
+<w:pPr><w:tabs/><w:snapToGrid w:val="0"/></w:pPr></w:style>
+<w:style w:type="character" w:styleId="a5"><w:name w:val="line number"/><w:basedOn w:val="a0"/></w:style>
+<w:style w:type="character" w:styleId="a6"><w:name w:val="page number"/><w:basedOn w:val="a0"/></w:style>
+<w:style w:type="paragraph" w:styleId="a7"><w:name w:val="List Paragraph"/><w:basedOn w:val="a"/>
+<w:pPr><w:ind w:leftChars="400" w:left="800"/></w:pPr></w:style>
 </w:styles>`;
 
-    zip.file("word/styles.xml", stylesXml);
+    // settings.xml
+    const settingsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+            xmlns:o="urn:schemas-microsoft-com:office:office">
+<w:zoom w:percent="100"/>
+<w:updateFields w:val="1"/>
+<w:bordersDoNotSurroundHeader/>
+<w:bordersDoNotSurroundFooter/>
+<w:defaultTabStop w:val="800"/>
+<w:characterSpacingControl w:val="doNotCompress"/>
+<w:themeFontLang w:val="en-US" w:eastAsia="ko-KR"/>
+<w:decimalSymbol w:val="."/>
+<w:listSeparator w:val=","/>
+</w:settings>`;
 
-    // ---- Update [Content_Types].xml to include numbering ----
-    let contentTypesXml = await zip.file("[Content_Types].xml").async("string");
-    if (!contentTypesXml.includes("numbering.xml")) {
-        contentTypesXml = contentTypesXml.replace(
-            "</Types>",
-            '<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>'
-        );
-    }
-    zip.file("[Content_Types].xml", contentTypesXml);
+    // Headers (empty)
+    const headerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:p><w:pPr><w:pStyle w:val="a3"/></w:pPr></w:p>
+</w:hdr>`;
 
-    // ---- Update word/_rels/document.xml.rels to reference numbering.xml ----
-    let docRels = await zip.file("word/_rels/document.xml.rels").async("string");
-    if (!docRels.includes("numbering.xml")) {
-        docRels = docRels.replace(
-            "</Relationships>",
-            '<Relationship Id="rId99" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>'
-        );
-    }
-    zip.file("word/_rels/document.xml.rels", docRels);
+    // Footer with PAGE field (footer1, footer2)
+    const footerWithPageXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:p>
+<w:pPr>
+<w:pStyle w:val="a4"/>
+<w:framePr w:wrap="around" w:vAnchor="text" w:hAnchor="margin" w:xAlign="center" w:y="1"/>
+<w:rPr><w:rStyle w:val="a6"/></w:rPr>
+</w:pPr>
+<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>
+<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
+<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>
+</w:p>
+<w:p><w:pPr><w:pStyle w:val="a4"/></w:pPr></w:p>
+</w:ftr>`;
 
-    // ---- Fix document.xml: update numId references to match our numbering ----
-    documentXml = await zip.file("word/document.xml").async("string");
+    // Footer first page (empty)
+    const footerFirstPageXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:p><w:pPr><w:pStyle w:val="a4"/></w:pPr></w:p>
+</w:ftr>`;
 
-    // The docx library generates its own numbering IDs. We need to replace them
-    // to match our custom numbering.xml (numId="1").
-    // Find all numId references and replace with numId=1
-    documentXml = documentXml.replace(
-        /<w:numId w:val="[^"]*"\/>/g,
-        '<w:numId w:val="1"/>'
-    );
-    // Ensure ilvl is 0 for all numbered paragraphs
-    documentXml = documentXml.replace(
-        /<w:ilvl w:val="[^"]*"\/>/g,
-        '<w:ilvl w:val="0"/>'
-    );
+    // [Content_Types].xml
+    zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
+<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+<Override PartName="/word/header2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+<Override PartName="/word/header3.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>
+<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
+<Override PartName="/word/footer2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
+<Override PartName="/word/footer3.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
+</Types>`);
 
-    // ---- Fix footer: add framePr to PAGE field paragraph ----
-    // Find footer files and modify them
-    const footerFiles = Object.keys(zip.files).filter(f => f.match(/word\/footer\d*\.xml/));
-    for (const footerFile of footerFiles) {
-        let footerXml = await zip.file(footerFile).async("string");
+    // _rels/.rels
+    zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
 
-        // Add pStyle footer and framePr to the paragraph containing PAGE field
-        footerXml = footerXml.replace(
-            /<w:pPr>([\s\S]*?)<w:jc w:val="center"\/>/g,
-            '<w:pPr><w:pStyle w:val="a4"/><w:framePr w:wrap="around" w:vAnchor="text" w:hAnchor="margin" w:xAlign="center" w:y="1"/>$1<w:jc w:val="center"/>'
-        );
+    // word/_rels/document.xml.rels
+    zip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
+<Relationship Id="rId10" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>
+<Relationship Id="rId11" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/>
+<Relationship Id="rId12" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>
+<Relationship Id="rId13" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>
+<Relationship Id="rId14" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header3.xml"/>
+<Relationship Id="rId15" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer3.xml"/>
+</Relationships>`);
 
-        // Add character style for page number runs
-        footerXml = footerXml.replace(
-            /(<w:r>[\s\S]*?<w:fldChar)/g,
-            '<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:fldChar'
-        );
+    // Write all files
+    zip.file('word/document.xml', documentXml);
+    zip.file('word/numbering.xml', numberingXml);
+    zip.file('word/styles.xml', stylesXml);
+    zip.file('word/settings.xml', settingsXml);
+    zip.file('word/header1.xml', headerXml);
+    zip.file('word/header2.xml', headerXml);
+    zip.file('word/header3.xml', headerXml);
+    zip.file('word/footer1.xml', footerWithPageXml);
+    zip.file('word/footer2.xml', footerWithPageXml);
+    zip.file('word/footer3.xml', footerFirstPageXml);
 
-        zip.file(footerFile, footerXml);
-    }
-
-    // ---- Fix header files: add pStyle header ----
-    const headerFiles = Object.keys(zip.files).filter(f => f.match(/word\/header\d*\.xml/));
-    for (const headerFile of headerFiles) {
-        let headerXml = await zip.file(headerFile).async("string");
-        // Add header style to paragraphs
-        if (!headerXml.includes('w:pStyle')) {
-            headerXml = headerXml.replace(
-                /<w:p[ >]/g,
-                (match) => {
-                    if (match === '<w:p>') {
-                        return '<w:p><w:pPr><w:pStyle w:val="a3"/></w:pPr>';
-                    }
-                    return match;
-                }
-            );
-            // Also handle <w:p> without children
-            headerXml = headerXml.replace(
-                /<w:p\/>/g,
-                '<w:p><w:pPr><w:pStyle w:val="a3"/></w:pPr></w:p>'
-            );
-        }
-        zip.file(headerFile, headerXml);
-    }
-
-    zip.file("word/document.xml", documentXml);
-
-    // ---- Generate final docx ----
+    // Generate
     const finalBuffer = await zip.generateAsync({
         type: "nodebuffer",
-        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         compression: "DEFLATE",
     });
 
     fs.writeFileSync("US_patent_template.docx", finalBuffer);
     console.log("✅ US_patent_template.docx 생성 완료!");
 
-    // ---- Verification: re-read and check contents ----
-    const verifyZip = await JSZip.loadAsync(finalBuffer);
-
+    // === Verification ===
+    const vZip = await JSZip.loadAsync(finalBuffer);
     console.log("\n=== 검증 결과 ===");
 
-    // Check numbering.xml
-    const numXml = await verifyZip.file("word/numbering.xml").async("string");
-    console.log("✅ numbering.xml 존재:", numXml.includes("decimalZero") && numXml.includes("[00%1]"));
-    console.log("   - abstractNumId=0, hybridMultilevel:", numXml.includes('abstractNumId="0"') && numXml.includes("hybridMultilevel"));
-    console.log("   - lvlRestart=0:", numXml.includes('lvlRestart'));
-    console.log("   - numId=1:", numXml.includes('numId="1"'));
+    const docXml = await vZip.file("word/document.xml").async("string");
+    console.log("✅ sectPr pgSz (no orient):", docXml.includes('w:w="11906"') && !docXml.includes('orient'));
+    console.log("✅ cols (no num):", docXml.includes('w:space="720"') && !docXml.match(/cols[^>]*num/));
+    console.log("✅ lnNumType countBy=5:", docXml.includes('countBy="5"'));
+    console.log("✅ docGrid linePitch=326:", docXml.includes('linePitch="326"'));
 
-    // Check styles.xml
-    const stXml = await verifyZip.file("word/styles.xml").async("string");
-    console.log("✅ styles.xml Normal(바탕체):", stXml.includes("바탕체"));
-    console.log("   - header style a3:", stXml.includes('styleId="a3"'));
-    console.log("   - footer style a4:", stXml.includes('styleId="a4"'));
-    console.log("   - line number a5:", stXml.includes('styleId="a5"'));
-    console.log("   - page number a6:", stXml.includes('styleId="a6"'));
-    console.log("   - List Paragraph a7:", stXml.includes('styleId="a7"'));
+    const seqCount = (docXml.match(/SEQ ParagraphNum/g) || []).length;
+    console.log(`✅ SEQ 필드 개수: ${seqCount}`);
 
-    // Check document.xml
-    const docXml = await verifyZip.file("word/document.xml").async("string");
-    console.log("✅ document.xml lnNumType:", docXml.includes('lnNumType') && docXml.includes('countBy="5"'));
-    console.log("   - docGrid:", docXml.includes('docGrid') && docXml.includes('linePitch="326"'));
-    console.log("   - numId=1 참조:", docXml.includes('numId w:val="1"'));
-    console.log("   - 페이지 크기 A4:", docXml.includes('w:w="11906"') && docXml.includes('w:h="16838"'));
-
-    // Check footers
-    for (const f of Object.keys(verifyZip.files).filter(f => f.match(/word\/footer/))) {
-        const fXml = await verifyZip.file(f).async("string");
-        console.log(`✅ ${f} PAGE필드:`, fXml.includes("PAGE"));
-        console.log(`   - framePr:`, fXml.includes("framePr"));
+    // Check SEQ cache values
+    const cacheMatches = docXml.match(/<w:noProof\/><\/w:rPr><w:t>(\d+)<\/w:t>/g) || [];
+    if (cacheMatches.length > 0) {
+        const lastCache = cacheMatches[cacheMatches.length - 1].match(/(\d+)/);
+        console.log(`✅ 마지막 SEQ 캐시값: ${lastCache ? lastCache[0] : 'N/A'}`);
     }
 
-    // Check Content_Types
-    const ctXml = await verifyZip.file("[Content_Types].xml").async("string");
-    console.log("✅ Content_Types numbering:", ctXml.includes("numbering.xml"));
+    const stXml = await vZip.file("word/styles.xml").async("string");
+    console.log("✅ styles Normal(바탕체):", stXml.includes("바탕체"));
+    console.log("✅ docDefaults theme fonts:", stXml.includes("minorHAnsi"));
+    console.log("✅ header tabs empty:", stXml.includes('<w:tabs/>'));
+    console.log("✅ a0 Default Paragraph Font:", stXml.includes('styleId="a0"'));
+    console.log("✅ a1 Normal Table:", stXml.includes('styleId="a1"'));
+    console.log("✅ a2 No List:", stXml.includes('styleId="a2"'));
+    console.log("✅ a5 basedOn a0:", stXml.includes('a5') && stXml.includes('<w:basedOn w:val="a0"/>'));
 
-    // Check rels
-    const relsXml = await verifyZip.file("word/_rels/document.xml.rels").async("string");
-    console.log("✅ document.xml.rels numbering:", relsXml.includes("numbering.xml"));
+    const setXml = await vZip.file("word/settings.xml").async("string");
+    console.log("✅ settings updateFields=1:", setXml.includes('updateFields w:val="1"'));
+    console.log("✅ bordersDoNotSurroundHeader:", setXml.includes('bordersDoNotSurroundHeader'));
+    console.log("✅ characterSpacingControl:", setXml.includes('doNotCompress'));
+    console.log("✅ themeFontLang:", setXml.includes('eastAsia="ko-KR"'));
+
+    const numXml = await vZip.file("word/numbering.xml").async("string");
+    console.log("✅ numbering nsid:", numXml.includes('639059B6'));
+    console.log("✅ numbering tmpl:", numXml.includes('DD9A07EC'));
+    console.log("✅ numbering tentative:", numXml.includes('tentative="1"'));
+
+    const f1 = await vZip.file("word/footer1.xml").async("string");
+    console.log("✅ footer1 PAGE field:", f1.includes('PAGE'));
+    console.log("✅ footer1 framePr (no jc):", f1.includes('framePr') && !f1.includes('w:jc'));
+    console.log("✅ footer1 two paragraphs:", (f1.match(/<w:p>/g) || []).length === 2);
+
+    const f3 = await vZip.file("word/footer3.xml").async("string");
+    console.log("✅ footer3 empty (no PAGE):", !f3.includes('PAGE'));
 
     console.log("\n파일 크기:", (finalBuffer.length / 1024).toFixed(1), "KB");
 }
