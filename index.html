@@ -2248,23 +2248,45 @@ def fibonacci(n):
         
         // 양식표준화 공통 로직 (텍스트 입력, 결과 반환)
         function applyFormatStandardization(text) {
-            // 1단계: 단락 뒤 불필요한 공백(trailing spaces) 제거
+            // 1단계: 단락 뒤 불필요한 공백 제거
+            // - 각 줄의 trailing spaces 제거
+            // - 연속된 빈줄을 1줄로 축소
             const rawLines = text.split('\n');
-            let trailingSpaceRemoved = 0;
+            let changeCount = 0;
+
+            // trailing spaces 제거
             const cleanedLines = rawLines.map(line => {
                 const trimmedRight = line.replace(/\s+$/, '');
                 if (trimmedRight !== line && line.trim() !== '') {
-                    trailingSpaceRemoved++;
+                    changeCount++;
                 }
                 return trimmedRight;
             });
-            text = cleanedLines.join('\n');
+
+            // 연속된 빈줄을 1줄로 축소
+            const deduped = [];
+            for (let i = 0; i < cleanedLines.length; i++) {
+                const isEmpty = cleanedLines[i].trim() === '';
+                const prevEmpty = deduped.length > 0 && deduped[deduped.length - 1].trim() === '';
+                if (isEmpty && prevEmpty) {
+                    changeCount++; // 중복 빈줄 제거
+                    continue;
+                }
+                deduped.push(cleanedLines[i]);
+            }
+
+            // 문서 끝 빈줄 제거
+            while (deduped.length > 0 && deduped[deduped.length - 1].trim() === '') {
+                deduped.pop();
+                changeCount++;
+            }
+
+            text = deduped.join('\n');
 
             // 2단계: 양식표준화 규칙 적용
             const lines = text.split('\n');
             const resultLines = [];
             let inClaims = false;
-            let changeCount = trailingSpaceRemoved;
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
@@ -2297,8 +2319,11 @@ def fibonacci(n):
                 if (upperTrimmed === 'WHAT IS CLAIMED IS:' || upperTrimmed === 'WHAT IS CLAIMED IS') {
                     resultLines.push('<pagebreak/>');
                     resultLines.push(line);
-                    // WHAT IS CLAIMED IS: 다음에 빈줄 추가
-                    resultLines.push('');
+                    // WHAT IS CLAIMED IS: 다음에 빈줄 추가 (이미 빈줄이 있으면 추가하지 않음)
+                    if (i + 1 >= lines.length || lines[i + 1].trim() !== '') {
+                        resultLines.push('');
+                        changeCount++;
+                    }
                     inClaims = true;
                     changeCount++;
                     continue;
@@ -3697,6 +3722,8 @@ def fibonacci(n):
 
             // 양식표준화가 아직 안 되어 있으면 먼저 적용
             const result = applyFormatStandardization(text);
+            // US양식에서는 <pagebreak/> 마커 제거 (DOCX 내에서 별도로 페이지 나누기 처리)
+            result.text = result.text.replace(/<pagebreak\/>\n?/g, '');
             if (result.changeCount > 0) {
                 window.englishRawText3 = result.text;
             }
