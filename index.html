@@ -4310,7 +4310,7 @@ def fibonacci(n):
                 // 청구항 시작 감지
                 if (isClaimsStartLine(para)) {
                     inClaims = true;
-                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocxArial(trimmed)}</w:r></w:p>`;
                     continue;
                 }
 
@@ -4320,17 +4320,17 @@ def fibonacci(n):
                     if (upperTrimmed === 'ABSTRACT' || upperTrimmed === 'ABSTRACT OF DISCLOSURE') {
                         inClaims = false;
                         inAbstract = true;
-                        bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
+                        bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocxArial(trimmed)}</w:r></w:p>`;
                         continue;
                     }
 
                     const isClaimNum = /^\d+\.\s*$/.test(trimmed);
                     if (isClaimNum) {
-                        bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrBody}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
+                        bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrBody}${convertRunToDocxArial(trimmed)}</w:r></w:p>`;
                     } else {
                         const claimText = stripTextParagraphNumber(trimmed);
                         const cleanText = claimText.replace(/^\d+\.\t/, (m) => m);
-                        bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:ind w:firstLine="799"/></w:pPr><w:r>${rPrBody}${convertRunToDocx3(cleanText)}</w:r></w:p>`;
+                        bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:ind w:firstLine="799"/></w:pPr><w:r>${rPrBody}${convertRunToDocxArial(cleanText)}</w:r></w:p>`;
                     }
                     continue;
                 }
@@ -4341,13 +4341,13 @@ def fibonacci(n):
                 const upperTrimmedBody = trimmed.toUpperCase();
                 if (!inAbstract && (upperTrimmedBody === 'ABSTRACT' || upperTrimmedBody === 'ABSTRACT OF DISCLOSURE')) {
                     inAbstract = true;
-                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocxArial(trimmed)}</w:r></w:p>`;
                     continue;
                 }
 
                 // 부제목 → 번호 없음, 헤딩 서식
                 if (isSubtitleLine(para)) {
-                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocx3(trimmed)}</w:r></w:p>`;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrHeading}${convertRunToDocxArial(trimmed)}</w:r></w:p>`;
                     continue;
                 }
 
@@ -4360,10 +4360,10 @@ def fibonacci(n):
                 // 본문 단락: SEQ 필드 단락번호 적용 여부 판별
                 if (isNumberedBodyParagraph(para, inClaims, inTable, beforeCrossRef, inAbstract)) {
                     const cleanPara = stripTextParagraphNumber(trimmed);
-                    bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:ind w:leftChars="0"/></w:pPr>${makeSeqFieldXml()}<w:r>${rPrBody}${convertRunToDocx3(cleanPara)}</w:r></w:p>`;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:ind w:leftChars="0"/></w:pPr>${makeSeqFieldXml()}<w:r>${rPrBody}${convertRunToDocxArial(cleanPara)}</w:r></w:p>`;
                 } else {
                     const cleanPara = stripTextParagraphNumber(trimmed);
-                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrBody}${convertRunToDocx3(cleanPara)}</w:r></w:p>`;
+                    bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrBody}${convertRunToDocxArial(cleanPara)}</w:r></w:p>`;
                 }
             }
 
@@ -4650,7 +4650,7 @@ def fibonacci(n):
         function convertRunToDocx3(text) {
             let result = '';
             let i = 0;
-            
+
             while (i < text.length) {
                 // <sub> 태그 처리
                 if (text.substr(i, 5).toLowerCase() === '<sub>') {
@@ -4681,7 +4681,47 @@ def fibonacci(n):
                 result += escapeXml(text[i]);
                 i++;
             }
-            
+
+            return `<w:t xml:space="preserve">${result}</w:t>`;
+        }
+
+        // US특허 양식용 run 변환 - sub/sup 생성 run에도 Arial 폰트 유지
+        function convertRunToDocxArial(text) {
+            const arialFonts = '<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:sz w:val="24"/>';
+            let result = '';
+            let i = 0;
+
+            while (i < text.length) {
+                // <sub> 태그 처리
+                if (text.substr(i, 5).toLowerCase() === '<sub>') {
+                    const endIdx = text.toLowerCase().indexOf('</sub>', i);
+                    if (endIdx !== -1) {
+                        const subText = text.substring(i + 5, endIdx);
+                        result += `</w:t></w:r><w:r><w:rPr><w:vertAlign w:val="subscript"/>${arialFonts}</w:rPr><w:t xml:space="preserve">${escapeXml(subText)}</w:t></w:r><w:r><w:rPr>${arialFonts}</w:rPr><w:t xml:space="preserve">`;
+                        i = endIdx + 6;
+                        continue;
+                    }
+                }
+                // <sup> 태그 처리
+                if (text.substr(i, 5).toLowerCase() === '<sup>') {
+                    const endIdx = text.toLowerCase().indexOf('</sup>', i);
+                    if (endIdx !== -1) {
+                        const supText = text.substring(i + 5, endIdx);
+                        result += `</w:t></w:r><w:r><w:rPr><w:vertAlign w:val="superscript"/>${arialFonts}</w:rPr><w:t xml:space="preserve">${escapeXml(supText)}</w:t></w:r><w:r><w:rPr>${arialFonts}</w:rPr><w:t xml:space="preserve">`;
+                        i = endIdx + 6;
+                        continue;
+                    }
+                }
+                // <br> 태그 처리
+                if (text.substr(i, 4).toLowerCase() === '<br>' || text.substr(i, 5).toLowerCase() === '<br/>') {
+                    result += '</w:t><w:br/><w:t xml:space="preserve">';
+                    i += text.substr(i, 4).toLowerCase() === '<br>' ? 4 : 5;
+                    continue;
+                }
+                result += escapeXml(text[i]);
+                i++;
+            }
+
             return `<w:t xml:space="preserve">${result}</w:t>`;
         }
         
