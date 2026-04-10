@@ -186,64 +186,74 @@
                 </div>
             </div>
             <div class="section">
-                <div class="section-title">2단계: 우선권출원 정보 입력</div>
-                <div class="priority-input-group">
-                    <div class="priority-row">
-                        <div class="priority-field">
-                            <label>출원년도</label>
-                            <input type="text" id="priorityYear2" placeholder="2024" maxlength="4">
+                <div class="toggle-section" onclick="toggleSection2('Step2')" style="cursor:pointer;margin-bottom:0;">
+                    <div class="section-title" style="margin-bottom:0;">2단계: 우선권출원 정보 입력</div>
+                    <button class="toggle-btn" id="toggleBtn2Step2" onclick="event.stopPropagation();toggleSection2('Step2')">▶ 펼치기</button>
+                </div>
+                <div id="content2Step2" style="display:none;">
+                    <div class="priority-input-group" style="margin-top:12px;">
+                        <div class="priority-row">
+                            <div class="priority-field">
+                                <label>출원년도</label>
+                                <input type="text" id="priorityYear2" placeholder="2024" maxlength="4">
+                            </div>
+                            <div class="priority-field">
+                                <label>출원월</label>
+                                <input type="text" id="priorityMonth2" placeholder="01" maxlength="2">
+                            </div>
+                            <div class="priority-field">
+                                <label>출원일</label>
+                                <input type="text" id="priorityDay2" placeholder="15" maxlength="2">
+                            </div>
                         </div>
-                        <div class="priority-field">
-                            <label>출원월</label>
-                            <input type="text" id="priorityMonth2" placeholder="01" maxlength="2">
-                        </div>
-                        <div class="priority-field">
-                            <label>출원일</label>
-                            <input type="text" id="priorityDay2" placeholder="15" maxlength="2">
+                        <div class="priority-row">
+                            <div class="priority-field wide">
+                                <label>출원번호</label>
+                                <input type="text" id="priorityNumber2" placeholder="10-2024-0012345">
+                            </div>
+                            <div class="priority-field" style="justify-content: flex-end;">
+                                <button class="btn btn-primary" onclick="insertCrossReference2()" id="insertCrossRefBtn2">📝 Cross-reference 삽입</button>
+                            </div>
                         </div>
                     </div>
-                    <div class="priority-row">
-                        <div class="priority-field wide">
-                            <label>출원번호</label>
-                            <input type="text" id="priorityNumber2" placeholder="10-2024-0012345">
-                        </div>
-                        <div class="priority-field" style="justify-content: flex-end;">
-                            <button class="btn btn-primary" onclick="insertCrossReference2()" id="insertCrossRefBtn2">📝 Cross-reference 삽입</button>
-                        </div>
+                    <div class="note" style="margin-top:15px;">
+                        <span class="note-icon">💡</span>
+                        <span>모든 정보 입력 후 버튼을 클릭하면 BACKGROUND 단락 앞에 Cross-reference가 삽입됩니다.</span>
                     </div>
+                    <div id="crossRefMessage2" class="message hidden"></div>
                 </div>
-                <div class="note" style="margin-top:15px;">
-                    <span class="note-icon">💡</span>
-                    <span>모든 정보 입력 후 버튼을 클릭하면 BACKGROUND 단락 앞에 Cross-reference가 삽입됩니다.</span>
-                </div>
-                <div id="crossRefMessage2" class="message hidden"></div>
             </div>
             <div class="section">
-                <div class="section-title">3단계: 부제표준화 (선택)</div>
-                <div class="subtitle-standard-option">
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="subtitleStandard2" value="sdc" checked>
-                            <span class="radio-text">SDC표준US</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="subtitleStandard2" value="office">
-                            <span class="radio-text">사무소표준US</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="subtitleStandard2" value="pct">
-                            <span class="radio-text">PCT출원용</span>
-                        </label>
+                <div class="toggle-section" onclick="toggleSection2('Step3')" style="cursor:pointer;margin-bottom:0;">
+                    <div class="section-title" style="margin-bottom:0;">3단계: 부제표준화 (선택)</div>
+                    <button class="toggle-btn" id="toggleBtn2Step3" onclick="event.stopPropagation();toggleSection2('Step3')">▶ 펼치기</button>
+                </div>
+                <div id="content2Step3" style="display:none;">
+                    <div class="subtitle-standard-option" style="margin-top:12px;">
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="subtitleStandard2" value="sdc" checked>
+                                <span class="radio-text">SDC표준US</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="subtitleStandard2" value="office">
+                                <span class="radio-text">사무소표준US</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="subtitleStandard2" value="pct">
+                                <span class="radio-text">PCT출원용</span>
+                            </label>
+                        </div>
+                        <button class="btn btn-primary" onclick="standardizeSubtitles2()" id="standardizeSubtitleBtn2">🔄 부제표준화 적용</button>
                     </div>
-                    <button class="btn btn-primary" onclick="standardizeSubtitles2()" id="standardizeSubtitleBtn2">🔄 부제표준화 적용</button>
+                    <div class="note" style="margin-top:15px;">
+                        <span class="note-icon">💡</span>
+                        <span><strong>SDC표준US:</strong> 국문/사무소부제 → SDC형식 (BACKGROUND, SUMMARY, DETAILED DESCRIPTION 등)<br>
+                        <strong>사무소표준US:</strong> 국문부제 → 영문부제 (TITLE OF THE INVENTION, BACKGROUND OF THE INVENTION 등)<br>
+                        <strong>PCT출원용:</strong> 국문/영문부제 → PCT형식 (【Technical Field】, 【Background Art】 등). 영문부제 변환 시 **적소이동필요** 표시가 추가됩니다.</span>
+                    </div>
+                    <div id="subtitleMessage2" class="message hidden"></div>
                 </div>
-                <div class="note" style="margin-top:15px;">
-                    <span class="note-icon">💡</span>
-                    <span><strong>SDC표준US:</strong> 국문/사무소부제 → SDC형식 (BACKGROUND, SUMMARY, DETAILED DESCRIPTION 등)<br>
-                    <strong>사무소표준US:</strong> 국문부제 → 영문부제 (TITLE OF THE INVENTION, BACKGROUND OF THE INVENTION 등)<br>
-                    <strong>PCT출원용:</strong> 국문/영문부제 → PCT형식 (【Technical Field】, 【Background Art】 등). 영문부제 변환 시 **적소이동필요** 표시가 추가됩니다.</span>
-                </div>
-                <div id="subtitleMessage2" class="message hidden"></div>
             </div>
             <div class="section">
                 <div class="section-title">4단계: 단락번호 추가/제거 (선택)</div>
@@ -267,6 +277,7 @@
                 </div>
                 <div class="btn-group" style="margin-bottom:10px;">
                     <button class="btn btn-primary" onclick="standardizeFormat2()">📐 양식표준화</button>
+                    <button class="btn btn-primary" onclick="applyUSFormat2()" style="background:#1565c0;">🇺🇸 US양식</button>
                 </div>
                 <div id="formatMessage2" class="message hidden" style="margin-bottom:10px;"></div>
                 <div class="preview-area" id="preview2">입력된 텍스트의 미리보기가 여기에 표시됩니다.</div>
@@ -1632,13 +1643,13 @@ def fibonacci(n):
                 return;
             }
             
-            // 단락번호 제거 (임의 자릿수, 공백 유무 상관없이)
+            // 모든 단락을 검사하여 규정된 양식(4~5자리 숫자)의 단락번호 제거
             const lines = currentText.split('\n');
             let removedCount = 0;
             const resultLines = lines.map(line => {
-                if (/^\[\d+\]/.test(line)) {
+                if (/^\[\d{4,5}\]\s?/.test(line)) {
                     removedCount++;
-                    return line.replace(/^\[\d+\]\s?/, '');
+                    return line.replace(/^\[\d{4,5}\]\s?/, '');
                 }
                 return line;
             });
@@ -1685,18 +1696,18 @@ def fibonacci(n):
             let bodyContent = '';
             let insideTable = false;
             let tableBuffer = '';
-            
+
             const lines = text.split('\n');
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
                 const trimmed = line.trim();
-                
+
                 // 페이지 나누기 마커 처리
                 if (trimmed === '<pagebreak/>') {
                     bodyContent += '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
                     continue;
                 }
-                
+
                 // 표 시작 감지
                 if (trimmed.startsWith('<table')) {
                     // 한 줄에 표 전체가 있는 경우
@@ -1709,7 +1720,7 @@ def fibonacci(n):
                     tableBuffer = line + '\n';
                     continue;
                 }
-                
+
                 // 표 내용 수집
                 if (insideTable) {
                     tableBuffer += line + '\n';
@@ -1721,22 +1732,24 @@ def fibonacci(n):
                     }
                     continue;
                 }
-                
+
                 // 일반 텍스트 (font size 12pt = w:sz val 24)
                 bodyContent += `<w:p><w:pPr><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr></w:pPr>${parseOoxmlWithSize(line)}</w:p>`;
             }
-            
-            const docXml = `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${bodyContent}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
-            const ctXml = `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`;
-            const relXml = `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
-            const drXml = `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>`;
+
+            const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${bodyContent}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
+            const ctXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/></Types>`;
+            const relXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
+            const drXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/></Relationships>`;
+            const settingsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
             const zip = new JSZip();
             zip.file('[Content_Types].xml', ctXml);
             zip.folder('_rels').file('.rels', relXml);
             zip.folder('word').file('document.xml', docXml);
+            zip.folder('word').file('settings.xml', settingsXml);
             zip.folder('word/_rels').file('document.xml.rels', drXml);
             saveAs(await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}), filename+'.docx');
-            msgElement.textContent = '✅ 워드 파일(.docx)이 생성되었습니다!'; 
+            msgElement.textContent = '✅ 워드 파일(.docx)이 생성되었습니다!';
             msgElement.className = 'message success';
             setTimeout(() => msgElement.classList.add('hidden'), 3000);
         }
@@ -1790,7 +1803,8 @@ def fibonacci(n):
         
         // 탭2
         const inp2 = document.getElementById('htmlInput2');
-        inp2.addEventListener('input', updatePreview2);
+        window.tab2USFormat = false;
+        inp2.addEventListener('input', () => { window.tab2USFormat = false; updatePreview2(); });
         function updatePreview2() {
             const t = inp2.value;
             
@@ -1862,9 +1876,19 @@ def fibonacci(n):
             inp2.value = ex[type]; updatePreview2();
         }
         
+        // 탭2 2단계/3단계 접기/펼치기
+        function toggleSection2(step) {
+            const content = document.getElementById('content2' + step);
+            const btn = document.getElementById('toggleBtn2' + step);
+            const isCollapsed = content.style.display === 'none';
+            content.style.display = isCollapsed ? '' : 'none';
+            btn.textContent = isCollapsed ? '▲ 접기' : '▶ 펼치기';
+        }
+
         function clearAll2() {
             if (!confirm('모든 내용을 지우시겠습니까?')) return;
             inp2.value = '';
+            window.tab2USFormat = false;
             document.getElementById('fileName2').textContent = '또는 아래에 .docx 파일을 드래그하세요';
             document.getElementById('fileInput2').value = '';
             document.getElementById('outputFileName2').value = '';
@@ -2345,28 +2369,55 @@ def fibonacci(n):
         function standardizeFormat2() {
             const msg = document.getElementById('formatMessage2');
             msg.classList.add('hidden');
-            
+
             const text = inp2.value;
             if (!text.trim()) {
                 msg.textContent = '❌ 먼저 텍스트를 입력해주세요.';
                 msg.className = 'message error';
                 return;
             }
-            
+
             const result = applyFormatStandardization(text);
-            
+
             if (result.changeCount === 0) {
                 msg.textContent = '❌ 적용할 양식 변경이 없습니다.';
                 msg.className = 'message error';
                 return;
             }
-            
+
             inp2.value = result.text;
             updatePreview2();
-            
+
             msg.textContent = `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`;
             msg.className = 'message success';
             setTimeout(() => msg.classList.add('hidden'), 3000);
+        }
+
+        // 탭2 US양식 적용 (양식표준화 + US 특허출원 DOCX 양식 활성화)
+        function applyUSFormat2() {
+            const msg = document.getElementById('formatMessage2');
+            msg.classList.add('hidden');
+
+            const text = inp2.value;
+            if (!text.trim()) {
+                msg.textContent = '❌ 먼저 텍스트를 입력해주세요.';
+                msg.className = 'message error';
+                return;
+            }
+
+            // 양식표준화가 아직 안 되어 있으면 먼저 적용
+            const result = applyFormatStandardization(text);
+            if (result.changeCount > 0) {
+                inp2.value = result.text;
+                updatePreview2();
+            }
+
+            window.tab2USFormat = true; // US 특허출원 DOCX 양식 플래그
+
+            const changes = result.changeCount > 0 ? ` 양식표준화 ${result.changeCount}개 변경 포함.` : '';
+            msg.textContent = `✅ US양식 적용 완료!${changes} DOCX 다운로드 시 US 특허출원 양식이 적용됩니다.`;
+            msg.className = 'message success';
+            setTimeout(() => msg.classList.add('hidden'), 5000);
         }
         
         // 탭2 단락번호 추가
@@ -2488,34 +2539,34 @@ def fibonacci(n):
         function removeParagraphNumbers2() {
             const msg = document.getElementById('paragraphNumMessage2');
             msg.classList.add('hidden');
-            
+
             const text = inp2.value;
             if (!text.trim()) {
                 msg.textContent = '❌ 먼저 텍스트를 입력해주세요.';
                 msg.className = 'message error';
                 return;
             }
-            
+
             const lines = text.split('\n');
             let removedCount = 0;
+            // 모든 단락을 검사하여 규정된 양식(4~5자리 숫자)의 단락번호 제거
             const resultLines = lines.map(line => {
-                // 임의 자릿수, 공백 유무 상관없이 단락번호 제거
-                if (/^\[\d+\]/.test(line)) {
+                if (/^\[\d{4,5}\]\s?/.test(line)) {
                     removedCount++;
-                    return line.replace(/^\[\d+\]\s?/, '');
+                    return line.replace(/^\[\d{4,5}\]\s?/, '');
                 }
                 return line;
             });
-            
+
             if (removedCount === 0) {
                 msg.textContent = '❌ 제거할 단락번호가 없습니다.';
                 msg.className = 'message error';
                 return;
             }
-            
+
             inp2.value = resultLines.join('\n');
             updatePreview2();
-            
+
             msg.textContent = `✅ 단락번호가 제거되었습니다! (${removedCount}개 제거)`;
             msg.className = 'message success';
             setTimeout(() => msg.classList.add('hidden'), 3000);
@@ -2632,7 +2683,14 @@ def fibonacci(n):
             if (!t) { msg.textContent = '❌ 텍스트를 입력해주세요.'; msg.className = 'message error'; return; }
             const fn = document.getElementById('outputFileName2').value.trim() || 'output';
             try {
-                await generateDocxCommon(t, fn, msg);
+                if (window.tab2USFormat) {
+                    await generateDocxUSPatent(t, fn + '.docx');
+                    msg.textContent = '✅ US 특허출원 양식 DOCX 파일이 생성되었습니다!';
+                    msg.className = 'message success';
+                    setTimeout(() => msg.classList.add('hidden'), 3000);
+                } else {
+                    await generateDocxCommon(t, fn, msg);
+                }
             } catch (e) { msg.textContent = '❌ 오류: ' + e.message; msg.className = 'message error'; }
         }
         
@@ -3137,33 +3195,77 @@ def fibonacci(n):
         
         function copyKorean3() {
             const t = window.koreanRawText3 || '';
-            if (!t || t.includes('없습니다')) { alert('복사할 내용이 없습니다.'); return; }
-            navigator.clipboard.writeText(t).then(() => alert('✅ 국문본이 복사되었습니다!'));
+            const msg = document.getElementById('korParagraphNumMessage3');
+            if (!t || t.includes('없습니다')) {
+                msg.textContent = '❌ 복사할 내용이 없습니다.';
+                msg.className = 'message error';
+                return;
+            }
+            navigator.clipboard.writeText(t).then(() => {
+                msg.textContent = '✅ 국문본이 클립보드에 복사되었습니다!';
+                msg.className = 'message success';
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+            }).catch(() => {
+                msg.textContent = '❌ 복사에 실패했습니다.';
+                msg.className = 'message error';
+            });
         }
         function copyEnglish3() {
             const t = window.englishRawText3 || '';
-            if (!t || t.includes('없습니다')) { alert('복사할 내용이 없습니다.'); return; }
-            navigator.clipboard.writeText(t).then(() => alert('✅ 영문본이 복사되었습니다!'));
+            const msg = document.getElementById('engParagraphNumMessage3');
+            if (!t || t.includes('없습니다')) {
+                msg.textContent = '❌ 복사할 내용이 없습니다.';
+                msg.className = 'message error';
+                return;
+            }
+            navigator.clipboard.writeText(t).then(() => {
+                msg.textContent = '✅ 영문본이 클립보드에 복사되었습니다!';
+                msg.className = 'message success';
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+            }).catch(() => {
+                msg.textContent = '❌ 복사에 실패했습니다.';
+                msg.className = 'message error';
+            });
         }
         
         // 국문본 DOCX 다운로드
         async function downloadKorDocx3() {
             const text = window.koreanRawText3 || '';
+            const msg = document.getElementById('korParagraphNumMessage3');
             if (!text || text.includes('없습니다')) {
-                alert('다운로드할 내용이 없습니다.');
+                msg.textContent = '❌ 다운로드할 내용이 없습니다.';
+                msg.className = 'message error';
                 return;
             }
-            await generateDocxFromText3(text, 'korean_extracted.docx');
+            try {
+                await generateDocxFromText3(text, 'korean_extracted.docx');
+                msg.textContent = '✅ 국문본 DOCX 파일이 다운로드되었습니다!';
+                msg.className = 'message success';
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+            } catch (e) {
+                msg.textContent = '❌ 오류: ' + e.message;
+                msg.className = 'message error';
+            }
         }
-        
+
         // 영문본 DOCX 다운로드
         async function downloadEngDocx3() {
             const text = window.englishRawText3 || '';
+            const msg = document.getElementById('engParagraphNumMessage3');
             if (!text || text.includes('없습니다')) {
-                alert('다운로드할 내용이 없습니다.');
+                msg.textContent = '❌ 다운로드할 내용이 없습니다.';
+                msg.className = 'message error';
                 return;
             }
-            await generateDocxFromText3(text, 'english_extracted.docx');
+            try {
+                await generateDocxFromText3(text, 'english_extracted.docx');
+                msg.textContent = '✅ 영문본 DOCX 파일이 다운로드되었습니다!';
+                msg.className = 'message success';
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+            } catch (e) {
+                msg.textContent = '❌ 오류: ' + e.message;
+                msg.className = 'message error';
+            }
         }
         
         // 국문 색변환 함수
@@ -3353,7 +3455,7 @@ def fibonacci(n):
 </w:body></w:document>`;
                 
                 zip.file('word/document.xml', documentXml);
-                
+
                 const blob = await zip.generateAsync({ type: 'blob' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -3363,11 +3465,16 @@ def fibonacci(n):
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                
-                alert('✅ 한영혼합본 DOCX 파일이 다운로드되었습니다!');
+
+                const msg = document.getElementById('colorMessage3');
+                msg.textContent = '✅ 한영혼합본 DOCX 파일이 다운로드되었습니다!';
+                msg.className = 'message success';
+                setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (error) {
                 console.error('DOCX 생성 오류:', error);
-                alert('❌ DOCX 생성 중 오류가 발생했습니다.');
+                const msg = document.getElementById('colorMessage3');
+                msg.textContent = '❌ DOCX 생성 중 오류가 발생했습니다.';
+                msg.className = 'message error';
             }
         }
         
@@ -3770,22 +3877,21 @@ def fibonacci(n):
         function removeParagraphNumbersEng3() {
             const msg = document.getElementById('engParagraphNumMessage3');
             msg.classList.add('hidden');
-            
+
             let text = window.englishRawText3 || '';
             if (!text || text.includes('없습니다')) {
                 msg.textContent = '❌ 영문본이 없습니다.';
                 msg.className = 'message error';
                 return;
             }
-            
+
             const lines = text.split('\n');
             let removedCount = 0;
+            // 모든 단락을 검사하여 규정된 양식(4~5자리 숫자)의 단락번호 제거
             const resultLines = lines.map(line => {
-                const trimmed = line.trim();
-                // 마침표로 끝나는 단락에서만 단락번호 제거 (임의 자릿수, 공백 유무 상관없이)
-                if (/^\[\d+\]/.test(line) && /[.。]["']?$/.test(trimmed)) {
+                if (/^\[\d{4,5}\]\s?/.test(line)) {
                     removedCount++;
-                    return line.replace(/^\[\d+\]\s?/, '');
+                    return line.replace(/^\[\d{4,5}\]\s?/, '');
                 }
                 return line;
             });
@@ -3836,22 +3942,21 @@ def fibonacci(n):
         function removeParagraphNumbersKor3() {
             const msg = document.getElementById('korParagraphNumMessage3');
             msg.classList.add('hidden');
-            
+
             let text = window.koreanRawText3 || '';
             if (!text || text.includes('없습니다')) {
                 msg.textContent = '❌ 국문본이 없습니다.';
                 msg.className = 'message error';
                 return;
             }
-            
+
             const lines = text.split('\n');
             let removedCount = 0;
+            // 모든 단락을 검사하여 규정된 양식(4~5자리 숫자)의 단락번호 제거
             const resultLines = lines.map(line => {
-                const trimmed = line.trim();
-                // 마침표로 끝나는 단락에서만 단락번호 제거 (임의 자릿수, 공백 유무 상관없이)
-                if (/^\[\d+\]/.test(line) && /[.。]["']?$/.test(trimmed)) {
+                if (/^\[\d{4,5}\]\s?/.test(line)) {
                     removedCount++;
-                    return line.replace(/^\[\d+\]\s?/, '');
+                    return line.replace(/^\[\d{4,5}\]\s?/, '');
                 }
                 return line;
             });
@@ -4002,17 +4107,11 @@ def fibonacci(n):
         // 영문본 + 양식표준화 미실행: 기본 양식 (국문본과 동일)
         // 국문본: 기본 양식 (Letter, 12pt, 기본 줄간격)
         async function generateDocxFromText3(text, filename) {
-            try {
-                const isEnglish = filename.toLowerCase().includes('english');
-
-                if (isEnglish && window.englishFormatStandardized) {
-                    await generateDocxUSPatent(text, filename);
-                } else {
-                    await generateDocxBasic(text, filename);
-                }
-            } catch (error) {
-                console.error('DOCX 생성 오류:', error);
-                alert('❌ DOCX 생성 중 오류가 발생했습니다.');
+            const isEnglish = filename.toLowerCase().includes('english');
+            if (isEnglish && window.englishFormatStandardized) {
+                await generateDocxUSPatent(text, filename);
+            } else {
+                await generateDocxBasic(text, filename);
             }
         }
 
@@ -4083,8 +4182,6 @@ def fibonacci(n):
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-
-            alert('✅ DOCX 파일이 다운로드되었습니다!');
         }
 
         // US 특허출원 양식 DOCX 생성 (영문본용)
@@ -4547,8 +4644,6 @@ def fibonacci(n):
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-
-            alert('✅ US 특허출원 양식 DOCX 파일이 다운로드되었습니다!\n\n• SEQ 필드 단락번호 [0001]~ (4자리 고정)\n• 단락 삭제 후 저장→재열기 시 번호 자동 갱신\n• 행번호(5행마다), 페이지번호 포함');
         }
         
         // 텍스트를 DOCX run으로 변환 (sub, sup 처리) - font size 12pt
@@ -5371,21 +5466,30 @@ def fibonacci(n):
 
         // 결과 복사
         function copyMergeResult3() {
+            const msg = document.getElementById('mergeMessage3');
             if (!mergeResult) {
-                alert('병합 결과가 없습니다.');
+                msg.textContent = '❌ 병합 결과가 없습니다.';
+                msg.className = 'message error';
                 return;
             }
             const stripNums = document.getElementById('stripParaNumsOption').checked;
             const text = stripNums ? stripParaNumsFromText(mergeResult) : mergeResult;
             navigator.clipboard.writeText(text).then(() => {
-                alert('✅ 한영혼합본이 클립보드에 복사되었습니다.' + (stripNums ? ' (단락번호 삭제됨)' : ''));
+                msg.textContent = '✅ 한영혼합본이 클립보드에 복사되었습니다.' + (stripNums ? ' (단락번호 삭제됨)' : '');
+                msg.className = 'message success';
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+            }).catch(() => {
+                msg.textContent = '❌ 복사에 실패했습니다.';
+                msg.className = 'message error';
             });
         }
         
         // DOCX 다운로드 (국문 단락은 갈색 폰트, 영문 단락은 검정)
         async function downloadMergeDocx3() {
+            const msg = document.getElementById('mergeMessage3');
             if (!mergeResult || mergeResultPairs.length === 0) {
-                alert('병합 결과가 없습니다.');
+                msg.textContent = '❌ 병합 결과가 없습니다.';
+                msg.className = 'message error';
                 return;
             }
             
@@ -5467,9 +5571,13 @@ ${bodyContent}
                 const fileName = document.getElementById('mergeFileName3').value.trim() || '한영혼합본';
                 const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
                 saveAs(blob, fileName + '.docx');
-                
+
+                msg.textContent = '✅ 한영혼합본 DOCX 파일이 다운로드되었습니다!';
+                msg.className = 'message success';
+                setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (error) {
-                alert('오류: ' + error.message);
+                msg.textContent = '❌ 오류: ' + error.message;
+                msg.className = 'message error';
             }
         }
         
