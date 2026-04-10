@@ -4188,7 +4188,6 @@ def fibonacci(n):
         // - A4, 여백(top=1440, bottom=1701, left/right=1701), 줄간격 2배, Arial 12pt
         // - SEQ 필드 단락번호 [0001]~ (4자리 고정, 단락 삭제/추가 시 재열기로 자동 갱신)
         // - 5행마다 행번호, 페이지번호 (푸터), docGrid
-        // - settings.xml updateFields=1 → Word 열 때 SEQ 자동 재계산
         async function generateDocxUSPatent(text, filename) {
             const zip = new JSZip();
 
@@ -4542,13 +4541,12 @@ def fibonacci(n):
 </w:style>
 </w:styles>`;
 
-            // === settings.xml (updateFields=1 → SEQ 자동 재계산) ===
+            // === settings.xml ===
             const settingsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
             xmlns:o="urn:schemas-microsoft-com:office:office">
 <w:zoom w:percent="100"/>
-<w:updateFields w:val="1"/>
 <w:bordersDoNotSurroundHeader/>
 <w:bordersDoNotSurroundFooter/>
 <w:defaultTabStop w:val="800"/>
