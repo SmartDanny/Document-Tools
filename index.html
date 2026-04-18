@@ -5104,6 +5104,7 @@ def fibonacci(n):
 
             for (const chunk of chunks) {
                 if (!chunk.trim()) continue;
+                secState = 'body';  // 각 청크는 독립적으로 본문 파싱 시작 (이전 청크의 특수 섹션 상태 이월 방지)
                 for (const line of chunk.split('\n')) {
                     const t = line.trim();
 
