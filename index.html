@@ -817,7 +817,54 @@ def fibonacci(n):
             document.getElementById(tabId).classList.add('active');
             btn.classList.add('active');
         }
-        
+
+        // 단락 개수 계산 헬퍼 (단락번호 추가 기준과 동일한 규칙 적용)
+        function countParagraphsInText(text) {
+            function _isSub(line) {
+                const t = line.trim();
+                if (!t) return false;
+                const exact = ['CROSS-REFERENCE TO RELATED APPLICATIONS','BACKGROUND OF THE INVENTION','BACKGROUND',
+                    'SUMMARY OF THE INVENTION','SUMMARY','BRIEF DESCRIPTION OF THE DRAWINGS',
+                    'DETAILED DESCRIPTION OF THE EMBODIMENTS','DETAILED DESCRIPTION OF THE PREFERRED EMBODIMENTS',
+                    'DETAILED DESCRIPTION','DESCRIPTION OF SYMBOLS','Description of Symbols',
+                    '<Description of Symbols>','<DESCRIPTION OF SYMBOLS>','WHAT IS CLAIMED IS:',
+                    'WHAT IS CLAIMED IS','TITLE OF THE INVENTION','ABSTRACT OF DISCLOSURE','ABSTRACT'];
+                if (exact.some(s => t.toUpperCase() === s.toUpperCase())) return true;
+                if (/^【[^】]+】$/.test(t)) return true;
+                if (/^<?\s*Description\s+of\s+Symbols\s*>?$/i.test(t)) return true;
+                if (/^[【\[]표\s*\d+[】\]]$/i.test(t) || /^[【\[]Table\s*\d+[】\]]$/i.test(t)) return true;
+                if (/^[【\[](수학식|화학식|반응식|분자식)\s*\d*[】\]]$/.test(t)) return true;
+                if (/^[【\[](Mathematical|Chemical|Reaction|Molecular)\s*(Formula)?\s*\d*[】\]]$/i.test(t)) return true;
+                if (/^(실시예|실험예|비교예|참고예|제조예|Example|Comparative\s*Example|Reference\s*Example)/i.test(t) && !t.includes('.')) return true;
+                if (/^\([a-zA-Z]\)\s+/.test(t)) return true;
+                if (/^\d+\.\s+[A-Z]/.test(t)) return true;
+                const words = t.split(/\s+/);
+                if (words.length <= 6 && /^[A-Z\s]+$/.test(t) && t.length > 3) return true;
+                return false;
+            }
+            const lines = text.split('\n');
+            let stopIdx = -1, crossIdx = -1;
+            for (let i = 0; i < lines.length; i++) {
+                const t = lines[i].trim(), tu = t.toUpperCase();
+                if (tu === 'WHAT IS CLAIMED IS:' || tu === 'WHAT IS CLAIMED IS' ||
+                    t === '【CLAIMS】' || t === '【청구의 범위】' || t === '【청구범위】') { stopIdx = i; break; }
+            }
+            for (let i = 0; i < lines.length; i++) {
+                const tu = lines[i].trim().toUpperCase();
+                if (tu === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || tu === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
+                    tu === 'CROSS REFERENCE TO RELATED APPLICATIONS' || tu === 'CROSS REFERENCE TO RELATED APPLICATION') { crossIdx = i; break; }
+            }
+            let count = 0, inTable = false;
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i], t = line.trim();
+                if (t.startsWith('<table')) inTable = true;
+                if (t.endsWith('</table>')) { inTable = false; continue; }
+                const stopped = (stopIdx >= 0 && i >= stopIdx) || (crossIdx >= 0 && i < crossIdx);
+                if (!stopped && t && !_isSub(line) && !inTable && /[.。]["']?$/.test(t) && !/^\[\d{4,5}\]\s/.test(t)) count++;
+            }
+            return count;
+        }
+
         // 탭1 - 파일 처리 공통 함수
         async function handleFile1(file) {
             if (!file) return;
@@ -1078,6 +1125,7 @@ def fibonacci(n):
         function displayResult1(r) {
             document.getElementById('subCount1').textContent = r.subscriptCount;
             document.getElementById('supCount1').textContent = r.superscriptCount;
+            document.getElementById('paragraphCount1').textContent = countParagraphsInText(r.text);
             
             originalText1 = r.text; // 원본 저장
             rawOutput1 = r.text;
