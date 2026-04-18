@@ -70,34 +70,19 @@
             </div>
             <div class="section">
                 <div class="section-title">2단계: 우선권출원 정보 입력</div>
-                <div class="priority-input-group">
-                    <div class="priority-row">
-                        <div class="priority-field">
-                            <label>출원년도</label>
-                            <input type="text" id="priorityYear" placeholder="2024" maxlength="4">
-                        </div>
-                        <div class="priority-field">
-                            <label>출원월</label>
-                            <input type="text" id="priorityMonth" placeholder="01" maxlength="2">
-                        </div>
-                        <div class="priority-field">
-                            <label>출원일</label>
-                            <input type="text" id="priorityDay" placeholder="15" maxlength="2">
-                        </div>
-                    </div>
-                    <div class="priority-row">
-                        <div class="priority-field wide">
-                            <label>출원번호</label>
-                            <input type="text" id="priorityNumber" placeholder="10-2024-0012345">
-                        </div>
-                        <div class="priority-field" style="justify-content: flex-end;">
-                            <button class="btn btn-primary" onclick="insertCrossReference()" id="insertCrossRefBtn">📝 Cross-reference 삽입</button>
-                        </div>
-                    </div>
+                <div class="priority-header">
+                    <span class="priority-header-label">우선권 추가</span>
+                    <button class="priority-add-btn" onclick="openPriorityModal1()" title="우선권출원 정보 추가">+</button>
+                </div>
+                <div id="priorityList1" class="priority-list">
+                    <div class="priority-empty">추가된 우선권출원 정보가 없습니다.</div>
+                </div>
+                <div style="margin-top:12px;">
+                    <button class="btn btn-primary" onclick="insertCrossReference()" id="insertCrossRefBtn">📝 Cross-reference 삽입</button>
                 </div>
                 <div class="note" style="margin-top:15px;">
                     <span class="note-icon">💡</span>
-                    <span>모든 정보 입력 후 버튼을 클릭하면 BACKGROUND 단락 앞에 Cross-reference가 삽입됩니다.</span>
+                    <span>우선권출원 정보 추가 후 버튼을 클릭하면 BACKGROUND 단락 앞에 Cross-reference가 삽입됩니다.</span>
                 </div>
                 <div id="crossRefMessage" class="message hidden"></div>
             </div>
@@ -191,34 +176,19 @@
                     <button class="toggle-btn" id="toggleBtn2Step2" onclick="event.stopPropagation();toggleSection2('Step2')">▶ 펼치기</button>
                 </div>
                 <div id="content2Step2" style="display:none;">
-                    <div class="priority-input-group" style="margin-top:12px;">
-                        <div class="priority-row">
-                            <div class="priority-field">
-                                <label>출원년도</label>
-                                <input type="text" id="priorityYear2" placeholder="2024" maxlength="4">
-                            </div>
-                            <div class="priority-field">
-                                <label>출원월</label>
-                                <input type="text" id="priorityMonth2" placeholder="01" maxlength="2">
-                            </div>
-                            <div class="priority-field">
-                                <label>출원일</label>
-                                <input type="text" id="priorityDay2" placeholder="15" maxlength="2">
-                            </div>
-                        </div>
-                        <div class="priority-row">
-                            <div class="priority-field wide">
-                                <label>출원번호</label>
-                                <input type="text" id="priorityNumber2" placeholder="10-2024-0012345">
-                            </div>
-                            <div class="priority-field" style="justify-content: flex-end;">
-                                <button class="btn btn-primary" onclick="insertCrossReference2()" id="insertCrossRefBtn2">📝 Cross-reference 삽입</button>
-                            </div>
-                        </div>
+                    <div class="priority-header" style="margin-top:12px;">
+                        <span class="priority-header-label">우선권 추가</span>
+                        <button class="priority-add-btn" onclick="openPriorityModal2()" title="우선권출원 정보 추가">+</button>
+                    </div>
+                    <div id="priorityList2" class="priority-list">
+                        <div class="priority-empty">추가된 우선권출원 정보가 없습니다.</div>
+                    </div>
+                    <div style="margin-top:12px;">
+                        <button class="btn btn-primary" onclick="insertCrossReference2()" id="insertCrossRefBtn2">📝 Cross-reference 삽입</button>
                     </div>
                     <div class="note" style="margin-top:15px;">
                         <span class="note-icon">💡</span>
-                        <span>모든 정보 입력 후 버튼을 클릭하면 BACKGROUND 단락 앞에 Cross-reference가 삽입됩니다.</span>
+                        <span>우선권출원 정보 추가 후 버튼을 클릭하면 BACKGROUND 단락 앞에 Cross-reference가 삽입됩니다.</span>
                     </div>
                     <div id="crossRefMessage2" class="message hidden"></div>
                 </div>
@@ -754,6 +724,92 @@ def fibonacci(n):
             hasParagraphNum: false,
             hasTable: false
         };
+        let priorityList1 = [];
+        let priorityList2 = [];
+
+        function openPriorityModal1() {
+            document.getElementById('modalYear1').value = '';
+            document.getElementById('modalMonth1').value = '';
+            document.getElementById('modalDay1').value = '';
+            document.getElementById('modalNumber1').value = '';
+            document.getElementById('priorityModal1').classList.add('active');
+            setTimeout(() => document.getElementById('modalYear1').focus(), 100);
+        }
+        function closePriorityModal1() {
+            document.getElementById('priorityModal1').classList.remove('active');
+        }
+        function addPriority1() {
+            const year = document.getElementById('modalYear1').value.trim();
+            const month = document.getElementById('modalMonth1').value.trim();
+            const day = document.getElementById('modalDay1').value.trim();
+            const appNum = document.getElementById('modalNumber1').value.trim();
+            if (!year || !month || !day || !appNum) {
+                alert('모든 필드를 입력해주세요.');
+                return;
+            }
+            priorityList1.push({ year, month, day, appNum });
+            renderPriorityList1();
+            closePriorityModal1();
+        }
+        function removePriority1(index) {
+            priorityList1.splice(index, 1);
+            renderPriorityList1();
+        }
+        function renderPriorityList1() {
+            const container = document.getElementById('priorityList1');
+            if (priorityList1.length === 0) {
+                container.innerHTML = '<div class="priority-empty">추가된 우선권출원 정보가 없습니다.</div>';
+                return;
+            }
+            container.innerHTML = priorityList1.map((p, i) => `
+                <div class="priority-entry">
+                    <span class="priority-entry-info">${p.year}년 ${p.month}월 ${p.day}일 · ${p.appNum}</span>
+                    <button class="priority-entry-delete" onclick="removePriority1(${i})" title="삭제">✕</button>
+                </div>
+            `).join('');
+        }
+
+        function openPriorityModal2() {
+            document.getElementById('modalYear2').value = '';
+            document.getElementById('modalMonth2').value = '';
+            document.getElementById('modalDay2').value = '';
+            document.getElementById('modalNumber2').value = '';
+            document.getElementById('priorityModal2').classList.add('active');
+            setTimeout(() => document.getElementById('modalYear2').focus(), 100);
+        }
+        function closePriorityModal2() {
+            document.getElementById('priorityModal2').classList.remove('active');
+        }
+        function addPriority2() {
+            const year = document.getElementById('modalYear2').value.trim();
+            const month = document.getElementById('modalMonth2').value.trim();
+            const day = document.getElementById('modalDay2').value.trim();
+            const appNum = document.getElementById('modalNumber2').value.trim();
+            if (!year || !month || !day || !appNum) {
+                alert('모든 필드를 입력해주세요.');
+                return;
+            }
+            priorityList2.push({ year, month, day, appNum });
+            renderPriorityList2();
+            closePriorityModal2();
+        }
+        function removePriority2(index) {
+            priorityList2.splice(index, 1);
+            renderPriorityList2();
+        }
+        function renderPriorityList2() {
+            const container = document.getElementById('priorityList2');
+            if (priorityList2.length === 0) {
+                container.innerHTML = '<div class="priority-empty">추가된 우선권출원 정보가 없습니다.</div>';
+                return;
+            }
+            container.innerHTML = priorityList2.map((p, i) => `
+                <div class="priority-entry">
+                    <span class="priority-entry-info">${p.year}년 ${p.month}월 ${p.day}일 · ${p.appNum}</span>
+                    <button class="priority-entry-delete" onclick="removePriority2(${i})" title="삭제">✕</button>
+                </div>
+            `).join('');
+        }
         
         function switchMainTab(tabId, btn) {
             document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
@@ -1112,19 +1168,22 @@ def fibonacci(n):
             }
             
             // 우선권출원 정보 확인
-            const year = document.getElementById('priorityYear').value.trim();
-            const month = document.getElementById('priorityMonth').value.trim();
-            const day = document.getElementById('priorityDay').value.trim();
-            const appNum = document.getElementById('priorityNumber').value.trim();
-            
-            if (!year || !month || !day || !appNum) {
-                msg.textContent = '❌ 모든 우선권출원 정보를 입력해주세요.';
+            if (priorityList1.length === 0) {
+                msg.textContent = '❌ 우선권출원 정보를 추가해주세요.';
                 msg.className = 'message error';
                 return;
             }
-            
+
             // Cross-reference 텍스트 생성
-            const crossRef = `CROSS-REFERENCE TO RELATED APPLICATIONS\n본 출원은 ${year}년 ${month}월 ${day}일 출원된 대한민국 특허출원 제${appNum}호에 기초한 것으로서, 그 전체 내용이 참조로 여기에 포함된다.`;
+            let priorityText1;
+            if (priorityList1.length === 1) {
+                const p = priorityList1[0];
+                priorityText1 = `본 출원은 ${p.year}년 ${p.month}월 ${p.day}일 출원된 대한민국 특허출원 제${p.appNum}호에 기초한 것으로서, 그 전체 내용이 참조로 여기에 포함된다.`;
+            } else {
+                const parts = priorityList1.map(p => `${p.year}년 ${p.month}월 ${p.day}일 출원된 대한민국 특허출원 제${p.appNum}호`);
+                priorityText1 = `본 출원은 ${parts.join(' 및 ')}에 기초한 것으로서, 그 전체 내용이 참조로 여기에 포함된다.`;
+            }
+            const crossRef = `CROSS-REFERENCE TO RELATED APPLICATIONS\n${priorityText1}`;
             
             // BACKGROUND로 시작하는 단락 찾기
             const lines = currentText.split('\n');
@@ -1434,11 +1493,10 @@ def fibonacci(n):
         
         function goToCrossRefInsert() {
             closeModal();
-            // 2단계(Cross-reference 삽입) 영역으로 스크롤 및 포커스
-            const prioritySection = document.getElementById('priorityYear');
+            // 2단계(Cross-reference 삽입) 영역으로 스크롤
+            const prioritySection = document.getElementById('priorityList1');
             if (prioritySection) {
                 prioritySection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                setTimeout(() => prioritySection.focus(), 500);
             }
         }
         
@@ -1780,10 +1838,8 @@ def fibonacci(n):
             document.getElementById('textInput1').value = '';
             document.getElementById('fileName1').textContent = '또는 아래에 .docx 파일을 드래그하세요';
             document.getElementById('fileInput1').value = '';
-            document.getElementById('priorityYear').value = '';
-            document.getElementById('priorityMonth').value = '';
-            document.getElementById('priorityDay').value = '';
-            document.getElementById('priorityNumber').value = '';
+            priorityList1 = [];
+            renderPriorityList1();
             document.getElementById('output1').innerHTML = '';
             document.getElementById('preview1').innerHTML = '';
             document.getElementById('result1Section').classList.add('hidden');
@@ -1897,11 +1953,9 @@ def fibonacci(n):
             document.getElementById('supCount2').textContent = '0';
             document.getElementById('paragraphCount2').textContent = '0';
             document.getElementById('tableCount2').textContent = '0';
-            // 우선권 입력 필드 초기화
-            document.getElementById('priorityYear2').value = '';
-            document.getElementById('priorityMonth2').value = '';
-            document.getElementById('priorityDay2').value = '';
-            document.getElementById('priorityNumber2').value = '';
+            // 우선권 목록 초기화
+            priorityList2 = [];
+            renderPriorityList2();
             // 메시지 초기화
             document.getElementById('crossRefMessage2').classList.add('hidden');
             document.getElementById('subtitleMessage2').classList.add('hidden');
@@ -1975,24 +2029,30 @@ def fibonacci(n):
             }
             
             // 우선권출원 정보 확인
-            const year = document.getElementById('priorityYear2').value.trim();
-            const month = document.getElementById('priorityMonth2').value.trim();
-            const day = document.getElementById('priorityDay2').value.trim();
-            const appNum = document.getElementById('priorityNumber2').value.trim();
-            
-            if (!year || !month || !day || !appNum) {
-                msg.textContent = '❌ 모든 우선권출원 정보를 입력해주세요.';
+            if (priorityList2.length === 0) {
+                msg.textContent = '❌ 우선권출원 정보를 추가해주세요.';
                 msg.className = 'message error';
                 return;
             }
-            
-            // 월 영문 변환
-            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+
+            // 월 영문 변환 헬퍼
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
                                 'July', 'August', 'September', 'October', 'November', 'December'];
-            const monthEng = monthNames[parseInt(month) - 1] || month;
-            
+
             // Cross-reference 텍스트 생성 (영문)
-            const crossRef = `CROSS-REFERENCE TO RELATED APPLICATIONS\nThis application is based on Korean Patent Application No. ${appNum}, filed on ${monthEng} ${parseInt(day)}, ${year}, the entire contents of which are incorporated herein by reference.`;
+            let priorityText2;
+            if (priorityList2.length === 1) {
+                const p = priorityList2[0];
+                const mEng = monthNames[parseInt(p.month) - 1] || p.month;
+                priorityText2 = `This application is based on Korean Patent Application No. ${p.appNum}, filed on ${mEng} ${parseInt(p.day)}, ${p.year}, the entire contents of which are incorporated herein by reference.`;
+            } else {
+                const parts = priorityList2.map(p => {
+                    const mEng = monthNames[parseInt(p.month) - 1] || p.month;
+                    return `Korean Patent Application No. ${p.appNum}, filed on ${mEng} ${parseInt(p.day)}, ${p.year}`;
+                });
+                priorityText2 = `This application is based on ${parts.join(', and ')}, the entire contents of which are incorporated herein by reference.`;
+            }
+            const crossRef = `CROSS-REFERENCE TO RELATED APPLICATIONS\n${priorityText2}`;
             
             // BACKGROUND로 시작하는 단락 찾기
             const lines = currentText.split('\n');
@@ -6806,6 +6866,68 @@ ${bodyContent}
         </div>
     </div>
     
+    <!-- 우선권출원 추가 모달 (탭1) -->
+    <div class="modal-overlay" id="priorityModal1">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <span class="modal-icon">📋</span>
+                <div class="modal-title">우선권출원 정보 추가</div>
+            </div>
+            <div class="modal-body">
+                <div class="priority-modal-field">
+                    <label class="priority-modal-label">출원연월일</label>
+                    <div class="priority-date-row">
+                        <input type="text" class="priority-modal-date-input" id="modalYear1" placeholder="YYYY" maxlength="4">
+                        <span class="priority-date-sep">년</span>
+                        <input type="text" class="priority-modal-date-input sm" id="modalMonth1" placeholder="MM" maxlength="2">
+                        <span class="priority-date-sep">월</span>
+                        <input type="text" class="priority-modal-date-input sm" id="modalDay1" placeholder="DD" maxlength="2">
+                        <span class="priority-date-sep">일</span>
+                    </div>
+                </div>
+                <div class="priority-modal-field" style="margin-top:15px;">
+                    <label class="priority-modal-label">출원번호</label>
+                    <input type="text" class="priority-modal-num-input" id="modalNumber1" placeholder="10-2024-0012345">
+                </div>
+            </div>
+            <div class="modal-buttons" style="flex-direction:row;gap:10px;">
+                <button class="modal-btn modal-btn-primary" onclick="addPriority1()" style="flex:1;">추가</button>
+                <button class="modal-btn modal-btn-secondary" onclick="closePriorityModal1()" style="flex:1;">취소</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 우선권출원 추가 모달 (탭2) -->
+    <div class="modal-overlay" id="priorityModal2">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <span class="modal-icon">📋</span>
+                <div class="modal-title">우선권출원 정보 추가</div>
+            </div>
+            <div class="modal-body">
+                <div class="priority-modal-field">
+                    <label class="priority-modal-label">출원연월일</label>
+                    <div class="priority-date-row">
+                        <input type="text" class="priority-modal-date-input" id="modalYear2" placeholder="YYYY" maxlength="4">
+                        <span class="priority-date-sep">년</span>
+                        <input type="text" class="priority-modal-date-input sm" id="modalMonth2" placeholder="MM" maxlength="2">
+                        <span class="priority-date-sep">월</span>
+                        <input type="text" class="priority-modal-date-input sm" id="modalDay2" placeholder="DD" maxlength="2">
+                        <span class="priority-date-sep">일</span>
+                    </div>
+                </div>
+                <div class="priority-modal-field" style="margin-top:15px;">
+                    <label class="priority-modal-label">출원번호</label>
+                    <input type="text" class="priority-modal-num-input" id="modalNumber2" placeholder="10-2024-0012345">
+                </div>
+            </div>
+            <div class="modal-buttons" style="flex-direction:row;gap:10px;">
+                <button class="modal-btn modal-btn-primary" onclick="addPriority2()" style="flex:1;">추가</button>
+                <button class="modal-btn modal-btn-secondary" onclick="closePriorityModal2()" style="flex:1;">취소</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Footer -->
     <footer class="app-footer">
         <span>Document Tools v1.2.2</span>
