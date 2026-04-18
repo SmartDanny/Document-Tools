@@ -5083,91 +5083,111 @@ def fibonacci(n):
 
         function mergeSplitChunks3(chunks) {
             const PARA_RE = /^\[(\d{4,5})\]\s/;
-
-            function isDos(line) { return isDescriptionOfSymbols(line.trim()); }
-            function isClaims(line) {
-                const s = line.trim();
+            function isDos(l) { return isDescriptionOfSymbols(l.trim()); }
+            function isClaims(l) {
+                const s = l.trim();
                 return s === 'WHAT IS CLAIMED IS:' || s === 'WHAT IS CLAIMED IS' ||
                        s === '【CLAIMS】' || s === '【청구의 범위】' || s === '【청구범위】';
             }
-            function isAbstract(line) {
-                const s = line.trim().toUpperCase();
+            function isAbstract(l) {
+                const s = l.trim().toUpperCase();
                 return s === 'ABSTRACT OF DISCLOSURE' || s === 'ABSTRACT' ||
                        s === '【ABSTRACT】' || s === '【요약】';
             }
-            function langPri(line) { return /[가-힣]/.test(line) ? 0 : 1; }
+            function langPri(l) { return /[가-힣]/.test(l) ? 0 : 1; }
 
-            const bodyParas = [];   // {num, lang, line, headers:[]}
-            const dosLines = [], claimsLines = [], abstractLines = [], preambleLines = [];
-            let preambleDone = false;
-            let pendingHeaders = [];
+            const groups = [];                          // {num, lang, line, headers:[], trailing:[]}
+            const dosLines = [], claimsLines = [], absLines = [], pre = [];
+            let secState = 'body';                      // 'body' | 'dos' | 'claims' | 'abs'
+            let bodyState = 'pre';                      // 'pre' | 'in_group' | 'between'
+            let pending = [];                           // 다음 그룹의 섹션헤더 후보
 
             for (const chunk of chunks) {
                 if (!chunk.trim()) continue;
-                let state = 'body';
                 for (const line of chunk.split('\n')) {
-                    // 특수 섹션 상태
-                    if (state === 'abstract') { abstractLines.push(line); continue; }
-                    if (state === 'claims') {
-                        if (isAbstract(line)) { state = 'abstract'; abstractLines.push(line); continue; }
-                        claimsLines.push(line); continue;
-                    }
-                    if (state === 'dos') {
-                        if (isClaims(line)) { state = 'claims'; claimsLines.push(line); pendingHeaders = []; continue; }
-                        if (isAbstract(line)) { state = 'abstract'; abstractLines.push(line); pendingHeaders = []; continue; }
-                        dosLines.push(line); continue;
-                    }
-                    // 본문 상태: 섹션 전환 감지
-                    if (isAbstract(line)) { state = 'abstract'; preambleDone = true; abstractLines.push(line); pendingHeaders = []; continue; }
-                    if (isClaims(line)) { state = 'claims'; preambleDone = true; claimsLines.push(line); pendingHeaders = []; continue; }
-                    if (isDos(line)) { state = 'dos'; preambleDone = true; dosLines.push(line); pendingHeaders = []; continue; }
+                    const t = line.trim();
 
+                    // ── 특수 섹션 라우팅 ──
+                    if (secState === 'abs') { absLines.push(line); continue; }
+                    if (secState === 'claims') {
+                        if (isAbstract(line)) { secState = 'abs'; absLines.push(line); pending = []; }
+                        else claimsLines.push(line);
+                        continue;
+                    }
+                    if (secState === 'dos') {
+                        if (isClaims(line)) { secState = 'claims'; claimsLines.push(line); pending = []; }
+                        else if (isAbstract(line)) { secState = 'abs'; absLines.push(line); pending = []; }
+                        else dosLines.push(line);
+                        continue;
+                    }
+
+                    // ── 특수 섹션 진입 감지 ──
+                    if (isAbstract(line)) { secState = 'abs'; bodyState = 'between'; absLines.push(line); pending = []; continue; }
+                    if (isClaims(line)) { secState = 'claims'; bodyState = 'between'; claimsLines.push(line); pending = []; continue; }
+                    if (isDos(line)) { secState = 'dos'; bodyState = 'between'; dosLines.push(line); pending = []; continue; }
+
+                    // ── 본문 처리 ──
                     const m = line.match(PARA_RE);
                     if (m) {
-                        preambleDone = true;
-                        bodyParas.push({ num: parseInt(m[1]), lang: langPri(line), line, headers: pendingHeaders });
-                        pendingHeaders = [];
+                        // 번호단락: pending(섹션헤더)을 headers로 가져오고 trailing 초기화
+                        groups.push({ num: parseInt(m[1]), lang: langPri(line), line, headers: pending, trailing: [] });
+                        pending = [];
+                        bodyState = 'in_group';
+                    } else if (!t) {
+                        // 빈 줄
+                        if (bodyState === 'pre') pre.push(line);
+                        else if (bodyState === 'in_group') bodyState = 'between'; // 그룹 trailing 종료
+                        // 'between' 상태의 빈 줄은 버림 (헤더 구분선은 재구성 시 추가)
                     } else {
-                        if (!preambleDone) preambleLines.push(line);
-                        else pendingHeaders.push(line);
+                        // 비어있지 않은 비번호 줄
+                        if (bodyState === 'pre') {
+                            pre.push(line);
+                        } else if (bodyState === 'in_group') {
+                            // 번호단락 직후 → 영문단락 등 trailing 콘텐츠
+                            groups[groups.length - 1].trailing.push(line);
+                        } else {
+                            // 'between' → 다음 번호단락의 섹션헤더 후보
+                            pending.push(line);
+                        }
                     }
                 }
-                // 청크 경계: 잔여 pendingHeaders는 다음 청크로 이월
+                // 청크 경계: in_group 상태를 이월하지 않음
+                if (bodyState === 'in_group') bodyState = 'between';
             }
 
-            // 단락 정렬: 번호 오름차순, 동일 번호는 한국어 먼저
-            bodyParas.sort((a, b) => a.num !== b.num ? a.num - b.num : a.lang - b.lang);
+            // 정렬: 번호 오름차순, 동일 번호는 한국어(0) 우선
+            groups.sort((a, b) => a.num !== b.num ? a.num - b.num : a.lang - b.lang);
 
             // 중복 제거 (같은 번호+언어 → 첫 번째 유지)
-            const seen = new Set();
-            const duplicates = [];
-            const deduped = bodyParas.filter(p => {
-                const key = `${p.num}-${p.lang}`;
-                if (seen.has(key)) { duplicates.push(p); return false; }
-                seen.add(key); return true;
+            const seen = new Set(), dups = [];
+            const deduped = groups.filter(g => {
+                const k = `${g.num}-${g.lang}`;
+                if (seen.has(k)) { dups.push(g); return false; }
+                seen.add(k); return true;
             });
 
-            // 본문 재조합
-            const result = [...preambleLines];
-            let prevHeaderKey = null;
-            for (const p of deduped) {
-                if (p.headers.length > 0) {
-                    const hKey = p.headers.join('\n');
-                    if (hKey !== prevHeaderKey) {
-                        if (result.length && result[result.length - 1] !== '') result.push('');
-                        result.push(...p.headers);
-                        prevHeaderKey = hKey;
+            // 재조합
+            const out = [...pre];
+            let prevHKey = null;
+            for (const g of deduped) {
+                if (g.headers.length > 0) {
+                    const hk = g.headers.join('\n');
+                    if (hk !== prevHKey) {
+                        if (out.length && out[out.length - 1].trim() !== '') out.push('');
+                        out.push(...g.headers);
+                        prevHKey = hk;
                     }
                 }
-                result.push(p.line);
+                out.push(g.line);
+                out.push(...g.trailing);  // 영문단락 등 trailing 콘텐츠 포함
             }
 
-            // 후미 섹션 순서대로 배치: DoS → Claims → Abstract
-            if (dosLines.length) { result.push(''); result.push(...dosLines); }
-            if (claimsLines.length) { result.push(''); result.push(...claimsLines); }
-            if (abstractLines.length) { result.push(''); result.push(...abstractLines); }
+            // 후미 섹션: DoS → Claims → Abstract
+            if (dosLines.length) { out.push(''); out.push(...dosLines); }
+            if (claimsLines.length) { out.push(''); out.push(...claimsLines); }
+            if (absLines.length) { out.push(''); out.push(...absLines); }
 
-            return { text: result.join('\n'), duplicates };
+            return { text: out.join('\n'), duplicates: dups };
         }
 
         // 서브탭 전환 함수 (탭3)
