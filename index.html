@@ -30,7 +30,18 @@
         <h1>📄 문서 도구 모음</h1>
         <p>첨자 변환 및 한영혼합본 도구 기능</p>
     </div>
-    
+
+    <!-- 스크롤 시 나타나는 플로팅 탭 바 -->
+    <div class="floating-tab-nav" id="floatingTabNav">
+        <div class="floating-tab-inner">
+            <button class="floating-tab-btn active" data-tab="tab1" onclick="switchMainTab('tab1', this)">전처리</button>
+            <button class="floating-tab-btn" data-tab="tab2" onclick="switchMainTab('tab2', this)">후처리</button>
+            <button class="floating-tab-btn" data-tab="tab3" onclick="switchMainTab('tab3', this)">한영혼합본</button>
+            <button class="floating-tab-btn" data-tab="tab4" onclick="switchMainTab('tab4', this)">문서비교</button>
+            <button class="floating-tab-btn" data-tab="tab5" onclick="switchMainTab('tab5', this)">MD→PDF</button>
+        </div>
+    </div>
+
     <div class="container">
         <div class="tab-nav">
             <button class="tab-btn active" onclick="switchMainTab('tab1', this)">전처리 단계 (DOCX→HTML)</button>
@@ -816,7 +827,18 @@ def fibonacci(n):
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
             btn.classList.add('active');
+            // 플로팅 탭 바 active 상태 동기화
+            document.querySelectorAll('.floating-tab-btn').forEach(t => {
+                t.classList.toggle('active', t.dataset.tab === tabId);
+            });
         }
+
+        // 탭 바가 뷰포트 밖으로 나가면 플로팅 바 표시
+        const _floatingNav = document.getElementById('floatingTabNav');
+        const _tabNavEl = document.querySelector('.tab-nav');
+        new IntersectionObserver(function(entries) {
+            _floatingNav.classList.toggle('visible', !entries[0].isIntersecting);
+        }, { threshold: 0 }).observe(_tabNavEl);
 
         // 단락 개수 계산 헬퍼 (단락번호 추가 기준과 동일한 규칙 적용)
         function countParagraphsInText(text) {

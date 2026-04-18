@@ -17,6 +17,58 @@ body {
 }
 .container { max-width: 900px; margin: 0 auto; padding: 0 20px 30px 20px; }
 
+/* 플로팅 탭 바 */
+.floating-tab-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 500;
+    display: flex;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-100%);
+    transition: transform 0.25s ease;
+    backdrop-filter: blur(6px);
+}
+.floating-tab-nav.visible {
+    transform: translateY(0);
+}
+.floating-tab-inner {
+    display: flex;
+    max-width: 900px;
+    width: 100%;
+    gap: 0;
+}
+.floating-tab-btn {
+    flex: 1;
+    padding: 10px 8px;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    font-size: 0.82em;
+    font-weight: 500;
+    color: #555;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+    white-space: nowrap;
+}
+.floating-tab-btn:hover:not(.active) {
+    background: #f0f4f8;
+    color: #1e3a5f;
+}
+.floating-tab-btn.active {
+    color: #1e3a5f;
+    border-bottom-color: #1e3a5f;
+    font-weight: 700;
+    background: #eef2f7;
+}
+@media (max-width: 768px) {
+    .floating-tab-btn { font-size: 0.72em; padding: 10px 4px; }
+}
+
 /* 제목 */
 .title-section {
     background: #1e3a5f;
