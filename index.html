@@ -258,7 +258,6 @@
                 </div>
                 <div class="btn-group" style="margin-bottom:10px;">
                     <button class="btn btn-primary" onclick="standardizeFormat2()">📐 양식표준화</button>
-                    <button class="btn btn-primary" onclick="applyUSFormat2()" style="background:#1565c0;">🇺🇸 US양식</button>
                 </div>
                 <div id="formatMessage2" class="message hidden" style="margin-bottom:10px;"></div>
                 <div class="preview-area" id="preview2">입력된 텍스트의 미리보기가 여기에 표시됩니다.</div>
@@ -269,7 +268,10 @@
                     <input type="text" id="outputFileName2" placeholder="파일명">
                     <span>.docx</span>
                 </div>
-                <button class="btn btn-primary btn-block" onclick="convertToDocx2()">📥 워드 파일 다운로드</button>
+                <div style="display:flex;gap:10px;margin-bottom:0;">
+                    <button class="btn btn-primary" style="flex:1;" onclick="convertToDocx2()">📥 워드 파일 다운로드</button>
+                    <button class="btn btn-primary" style="flex:1;background:#1565c0;" onclick="downloadUSFormat2()">🇺🇸 US양식 다운로드</button>
+                </div>
                 <div id="message2" class="message hidden"></div>
             </div>
         </div>
@@ -351,10 +353,12 @@
                             <div class="stat-card orange"><div class="stat-number" id="englishSupCount3">0</div><div class="stat-label">위첨자</div></div>
                             <div class="stat-card teal"><div class="stat-number" id="englishTableCount3">0</div><div class="stat-label">표 개수</div></div>
                         </div>
+                        <div style="display:flex;gap:10px;margin-bottom:8px;">
+                            <button class="btn btn-success" style="flex:1;" onclick="downloadEngDocx3()">📥 영문본 DOCX 다운로드</button>
+                            <button class="btn btn-primary" style="flex:1;background:#1565c0;" onclick="downloadUSFormatEng3()">🇺🇸 US양식 다운로드</button>
+                        </div>
                         <div class="btn-group" style="margin-bottom:10px;display:flex;align-items:center;gap:10px;">
-                            <button class="btn btn-success" onclick="downloadEngDocx3()">📥 영문본 DOCX 다운로드</button>
                             <button class="btn btn-primary" onclick="standardizeFormatEng3()" style="font-size:0.75em;padding:4px 8px;">📐 양식표준화</button>
-                            <button class="btn btn-primary" onclick="applyUSFormatEng3()" style="font-size:0.75em;padding:4px 8px;background:#1565c0;">🇺🇸 US양식</button>
                             <button class="btn btn-success" onclick="addParagraphNumbersEng3()" style="font-size:0.75em;padding:4px 8px;">🔢 단락번호 추가</button>
                             <button class="btn btn-danger" onclick="removeParagraphNumbersEng3()" style="font-size:0.75em;padding:4px 8px;">🗑️ 단락번호 제거</button>
                         </div>
@@ -2833,14 +2837,27 @@ def fibonacci(n):
             if (!t) { msg.textContent = '❌ 텍스트를 입력해주세요.'; msg.className = 'message error'; return; }
             const fn = document.getElementById('outputFileName2').value.trim() || 'output';
             try {
-                if (window.tab2USFormat) {
-                    await generateDocxUSPatent(t, fn + '.docx');
-                    msg.textContent = '✅ US 특허출원 양식 DOCX 파일이 생성되었습니다!';
-                    msg.className = 'message success';
-                    setTimeout(() => msg.classList.add('hidden'), 3000);
-                } else {
-                    await generateDocxCommon(t, fn, msg);
-                }
+                await generateDocxCommon(t, fn, msg);
+            } catch (e) { msg.textContent = '❌ 오류: ' + e.message; msg.className = 'message error'; }
+        }
+
+        async function downloadUSFormat2() {
+            const msg = document.getElementById('message2');
+            msg.classList.add('hidden');
+            let t = inp2.value.trim();
+            if (!t) { msg.textContent = '❌ 텍스트를 입력해주세요.'; msg.className = 'message error'; return; }
+            const result = applyFormatStandardization(t);
+            if (result.changeCount > 0) {
+                inp2.value = result.text;
+                t = result.text;
+                updatePreview2();
+            }
+            const fn = document.getElementById('outputFileName2').value.trim() || 'output';
+            try {
+                await generateDocxUSPatent(t, fn + '.docx');
+                msg.textContent = '✅ US 특허출원 양식 DOCX 파일이 생성되었습니다!';
+                msg.className = 'message success';
+                setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (e) { msg.textContent = '❌ 오류: ' + e.message; msg.className = 'message error'; }
         }
         
@@ -3408,7 +3425,7 @@ def fibonacci(n):
                 return;
             }
             try {
-                await generateDocxFromText3(text, 'english_extracted.docx');
+                await generateDocxBasic(text, 'english_extracted.docx');
                 msg.textContent = '✅ 영문본 DOCX 파일이 다운로드되었습니다!';
                 msg.className = 'message success';
                 setTimeout(() => msg.classList.add('hidden'), 3000);
@@ -3417,7 +3434,34 @@ def fibonacci(n):
                 msg.className = 'message error';
             }
         }
-        
+
+        // 영문본 US양식 다운로드
+        async function downloadUSFormatEng3() {
+            const msg = document.getElementById('engParagraphNumMessage3');
+            msg.classList.add('hidden');
+            let text = window.englishRawText3 || '';
+            if (!text || text.includes('없습니다')) {
+                msg.textContent = '❌ 영문본이 없습니다.';
+                msg.className = 'message error';
+                return;
+            }
+            const result = applyFormatStandardization(text);
+            if (result.changeCount > 0) {
+                window.englishRawText3 = result.text;
+                text = result.text;
+                updateEnglishDisplay3();
+            }
+            try {
+                await generateDocxUSPatent(text, 'english_extracted_US.docx');
+                msg.textContent = '✅ US 특허출원 양식 DOCX 파일이 다운로드되었습니다!';
+                msg.className = 'message success';
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+            } catch (e) {
+                msg.textContent = '❌ 오류: ' + e.message;
+                msg.className = 'message error';
+            }
+        }
+
         // 국문 색변환 함수
         function convertKoreanColor3() {
             const t = document.getElementById('inputText3').value;
