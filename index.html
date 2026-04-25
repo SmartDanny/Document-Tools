@@ -339,9 +339,9 @@
                 <div id="preview3Section" class="section hidden">
                     <div class="toggle-section">
                         <div class="section-title" style="margin-bottom:0;">2단계: 분류 미리보기</div>
-                        <button class="toggle-btn" onclick="togglePreview3()" id="toggleBtn3">▲ 접기</button>
+                        <button class="toggle-btn" onclick="togglePreview3()" id="toggleBtn3">▼ 펼치기</button>
                     </div>
-                    <div id="previewContent3" class="preview-content"><div id="paragraphList3" class="paragraph-list"></div></div>
+                    <div id="previewContent3" class="preview-content collapsed"><div id="paragraphList3" class="paragraph-list"></div></div>
                 </div>
                 <div id="result3Section" class="hidden">
                     <div class="section">
@@ -4978,8 +4978,8 @@ def fibonacci(n):
             window.colorLines3 = null;
             window.originalText3 = '';
             ['stats3Section','preview3Section','result3Section','colorResult3Section'].forEach(x => document.getElementById(x).classList.add('hidden'));
-            document.getElementById('previewContent3').classList.remove('collapsed');
-            document.getElementById('toggleBtn3').textContent = '▲ 접기';
+            document.getElementById('previewContent3').classList.add('collapsed');
+            document.getElementById('toggleBtn3').textContent = '▼ 펼치기';
             // 필터 버튼 초기화
             document.querySelectorAll('#stats3Section .stat-card.clickable').forEach(card => {
                 card.classList.remove('active');
