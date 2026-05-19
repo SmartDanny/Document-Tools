@@ -561,9 +561,9 @@
                     <div class="stats-row">
                         <div class="stat-card blue"><div class="stat-number" id="totalLines4">0</div><div class="stat-label">전체 줄</div></div>
                         <div class="stat-card green"><div class="stat-number" id="sameLines4">0</div><div class="stat-label">동일</div></div>
-                        <div class="stat-card orange"><div class="stat-number" id="modifiedLines4">0</div><div class="stat-label">수정됨</div></div>
-                        <div class="stat-card pink"><div class="stat-number" id="addedLines4">0</div><div class="stat-label">추가됨</div></div>
-                        <div class="stat-card purple"><div class="stat-number" id="deletedLines4">0</div><div class="stat-label">삭제됨</div></div>
+                        <div class="stat-card orange diff-nav-card" id="modifiedCard4" onclick="navigateDiff('modified')" title="클릭하여 수정된 항목으로 이동"><div class="stat-number" id="modifiedLines4">0</div><div class="stat-label">수정됨</div><div class="stat-nav-indicator" id="modifiedNavIndicator4"></div></div>
+                        <div class="stat-card pink diff-nav-card" id="addedCard4" onclick="navigateDiff('added')" title="클릭하여 추가된 항목으로 이동"><div class="stat-number" id="addedLines4">0</div><div class="stat-label">추가됨</div><div class="stat-nav-indicator" id="addedNavIndicator4"></div></div>
+                        <div class="stat-card purple diff-nav-card" id="deletedCard4" onclick="navigateDiff('deleted')" title="클릭하여 삭제된 항목으로 이동"><div class="stat-number" id="deletedLines4">0</div><div class="stat-label">삭제됨</div><div class="stat-nav-indicator" id="deletedNavIndicator4"></div></div>
                     </div>
                     <div class="compare-legend">
                         <span class="legend-item"><span class="legend-color same"></span> 동일</span>
@@ -6485,15 +6485,25 @@ ${bodyContent}
             document.getElementById('addedLines4').textContent = addedCount;
             document.getElementById('deletedLines4').textContent = deletedCount;
             
+            // 네비게이션 상태 초기화
+            diffNavState.modified = 0;
+            diffNavState.added = 0;
+            diffNavState.deleted = 0;
+            ['modifiedNavIndicator4', 'addedNavIndicator4', 'deletedNavIndicator4'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = '';
+            });
+
             // 결과 표시 (원본 텍스트 사용)
             let htmlA = '', htmlB = '';
+            let navIdx = { modified: 0, added: 0, deleted: 0 };
             diff.forEach(d => {
                 const escapeHtml = (t) => t ? t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : '';
-                
+
                 // 원본 라인 가져오기 (diff의 lineA/lineB는 1-based index) - 안전한 접근
                 const itemA = (d.lineA && d.lineA > 0 && d.lineA <= nonEmptyA.length) ? nonEmptyA[d.lineA - 1] : null;
                 const itemB = (d.lineB && d.lineB > 0 && d.lineB <= nonEmptyB.length) ? nonEmptyB[d.lineB - 1] : null;
-                
+
                 // 원본 텍스트 가져오기 - 여러 소스에서 폴백
                 let origTextA = '';
                 if (itemA && itemA.origText) {
@@ -6501,42 +6511,37 @@ ${bodyContent}
                 } else if (d.textA) {
                     origTextA = d.textA;
                 }
-                
+
                 let origTextB = '';
                 if (itemB && itemB.origText) {
                     origTextB = itemB.origText;
                 } else if (d.textB) {
                     origTextB = d.textB;
                 }
-                
+
                 const origLineNumA = itemA ? (itemA.origIdx + 1) : (d.lineA || '-');
                 const origLineNumB = itemB ? (itemB.origIdx + 1) : (d.lineB || '-');
-                
+
                 if (d.type === 'same') {
                     htmlA += `<div class="compare-line same"><span class="compare-line-num">${origLineNumA}</span>${escapeHtml(origTextA)}</div>`;
                     htmlB += `<div class="compare-line same"><span class="compare-line-num">${origLineNumB}</span>${escapeHtml(origTextB)}</div>`;
                 } else if (d.type === 'modified') {
-                    // 원본 텍스트를 기본값으로 설정
+                    const idx = navIdx.modified++;
                     const escapedA = escapeHtml(origTextA);
                     const escapedB = escapeHtml(origTextB);
-                    
-                    // 단어 단위 비교하여 하이라이트 적용
                     const highlighted = highlightModifiedLine(origTextA, origTextB);
-                    
-                    // 결과가 유효하면 사용, 아니면 원본 텍스트 사용
                     const finalHtmlA = (highlighted && highlighted.htmlA) ? highlighted.htmlA : escapedA;
                     const finalHtmlB = (highlighted && highlighted.htmlB) ? highlighted.htmlB : escapedB;
-                    
-                    htmlA += `<div class="compare-line modified"><span class="compare-line-num">${origLineNumA}</span>${finalHtmlA}</div>`;
-                    htmlB += `<div class="compare-line modified"><span class="compare-line-num">${origLineNumB}</span>${finalHtmlB}</div>`;
+                    htmlA += `<div class="compare-line modified" data-diff-type="modified" data-diff-index="${idx}"><span class="compare-line-num">${origLineNumA}</span>${finalHtmlA}</div>`;
+                    htmlB += `<div class="compare-line modified" data-diff-type="modified" data-diff-index="${idx}"><span class="compare-line-num">${origLineNumB}</span>${finalHtmlB}</div>`;
                 } else if (d.type === 'added') {
-                    // 추가된 라인: 문서A에 빈 자리 표시, 문서B에 추가된 내용
-                    htmlA += `<div class="compare-line added-placeholder"><span class="compare-line-num">-</span><span style="color:#155724;font-style:italic;">(추가된 내용)</span></div>`;
-                    htmlB += `<div class="compare-line added"><span class="compare-line-num">${origLineNumB}</span>${escapeHtml(origTextB) || '(내용 없음)'}</div>`;
+                    const idx = navIdx.added++;
+                    htmlA += `<div class="compare-line added-placeholder" data-diff-type="added" data-diff-index="${idx}"><span class="compare-line-num">-</span><span style="color:#155724;font-style:italic;">(추가된 내용)</span></div>`;
+                    htmlB += `<div class="compare-line added" data-diff-type="added" data-diff-index="${idx}"><span class="compare-line-num">${origLineNumB}</span>${escapeHtml(origTextB) || '(내용 없음)'}</div>`;
                 } else if (d.type === 'deleted') {
-                    // 삭제된 라인: 문서A에 삭제된 내용, 문서B에 빈 자리 표시
-                    htmlA += `<div class="compare-line deleted"><span class="compare-line-num">${origLineNumA}</span>${escapeHtml(origTextA) || '(내용 없음)'}</div>`;
-                    htmlB += `<div class="compare-line deleted-placeholder"><span class="compare-line-num">-</span><span style="color:#721c24;font-style:italic;">(삭제된 내용)</span></div>`;
+                    const idx = navIdx.deleted++;
+                    htmlA += `<div class="compare-line deleted" data-diff-type="deleted" data-diff-index="${idx}"><span class="compare-line-num">${origLineNumA}</span>${escapeHtml(origTextA) || '(내용 없음)'}</div>`;
+                    htmlB += `<div class="compare-line deleted-placeholder" data-diff-type="deleted" data-diff-index="${idx}"><span class="compare-line-num">-</span><span style="color:#721c24;font-style:italic;">(삭제된 내용)</span></div>`;
                 }
             });
             
@@ -6550,7 +6555,47 @@ ${bodyContent}
             panelA.onscroll = function() { panelB.scrollTop = panelA.scrollTop; };
             panelB.onscroll = function() { panelA.scrollTop = panelB.scrollTop; };
         }
-        
+
+        const diffNavState = { modified: 0, added: 0, deleted: 0 };
+
+        function navigateDiff(type) {
+            const panelA = document.getElementById('compareResult4a');
+            const panelB = document.getElementById('compareResult4b');
+            if (!panelA || !panelB) return;
+
+            const elements = panelA.querySelectorAll(`[data-diff-type="${type}"]`);
+            if (elements.length === 0) return;
+
+            // 이전 하이라이트 제거
+            panelA.querySelectorAll('.diff-nav-active').forEach(el => el.classList.remove('diff-nav-active'));
+            panelB.querySelectorAll('.diff-nav-active').forEach(el => el.classList.remove('diff-nav-active'));
+
+            // 순환 인덱스
+            const currentIdx = diffNavState[type] % elements.length;
+            diffNavState[type] = currentIdx + 1;
+
+            // 두 패널 모두 하이라이트
+            const targetA = panelA.querySelector(`[data-diff-type="${type}"][data-diff-index="${currentIdx}"]`);
+            const targetB = panelB.querySelector(`[data-diff-type="${type}"][data-diff-index="${currentIdx}"]`);
+            if (targetA) targetA.classList.add('diff-nav-active');
+            if (targetB) targetB.classList.add('diff-nav-active');
+
+            // 스크롤 이동 (패널 중앙에 오도록)
+            const target = targetA || targetB;
+            if (target) {
+                const scrollTo = target.offsetTop - panelA.clientHeight / 2 + target.clientHeight / 2;
+                panelA.scrollTop = Math.max(0, scrollTo);
+                panelB.scrollTop = Math.max(0, scrollTo);
+            }
+
+            // 인디케이터 업데이트
+            const indicatorId = type === 'modified' ? 'modifiedNavIndicator4'
+                              : type === 'added'    ? 'addedNavIndicator4'
+                              :                       'deletedNavIndicator4';
+            const indicator = document.getElementById(indicatorId);
+            if (indicator) indicator.textContent = `${currentIdx + 1} / ${elements.length}`;
+        }
+
         function clearAll4() {
             if (!confirm('모든 내용을 지우시겠습니까?')) return;
             document.getElementById('inputText4a').value = '';
