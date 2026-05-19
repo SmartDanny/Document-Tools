@@ -6581,9 +6581,12 @@ ${bodyContent}
             if (targetB) targetB.classList.add('diff-nav-active');
 
             // 스크롤 이동 (패널 중앙에 오도록)
+            // getBoundingClientRect()로 viewport 기준 상대 위치 계산하여 scrollTop에 반영
             const target = targetA || targetB;
             if (target) {
-                const scrollTo = target.offsetTop - panelA.clientHeight / 2 + target.clientHeight / 2;
+                const containerRect = panelA.getBoundingClientRect();
+                const targetRect = target.getBoundingClientRect();
+                const scrollTo = panelA.scrollTop + (targetRect.top - containerRect.top) - panelA.clientHeight / 2 + target.clientHeight / 2;
                 panelA.scrollTop = Math.max(0, scrollTo);
                 panelB.scrollTop = Math.max(0, scrollTo);
             }
