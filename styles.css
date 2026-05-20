@@ -303,6 +303,11 @@ input[type="file"] { display: none; }
 .stat-card.purple { background: #f3e5f5; border-color: #e1bee7; }
 .stat-card.pink { background: #fce4ec; border-color: #f8bbd9; }
 .stat-card.teal { background: #e0f2f1; border-color: #b2dfdb; }
+/* 문서비교 탭 전용: 비교 창 라인 색상과 일치 */
+.stat-card.compare-same { background: #f8f9fa; border-color: #dee2e6; }
+.stat-card.compare-modified { background: #fff3cd; border-color: #ffe69c; }
+.stat-card.compare-added { background: #d4edda; border-color: #b8dfc8; }
+.stat-card.compare-deleted { background: #f8d7da; border-color: #f1aeb5; }
 .stat-number { font-size: 2.2em; font-weight: 700; color: #333; }
 .stat-label { font-size: 0.85em; color: #666; margin-top: 5px; }
 .stat-card.clickable { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s; }
