@@ -98,31 +98,36 @@
                 <div id="crossRefMessage" class="message hidden"></div>
             </div>
             <div class="section">
-                <div class="section-title">3단계: 부제표준화 (선택)</div>
-                <div class="subtitle-standard-option">
-                    <div class="radio-group">
-                        <label class="radio-label">
-                            <input type="radio" name="subtitleStandard" value="sdc" checked>
-                            <span class="radio-text">SDC표준US</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="subtitleStandard" value="office">
-                            <span class="radio-text">사무소표준US</span>
-                        </label>
-                        <label class="radio-label">
-                            <input type="radio" name="subtitleStandard" value="pct">
-                            <span class="radio-text">PCT출원용</span>
-                        </label>
+                <div class="toggle-section" onclick="toggleSection1('Step3')" style="cursor:pointer;margin-bottom:0;">
+                    <div class="section-title" style="margin-bottom:0;">3단계: 부제표준화 (선택)</div>
+                    <button class="toggle-btn" id="toggleBtn1Step3" onclick="event.stopPropagation();toggleSection1('Step3')">▶ 펼치기</button>
+                </div>
+                <div id="content1Step3" style="display:none;">
+                    <div class="subtitle-standard-option" style="margin-top:12px;">
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="subtitleStandard" value="sdc" checked>
+                                <span class="radio-text">SDC표준US</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="subtitleStandard" value="office">
+                                <span class="radio-text">사무소표준US</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="subtitleStandard" value="pct">
+                                <span class="radio-text">PCT출원용</span>
+                            </label>
+                        </div>
+                        <button class="btn btn-primary" onclick="standardizeSubtitles()" id="standardizeSubtitleBtn">🔄 부제표준화 적용</button>
                     </div>
-                    <button class="btn btn-primary" onclick="standardizeSubtitles()" id="standardizeSubtitleBtn">🔄 부제표준화 적용</button>
+                    <div class="note" style="margin-top:15px;">
+                        <span class="note-icon">💡</span>
+                        <span><strong>SDC표준US:</strong> 국문/사무소부제 → SDC형식 (BACKGROUND, SUMMARY, DETAILED DESCRIPTION 등)<br>
+                        <strong>사무소표준US:</strong> 국문부제 → 영문부제 (TITLE OF THE INVENTION, BACKGROUND OF THE INVENTION 등)<br>
+                        <strong>PCT출원용:</strong> 국문/영문부제 → PCT형식 (【Technical Field】, 【Background Art】 등). 영문부제 변환 시 **적소이동필요** 표시가 추가됩니다.</span>
+                    </div>
+                    <div id="subtitleMessage" class="message hidden"></div>
                 </div>
-                <div class="note" style="margin-top:15px;">
-                    <span class="note-icon">💡</span>
-                    <span><strong>SDC표준US:</strong> 국문/사무소부제 → SDC형식 (BACKGROUND, SUMMARY, DETAILED DESCRIPTION 등)<br>
-                    <strong>사무소표준US:</strong> 국문부제 → 영문부제 (TITLE OF THE INVENTION, BACKGROUND OF THE INVENTION 등)<br>
-                    <strong>PCT출원용:</strong> 국문/영문부제 → PCT형식 (【Technical Field】, 【Background Art】 등). 영문부제 변환 시 **적소이동필요** 표시가 추가됩니다.</span>
-                </div>
-                <div id="subtitleMessage" class="message hidden"></div>
             </div>
             <div class="section">
                 <div class="section-title">4단계: 단락번호 추가/제거 (선택)</div>
@@ -139,10 +144,10 @@
             <div class="section hidden" id="result1Section">
                 <div class="section-title">5단계: 분석 결과</div>
                 <div class="stats-row">
-                    <div class="stat-card blue"><div class="stat-number" id="subCount1">0</div><div class="stat-label">아래첨자</div></div>
-                    <div class="stat-card orange"><div class="stat-number" id="supCount1">0</div><div class="stat-label">위첨자</div></div>
+                    <div class="stat-card blue diff-nav-card" onclick="navigateStatElem('tab1','sub')" title="클릭하여 아래첨자로 이동"><div class="stat-number" id="subCount1">0</div><div class="stat-label">아래첨자</div><div class="stat-nav-indicator" id="subNavIndicator1"></div></div>
+                    <div class="stat-card orange diff-nav-card" onclick="navigateStatElem('tab1','sup')" title="클릭하여 위첨자로 이동"><div class="stat-number" id="supCount1">0</div><div class="stat-label">위첨자</div><div class="stat-nav-indicator" id="supNavIndicator1"></div></div>
                     <div class="stat-card purple"><div class="stat-number" id="paragraphCount1">0</div><div class="stat-label">단락 개수</div></div>
-                    <div class="stat-card teal"><div class="stat-number" id="tableCount1">0</div><div class="stat-label">표 개수</div></div>
+                    <div class="stat-card teal diff-nav-card" onclick="navigateStatElem('tab1','table')" title="클릭하여 표로 이동"><div class="stat-number" id="tableCount1">0</div><div class="stat-label">표 개수</div><div class="stat-nav-indicator" id="tableNavIndicator1"></div></div>
                     <div class="stat-card pink"><div class="stat-number" id="claimCount1">0</div><div class="stat-label">청구항 개수</div></div>
                 </div>
             </div>
@@ -251,10 +256,10 @@
             <div class="section">
                 <div class="section-title">5단계: 미리보기</div>
                 <div class="stats-row" style="margin-bottom:15px;">
-                    <div class="stat-card blue"><div class="stat-number" id="subCount2">0</div><div class="stat-label">아래첨자</div></div>
-                    <div class="stat-card orange"><div class="stat-number" id="supCount2">0</div><div class="stat-label">위첨자</div></div>
+                    <div class="stat-card blue diff-nav-card" onclick="navigateStatElem('tab2','sub')" title="클릭하여 아래첨자로 이동"><div class="stat-number" id="subCount2">0</div><div class="stat-label">아래첨자</div><div class="stat-nav-indicator" id="subNavIndicator2"></div></div>
+                    <div class="stat-card orange diff-nav-card" onclick="navigateStatElem('tab2','sup')" title="클릭하여 위첨자로 이동"><div class="stat-number" id="supCount2">0</div><div class="stat-label">위첨자</div><div class="stat-nav-indicator" id="supNavIndicator2"></div></div>
                     <div class="stat-card purple"><div class="stat-number" id="paragraphCount2">0</div><div class="stat-label">단락 개수</div></div>
-                    <div class="stat-card teal"><div class="stat-number" id="tableCount2">0</div><div class="stat-label">표 개수</div></div>
+                    <div class="stat-card teal diff-nav-card" onclick="navigateStatElem('tab2','table')" title="클릭하여 표로 이동"><div class="stat-number" id="tableCount2">0</div><div class="stat-label">표 개수</div><div class="stat-nav-indicator" id="tableNavIndicator2"></div></div>
                 </div>
                 <div class="btn-group" style="margin-bottom:10px;">
                     <button class="btn btn-primary" onclick="standardizeFormat2()">📐 양식표준화</button>
@@ -349,9 +354,9 @@
                         <div class="stats-row" style="margin-bottom:15px;">
                             <div class="stat-card blue"><div class="stat-number" id="englishParagraphCount3">0</div><div class="stat-label">단락 개수</div></div>
                             <div class="stat-card purple"><div class="stat-number" id="englishClaimCount3">0</div><div class="stat-label">청구항 개수</div></div>
-                            <div class="stat-card blue"><div class="stat-number" id="englishSubCount3">0</div><div class="stat-label">아래첨자</div></div>
-                            <div class="stat-card orange"><div class="stat-number" id="englishSupCount3">0</div><div class="stat-label">위첨자</div></div>
-                            <div class="stat-card teal"><div class="stat-number" id="englishTableCount3">0</div><div class="stat-label">표 개수</div></div>
+                            <div class="stat-card blue diff-nav-card" onclick="navigateStatElem('tab3_eng','sub')" title="클릭하여 아래첨자로 이동"><div class="stat-number" id="englishSubCount3">0</div><div class="stat-label">아래첨자</div><div class="stat-nav-indicator" id="engSubNavIndicator3"></div></div>
+                            <div class="stat-card orange diff-nav-card" onclick="navigateStatElem('tab3_eng','sup')" title="클릭하여 위첨자로 이동"><div class="stat-number" id="englishSupCount3">0</div><div class="stat-label">위첨자</div><div class="stat-nav-indicator" id="engSupNavIndicator3"></div></div>
+                            <div class="stat-card teal diff-nav-card" onclick="navigateStatElem('tab3_eng','table')" title="클릭하여 표로 이동"><div class="stat-number" id="englishTableCount3">0</div><div class="stat-label">표 개수</div><div class="stat-nav-indicator" id="engTableNavIndicator3"></div></div>
                         </div>
                         <div style="display:flex;gap:10px;margin-bottom:8px;">
                             <button class="btn btn-success" style="flex:1;" onclick="downloadEngDocx3()">📥 영문본 DOCX 다운로드</button>
@@ -386,9 +391,9 @@
                         <div class="stats-row" style="margin-bottom:15px;">
                             <div class="stat-card green"><div class="stat-number" id="koreanParagraphCount3">0</div><div class="stat-label">단락 개수</div></div>
                             <div class="stat-card purple"><div class="stat-number" id="koreanClaimCount3">0</div><div class="stat-label">청구항 개수</div></div>
-                            <div class="stat-card blue"><div class="stat-number" id="koreanSubCount3">0</div><div class="stat-label">아래첨자</div></div>
-                            <div class="stat-card orange"><div class="stat-number" id="koreanSupCount3">0</div><div class="stat-label">위첨자</div></div>
-                            <div class="stat-card teal"><div class="stat-number" id="koreanTableCount3">0</div><div class="stat-label">표 개수</div></div>
+                            <div class="stat-card blue diff-nav-card" onclick="navigateStatElem('tab3_kor','sub')" title="클릭하여 아래첨자로 이동"><div class="stat-number" id="koreanSubCount3">0</div><div class="stat-label">아래첨자</div><div class="stat-nav-indicator" id="korSubNavIndicator3"></div></div>
+                            <div class="stat-card orange diff-nav-card" onclick="navigateStatElem('tab3_kor','sup')" title="클릭하여 위첨자로 이동"><div class="stat-number" id="koreanSupCount3">0</div><div class="stat-label">위첨자</div><div class="stat-nav-indicator" id="korSupNavIndicator3"></div></div>
+                            <div class="stat-card teal diff-nav-card" onclick="navigateStatElem('tab3_kor','table')" title="클릭하여 표로 이동"><div class="stat-number" id="koreanTableCount3">0</div><div class="stat-label">표 개수</div><div class="stat-nav-indicator" id="korTableNavIndicator3"></div></div>
                         </div>
                         <div class="btn-group" style="margin-bottom:10px;display:flex;align-items:center;gap:10px;">
                             <button class="btn btn-primary" onclick="downloadKorDocx3()">📥 국문본 DOCX 다운로드</button>
@@ -426,11 +431,27 @@
                             <div class="stat-card green"><div class="stat-number" id="colorKoreanCount3">0</div><div class="stat-label">한글단락 (색변환)</div></div>
                             <div class="stat-card blue"><div class="stat-number" id="colorEnglishCount3">0</div><div class="stat-label">영어단락</div></div>
                         </div>
-                        <div class="stats-row" style="margin-bottom:15px;">
-                            <div class="stat-card purple"><div class="stat-number" id="colorParagraphCount3">0</div><div class="stat-label">단락 개수</div></div>
-                            <div class="stat-card blue"><div class="stat-number" id="colorSubCount3">0</div><div class="stat-label">아래첨자</div></div>
-                            <div class="stat-card orange"><div class="stat-number" id="colorSupCount3">0</div><div class="stat-label">위첨자</div></div>
-                            <div class="stat-card teal"><div class="stat-number" id="colorTableCount3">0</div><div class="stat-label">표 개수</div></div>
+                        <div style="margin-bottom:15px;">
+                            <!-- 한글 단락 통계 -->
+                            <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                                <span style="background:#993300;color:white;padding:3px 10px;border-radius:12px;font-size:0.78em;font-weight:600;white-space:nowrap;min-width:36px;text-align:center;">한글</span>
+                                <div style="display:flex;flex:1;gap:8px;flex-wrap:wrap;">
+                                    <div class="stat-card purple" style="flex:1;min-width:80px;"><div class="stat-number" id="colorKrParagraphCount3">0</div><div class="stat-label">단락 개수</div></div>
+                                    <div class="stat-card blue diff-nav-card" onclick="navigateStatElem('tab3_color_kr','sub')" title="클릭하여 한글 아래첨자로 이동" style="flex:1;min-width:80px;"><div class="stat-number" id="colorKrSubCount3">0</div><div class="stat-label">아래첨자</div><div class="stat-nav-indicator" id="colorKrSubNavIndicator3"></div></div>
+                                    <div class="stat-card orange diff-nav-card" onclick="navigateStatElem('tab3_color_kr','sup')" title="클릭하여 한글 위첨자로 이동" style="flex:1;min-width:80px;"><div class="stat-number" id="colorKrSupCount3">0</div><div class="stat-label">위첨자</div><div class="stat-nav-indicator" id="colorKrSupNavIndicator3"></div></div>
+                                    <div class="stat-card teal diff-nav-card" onclick="navigateStatElem('tab3_color_kr','table')" title="클릭하여 한글 표로 이동" style="flex:1;min-width:80px;"><div class="stat-number" id="colorKrTableCount3">0</div><div class="stat-label">표 개수</div><div class="stat-nav-indicator" id="colorKrTableNavIndicator3"></div></div>
+                                </div>
+                            </div>
+                            <!-- 영어 단락 통계 -->
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span style="background:#2980b9;color:white;padding:3px 10px;border-radius:12px;font-size:0.78em;font-weight:600;white-space:nowrap;min-width:36px;text-align:center;">영어</span>
+                                <div style="display:flex;flex:1;gap:8px;flex-wrap:wrap;">
+                                    <div class="stat-card purple" style="flex:1;min-width:80px;"><div class="stat-number" id="colorEnParagraphCount3">0</div><div class="stat-label">단락 개수</div></div>
+                                    <div class="stat-card blue diff-nav-card" onclick="navigateStatElem('tab3_color_en','sub')" title="클릭하여 영어 아래첨자로 이동" style="flex:1;min-width:80px;"><div class="stat-number" id="colorEnSubCount3">0</div><div class="stat-label">아래첨자</div><div class="stat-nav-indicator" id="colorEnSubNavIndicator3"></div></div>
+                                    <div class="stat-card orange diff-nav-card" onclick="navigateStatElem('tab3_color_en','sup')" title="클릭하여 영어 위첨자로 이동" style="flex:1;min-width:80px;"><div class="stat-number" id="colorEnSupCount3">0</div><div class="stat-label">위첨자</div><div class="stat-nav-indicator" id="colorEnSupNavIndicator3"></div></div>
+                                    <div class="stat-card teal diff-nav-card" onclick="navigateStatElem('tab3_color_en','table')" title="클릭하여 영어 표로 이동" style="flex:1;min-width:80px;"><div class="stat-number" id="colorEnTableCount3">0</div><div class="stat-label">표 개수</div><div class="stat-nav-indicator" id="colorEnTableNavIndicator3"></div></div>
+                                </div>
+                            </div>
                         </div>
                         <div class="btn-group" style="margin-bottom:10px;display:flex;align-items:center;gap:10px;">
                             <button class="btn btn-primary" onclick="downloadColorDocx3()">📥 한영혼합본 DOCX 다운로드</button>
@@ -1169,6 +1190,7 @@ def fibonacci(n):
         }
         
         function displayResult1(r) {
+            resetStatNavState('tab1');
             document.getElementById('subCount1').textContent = r.subscriptCount;
             document.getElementById('supCount1').textContent = r.superscriptCount;
             document.getElementById('paragraphCount1').textContent = countParagraphsInText(r.text);
@@ -1956,8 +1978,9 @@ def fibonacci(n):
         window.tab2USFormat = false;
         inp2.addEventListener('input', () => { window.tab2USFormat = false; updatePreview2(); });
         function updatePreview2() {
+            resetStatNavState('tab2');
             const t = inp2.value;
-            
+
             // 미리보기 - 표는 실제 HTML로 렌더링
             let previewHtml = t;
             let inTable = false;
@@ -2026,6 +2049,15 @@ def fibonacci(n):
             inp2.value = ex[type]; updatePreview2();
         }
         
+        // 탭1 3단계 접기/펼치기
+        function toggleSection1(step) {
+            const content = document.getElementById('content1' + step);
+            const btn = document.getElementById('toggleBtn1' + step);
+            const isCollapsed = content.style.display === 'none';
+            content.style.display = isCollapsed ? '' : 'none';
+            btn.textContent = isCollapsed ? '▲ 접기' : '▶ 펼치기';
+        }
+
         // 탭2 2단계/3단계 접기/펼치기
         function toggleSection2(step) {
             const content = document.getElementById('content2' + step);
@@ -3285,10 +3317,13 @@ def fibonacci(n):
             document.getElementById('englishSupCount3').textContent = enSupCount;
             document.getElementById('englishTableCount3').textContent = enTableCount;
             
+            resetStatNavState('tab3_eng');
+            resetStatNavState('tab3_kor');
+
             // 원본 텍스트 창에 태그 강조 표시 (전처리 탭처럼)
             const krHighlighted = highlightHtmlTags(krText);
             document.getElementById('koreanResult3').innerHTML = krHighlighted;
-            
+
             const enHighlighted = highlightHtmlTags(enText);
             document.getElementById('englishResult3').innerHTML = enHighlighted;
             
@@ -3534,60 +3569,67 @@ def fibonacci(n):
                     .replace(/&lt;\/sup&gt;/gi, '</sup>');
                 if (l.type === 'korean') {
                     // 국문 단락은 갈색으로 표시
-                    previewHtml += `<div style="color:#993300;margin:3px 0;">${renderedText}</div>`;
+                    previewHtml += `<div data-line-type="korean" style="color:#993300;margin:3px 0;">${renderedText}</div>`;
                 } else if (l.type === 'subtitle') {
-                    previewHtml += `<div style="color:#e67e22;font-weight:bold;margin:3px 0;">${renderedText}</div>`;
+                    previewHtml += `<div data-line-type="subtitle" style="color:#e67e22;font-weight:bold;margin:3px 0;">${renderedText}</div>`;
                 } else if (l.type === 'english') {
-                    previewHtml += `<div style="color:#2980b9;margin:3px 0;">${renderedText}</div>`;
+                    previewHtml += `<div data-line-type="english" style="color:#2980b9;margin:3px 0;">${renderedText}</div>`;
                 } else {
-                    previewHtml += `<div style="margin:3px 0;">${renderedText}</div>`;
+                    previewHtml += `<div data-line-type="${l.type}" style="margin:3px 0;">${renderedText}</div>`;
                 }
             });
             previewEl.innerHTML = previewHtml;
-            
-            // 단락 개수, 첨자, 표 통계 계산
-            let paragraphCount = 0;
-            let subCount = 0;
-            let supCount = 0;
-            let tableCount = 0;
+
+            // 단락 개수, 첨자, 표 통계 계산 (한글/영어 분리)
+            let krParagraphCount = 0, krSubCount = 0, krSupCount = 0, krTableCount = 0;
+            let enParagraphCount = 0, enSubCount = 0, enSupCount = 0, enTableCount = 0;
             let insideTable = false;
             let afterClaimsSection = false;
-            
+
             colorLines.forEach(l => {
                 const trimmed = l.text.trim();
-                
-                // WHAT IS CLAIMED IS: 이후는 단락 카운트하지 않음
+                const isKorean = l.type === 'korean';
+
                 if (trimmed === 'WHAT IS CLAIMED IS:' || trimmed === 'WHAT IS CLAIMED IS') {
                     afterClaimsSection = true;
                 }
-                
+
                 if (trimmed.startsWith('<table')) insideTable = true;
-                
-                // 표 개수
+
+                // 표 개수 (한글/영어 분리)
                 const tableMatches = l.text.match(/<table[^>]*>/gi);
-                if (tableMatches) tableCount += tableMatches.length;
-                
-                // 첨자 개수
+                if (tableMatches) {
+                    if (isKorean) krTableCount += tableMatches.length;
+                    else enTableCount += tableMatches.length;
+                }
+
+                // 첨자 개수 (한글/영어 분리)
                 const subMatches = l.text.match(/<sub>/gi);
                 const supMatches = l.text.match(/<sup>/gi);
-                if (subMatches) subCount += subMatches.length;
-                if (supMatches) supCount += supMatches.length;
-                
-                // 단락 카운트 조건: 표 밖, WHAT IS CLAIMED IS: 이전, 마침표로 끝남
-                if (!afterClaimsSection && !insideTable && trimmed && 
+                if (subMatches) { if (isKorean) krSubCount += subMatches.length; else enSubCount += subMatches.length; }
+                if (supMatches) { if (isKorean) krSupCount += supMatches.length; else enSupCount += supMatches.length; }
+
+                // 단락 카운트 (한글/영어 분리, 표 밖, WHAT IS CLAIMED IS: 이전, 마침표로 끝남)
+                if (!afterClaimsSection && !insideTable && trimmed &&
                     !trimmed.startsWith('<table') && !trimmed.endsWith('</table>') &&
                     /[.。]["']?$/.test(trimmed)) {
-                    paragraphCount++;
+                    if (isKorean) krParagraphCount++;
+                    else if (l.type === 'english') enParagraphCount++;
                 }
-                
+
                 if (trimmed.endsWith('</table>')) insideTable = false;
             });
-            
-            document.getElementById('colorParagraphCount3').textContent = paragraphCount;
-            document.getElementById('colorSubCount3').textContent = subCount;
-            document.getElementById('colorSupCount3').textContent = supCount;
-            document.getElementById('colorTableCount3').textContent = tableCount;
-            
+
+            resetStatNavState('tab3_color');
+            document.getElementById('colorKrParagraphCount3').textContent = krParagraphCount;
+            document.getElementById('colorKrSubCount3').textContent = krSubCount;
+            document.getElementById('colorKrSupCount3').textContent = krSupCount;
+            document.getElementById('colorKrTableCount3').textContent = krTableCount;
+            document.getElementById('colorEnParagraphCount3').textContent = enParagraphCount;
+            document.getElementById('colorEnSubCount3').textContent = enSubCount;
+            document.getElementById('colorEnSupCount3').textContent = enSupCount;
+            document.getElementById('colorEnTableCount3').textContent = enTableCount;
+
             // 색변환 결과 섹션 표시, 영문/국문 추출 결과 숨기기
             document.getElementById('colorResult3Section').classList.remove('hidden');
             document.getElementById('stats3Section').classList.add('hidden');
@@ -3925,63 +3967,71 @@ def fibonacci(n):
                     .replace(/&lt;sup&gt;/gi, '<sup>')
                     .replace(/&lt;\/sup&gt;/gi, '</sup>');
                 if (l.type === 'korean') {
-                    previewHtml += `<div style="color:#993300;margin:3px 0;">${renderedText}</div>`;
+                    previewHtml += `<div data-line-type="korean" style="color:#993300;margin:3px 0;">${renderedText}</div>`;
                 } else if (l.type === 'subtitle') {
-                    previewHtml += `<div style="color:#e67e22;font-weight:bold;margin:3px 0;">${renderedText}</div>`;
+                    previewHtml += `<div data-line-type="subtitle" style="color:#e67e22;font-weight:bold;margin:3px 0;">${renderedText}</div>`;
                 } else if (l.type === 'english') {
-                    previewHtml += `<div style="color:#2980b9;margin:3px 0;">${renderedText}</div>`;
+                    previewHtml += `<div data-line-type="english" style="color:#2980b9;margin:3px 0;">${renderedText}</div>`;
                 } else {
-                    previewHtml += `<div style="margin:3px 0;">${renderedText}</div>`;
+                    previewHtml += `<div data-line-type="${l.type}" style="margin:3px 0;">${renderedText}</div>`;
                 }
             });
             previewEl.innerHTML = previewHtml;
-            
+
             // 통계 갱신
             document.getElementById('colorTotalCount3').textContent = window.colorLines3.filter(l => l.type !== 'empty' && l.type !== 'pagebreak').length;
             document.getElementById('colorSubtitleCount3').textContent = window.colorLines3.filter(l => l.type === 'subtitle').length;
             document.getElementById('colorKoreanCount3').textContent = window.colorLines3.filter(l => l.type === 'korean').length;
             document.getElementById('colorEnglishCount3').textContent = window.colorLines3.filter(l => l.type === 'english').length;
-            
-            // 단락 개수, 첨자, 표 통계 계산
-            let paragraphCount = 0;
-            let subCount = 0;
-            let supCount = 0;
-            let tableCount = 0;
+
+            // 단락 개수, 첨자, 표 통계 계산 (한글/영어 분리)
+            let krParagraphCount = 0, krSubCount = 0, krSupCount = 0, krTableCount = 0;
+            let enParagraphCount = 0, enSubCount = 0, enSupCount = 0, enTableCount = 0;
             let insideTable = false;
             let afterClaimsSection = false;
-            
+
             window.colorLines3.forEach(l => {
                 const trimmed = l.text.trim();
-                
+                const isKorean = l.type === 'korean';
+
                 if (trimmed === 'WHAT IS CLAIMED IS:' || trimmed === 'WHAT IS CLAIMED IS') {
                     afterClaimsSection = true;
                 }
-                
+
                 if (trimmed.startsWith('<table')) insideTable = true;
-                
+
                 const tableMatches = l.text.match(/<table[^>]*>/gi);
-                if (tableMatches) tableCount += tableMatches.length;
-                
+                if (tableMatches) {
+                    if (isKorean) krTableCount += tableMatches.length;
+                    else enTableCount += tableMatches.length;
+                }
+
                 const subMatches = l.text.match(/<sub>/gi);
                 const supMatches = l.text.match(/<sup>/gi);
-                if (subMatches) subCount += subMatches.length;
-                if (supMatches) supCount += supMatches.length;
-                
-                if (!afterClaimsSection && !insideTable && trimmed && 
+                if (subMatches) { if (isKorean) krSubCount += subMatches.length; else enSubCount += subMatches.length; }
+                if (supMatches) { if (isKorean) krSupCount += supMatches.length; else enSupCount += supMatches.length; }
+
+                if (!afterClaimsSection && !insideTable && trimmed &&
                     !trimmed.startsWith('<table') && !trimmed.endsWith('</table>') &&
                     /[.。]["']?$/.test(trimmed)) {
-                    paragraphCount++;
+                    if (isKorean) krParagraphCount++;
+                    else if (l.type === 'english') enParagraphCount++;
                 }
-                
+
                 if (trimmed.endsWith('</table>')) insideTable = false;
             });
-            
-            document.getElementById('colorParagraphCount3').textContent = paragraphCount;
-            document.getElementById('colorSubCount3').textContent = subCount;
-            document.getElementById('colorSupCount3').textContent = supCount;
-            document.getElementById('colorTableCount3').textContent = tableCount;
+
+            resetStatNavState('tab3_color');
+            document.getElementById('colorKrParagraphCount3').textContent = krParagraphCount;
+            document.getElementById('colorKrSubCount3').textContent = krSubCount;
+            document.getElementById('colorKrSupCount3').textContent = krSupCount;
+            document.getElementById('colorKrTableCount3').textContent = krTableCount;
+            document.getElementById('colorEnParagraphCount3').textContent = enParagraphCount;
+            document.getElementById('colorEnSubCount3').textContent = enSubCount;
+            document.getElementById('colorEnSupCount3').textContent = enSupCount;
+            document.getElementById('colorEnTableCount3').textContent = enTableCount;
         }
-        
+
         // 영문본 양식표준화 (국문과 동일 조건)
         function standardizeFormatEng3() {
             const msg = document.getElementById('engParagraphNumMessage3');
@@ -5027,10 +5077,14 @@ def fibonacci(n):
             document.getElementById('colorSubtitleCount3').textContent = '0';
             document.getElementById('colorKoreanCount3').textContent = '0';
             document.getElementById('colorEnglishCount3').textContent = '0';
-            document.getElementById('colorParagraphCount3').textContent = '0';
-            document.getElementById('colorSubCount3').textContent = '0';
-            document.getElementById('colorSupCount3').textContent = '0';
-            document.getElementById('colorTableCount3').textContent = '0';
+            document.getElementById('colorKrParagraphCount3').textContent = '0';
+            document.getElementById('colorKrSubCount3').textContent = '0';
+            document.getElementById('colorKrSupCount3').textContent = '0';
+            document.getElementById('colorKrTableCount3').textContent = '0';
+            document.getElementById('colorEnParagraphCount3').textContent = '0';
+            document.getElementById('colorEnSubCount3').textContent = '0';
+            document.getElementById('colorEnSupCount3').textContent = '0';
+            document.getElementById('colorEnTableCount3').textContent = '0';
             document.getElementById('colorPreview3').innerHTML = '색변환 미리보기가 여기에 표시됩니다.';
             document.getElementById('colorMessage3').classList.add('hidden');
             // 렌더링 패널 초기화
@@ -7275,6 +7329,162 @@ ${bodyContent}
             setTimeout(() => {
                 window.print();
             }, 300);
+        }
+
+        // ===== 첨자/표 통계 카드 내비게이션 =====
+        const statElemNavState = {};
+
+        const statNavConfig = {
+            'tab1': {
+                textBox: { id: 'output1', type: 'div' },
+                preview: { id: 'preview1', type: 'div' },
+                indicators: { sub: 'subNavIndicator1', sup: 'supNavIndicator1', table: 'tableNavIndicator1' }
+            },
+            'tab2': {
+                textBox: { id: 'htmlInput2', type: 'textarea' },
+                preview: { id: 'preview2', type: 'div' },
+                indicators: { sub: 'subNavIndicator2', sup: 'supNavIndicator2', table: 'tableNavIndicator2' }
+            },
+            'tab3_eng': {
+                textBox: { id: 'englishResult3', type: 'div' },
+                preview: { id: 'englishRender3', type: 'div' },
+                indicators: { sub: 'engSubNavIndicator3', sup: 'engSupNavIndicator3', table: 'engTableNavIndicator3' }
+            },
+            'tab3_kor': {
+                textBox: { id: 'koreanResult3', type: 'div' },
+                preview: { id: 'koreanRender3', type: 'div' },
+                indicators: { sub: 'korSubNavIndicator3', sup: 'korSupNavIndicator3', table: 'korTableNavIndicator3' }
+            },
+            'tab3_color_kr': {
+                textBox: null,
+                preview: { id: 'colorPreview3', type: 'div', filterType: 'korean' },
+                indicators: { sub: 'colorKrSubNavIndicator3', sup: 'colorKrSupNavIndicator3', table: 'colorKrTableNavIndicator3' }
+            },
+            'tab3_color_en': {
+                textBox: null,
+                preview: { id: 'colorPreview3', type: 'div', filterType: 'english' },
+                indicators: { sub: 'colorEnSubNavIndicator3', sup: 'colorEnSupNavIndicator3', table: 'colorEnTableNavIndicator3' }
+            }
+        };
+
+        function navigateStatElem(section, elemType) {
+            const config = statNavConfig[section];
+            if (!config) return;
+
+            const stateKey = `${section}_${elemType}`;
+            if (statElemNavState[stateKey] === undefined) statElemNavState[stateKey] = 0;
+
+            // 기존 하이라이트 제거
+            document.querySelectorAll('.elem-nav-active').forEach(el => el.classList.remove('elem-nav-active'));
+
+            // ---- 원본 텍스트 창 (div) 요소 수집 ----
+            let textBoxElems = [];
+            if (config.textBox && config.textBox.type === 'div') {
+                const textBox = document.getElementById(config.textBox.id);
+                if (textBox) {
+                    const tagClass = elemType === 'sub' ? 'span.sub-tag'
+                                   : elemType === 'sup' ? 'span.sup-tag'
+                                   : 'span.table-tag';
+                    // 여는 태그 span만 선택 (닫는 태그 /sub /sup /table 제외)
+                    textBoxElems = [...textBox.querySelectorAll(tagClass)].filter(el =>
+                        !el.textContent.includes('/'));
+                }
+            }
+
+            // ---- 렌더링 미리보기 창 요소 수집 ----
+            let previewElems = [];
+            if (config.preview) {
+                const preview = document.getElementById(config.preview.id);
+                if (preview) {
+                    const selector = elemType === 'sub' ? 'sub'
+                                   : elemType === 'sup' ? 'sup'
+                                   : 'table';
+                    let elems = [...preview.querySelectorAll(selector)];
+                    // filterType이 지정된 경우 해당 줄 타입만 선택
+                    if (config.preview.filterType) {
+                        elems = elems.filter(el => {
+                            const lineDiv = el.closest('[data-line-type]');
+                            return lineDiv && lineDiv.dataset.lineType === config.preview.filterType;
+                        });
+                    }
+                    previewElems = elems;
+                }
+            }
+
+            const totalCount = Math.max(textBoxElems.length, previewElems.length);
+            if (totalCount === 0) return;
+
+            const currentIdx = statElemNavState[stateKey] % totalCount;
+            statElemNavState[stateKey] = currentIdx + 1;
+
+            // 원본 텍스트 창 (div) 스크롤 및 하이라이트
+            if (textBoxElems[currentIdx]) {
+                const el = textBoxElems[currentIdx];
+                el.classList.add('elem-nav-active');
+                scrollContainerToElem(config.textBox.id, el);
+            }
+
+            // 원본 텍스트 창 (textarea) 선택 및 스크롤
+            if (config.textBox && config.textBox.type === 'textarea') {
+                const textarea = document.getElementById(config.textBox.id);
+                if (textarea) {
+                    const text = textarea.value;
+                    const pattern = elemType === 'sub' ? /<sub>/gi
+                                  : elemType === 'sup' ? /<sup>/gi
+                                  : /<table/gi;
+                    const matches = [...text.matchAll(pattern)];
+                    if (matches[currentIdx]) {
+                        const matchPos = matches[currentIdx].index;
+                        const matchEnd = matchPos + matches[currentIdx][0].length;
+                        textarea.focus();
+                        textarea.setSelectionRange(matchPos, matchEnd);
+                        const linesBefore = text.substring(0, matchPos).split('\n').length - 1;
+                        const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 21;
+                        textarea.scrollTop = Math.max(0, linesBefore * lineHeight - textarea.clientHeight / 2);
+                    }
+                }
+            }
+
+            // 렌더링 미리보기 스크롤 및 하이라이트
+            if (previewElems[currentIdx]) {
+                const el = previewElems[currentIdx];
+                el.classList.add('elem-nav-active');
+                scrollContainerToElem(config.preview.id, el);
+            }
+
+            // 인디케이터 업데이트
+            const indicatorId = config.indicators[elemType];
+            const indicator = document.getElementById(indicatorId);
+            if (indicator) indicator.textContent = `${currentIdx + 1} / ${totalCount}`;
+        }
+
+        function scrollContainerToElem(containerId, el) {
+            const container = document.getElementById(containerId);
+            if (!container || !el) return;
+            const containerRect = container.getBoundingClientRect();
+            const elRect = el.getBoundingClientRect();
+            const scrollTo = container.scrollTop + (elRect.top - containerRect.top) - container.clientHeight / 2 + el.clientHeight / 2;
+            container.scrollTop = Math.max(0, scrollTo);
+        }
+
+        function resetStatNavState(section) {
+            // section으로 시작하는 모든 상태 키 삭제
+            Object.keys(statElemNavState)
+                .filter(k => k.startsWith(section))
+                .forEach(k => { delete statElemNavState[k]; });
+            // section으로 시작하는 모든 config 항목의 인디케이터 초기화
+            Object.keys(statNavConfig)
+                .filter(k => k.startsWith(section))
+                .forEach(configKey => {
+                    const cfg = statNavConfig[configKey];
+                    if (cfg && cfg.indicators) {
+                        Object.values(cfg.indicators).forEach(id => {
+                            const el = document.getElementById(id);
+                            if (el) el.textContent = '';
+                        });
+                    }
+                });
+            document.querySelectorAll('.elem-nav-active').forEach(el => el.classList.remove('elem-nav-active'));
         }
     </script>
     
