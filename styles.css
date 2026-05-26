@@ -291,8 +291,8 @@ input[type="file"] { display: none; }
 .stats-row { display: flex; gap: 15px; flex-wrap: wrap; margin: 20px 0; }
 .stat-card {
     flex: 1;
-    min-width: 140px;
-    padding: 25px 20px;
+    min-width: 120px;
+    padding: 12px 15px;
     border-radius: 10px;
     text-align: center;
     border: 1px solid #e0e0e0;
@@ -308,8 +308,8 @@ input[type="file"] { display: none; }
 .stat-card.compare-modified { background: #fff3cd; border-color: #ffe69c; }
 .stat-card.compare-added { background: #d4edda; border-color: #b8dfc8; }
 .stat-card.compare-deleted { background: #f8d7da; border-color: #f1aeb5; }
-.stat-number { font-size: 2.2em; font-weight: 700; color: #333; }
-.stat-label { font-size: 0.85em; color: #666; margin-top: 5px; }
+.stat-number { font-size: 1.7em; font-weight: 700; color: #333; }
+.stat-label { font-size: 0.85em; color: #666; margin-top: 3px; }
 .stat-card.clickable { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s; }
 .stat-card.clickable:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
 .stat-card.clickable:not(.active) { opacity: 0.6; }
