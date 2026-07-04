@@ -6444,42 +6444,46 @@ ${bodyContent}
                 }
             }
             
-            // 인접한 deleted-added 쌍만 modified로 병합 (엄격한 조건)
+            // 연속된 삭제/추가 블록을 순서대로 짝지어 modified로 병합 (MS Word 스타일)
             const merged = [];
             let k = 0;
-            
+
             while (k < result.length) {
-                const current = result[k];
-                const next = k + 1 < result.length ? result[k + 1] : null;
-                
-                // deleted 바로 다음에 added가 오는 경우만 modified로 병합
-                if (current.type === 'deleted' && next && next.type === 'added') {
-                    merged.push({
-                        type: 'modified',
-                        lineA: current.lineA,
-                        lineB: next.lineB,
-                        textA: current.textA,
-                        textB: next.textB
-                    });
-                    k += 2;
+                if (result[k].type === 'same') {
+                    merged.push(result[k]);
+                    k++;
+                    continue;
                 }
-                // added 바로 다음에 deleted가 오는 경우도 modified로 병합
-                else if (current.type === 'added' && next && next.type === 'deleted') {
-                    merged.push({
-                        type: 'modified',
-                        lineA: next.lineA,
-                        lineB: current.lineB,
-                        textA: next.textA,
-                        textB: current.textB
-                    });
-                    k += 2;
-                }
-                else {
-                    merged.push(current);
+
+                // same이 나올 때까지의 연속된 변경 블록 수집
+                const dels = [], adds = [];
+                while (k < result.length && result[k].type !== 'same') {
+                    if (result[k].type === 'deleted') dels.push(result[k]);
+                    else adds.push(result[k]);
                     k++;
                 }
+
+                // 블록 내에서 삭제-추가를 순서대로 짝지어 유사도가 있으면 병합
+                const maxLen = Math.max(dels.length, adds.length);
+                for (let p = 0; p < maxLen; p++) {
+                    const del = p < dels.length ? dels[p] : null;
+                    const add = p < adds.length ? adds[p] : null;
+
+                    if (del && add && calculateSimilarity(del.textA, add.textB) >= 0.05) {
+                        merged.push({
+                            type: 'modified',
+                            lineA: del.lineA,
+                            lineB: add.lineB,
+                            textA: del.textA,
+                            textB: add.textB
+                        });
+                    } else {
+                        if (del) merged.push(del);
+                        if (add) merged.push(add);
+                    }
+                }
             }
-            
+
             return merged;
         }
         
