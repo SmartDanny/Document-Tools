@@ -143,38 +143,82 @@ function calculateSimilarity(textA, textB) {
 }
 
 /**
- * 단어 단위 diff 계산 (텍스트 비교용 - textA/textB 속성 반환)
+ * 단어 단위 diff 계산 (텍스트 비교용 - textA/textB/spaceA/spaceB 속성 반환)
+ * 공통 접두사/접미사를 LCS 계산 전에 제거하여 긴 단락도 처리 가능
  * @param {string} textA - 원본 텍스트
  * @param {string} textB - 비교 텍스트
  * @returns {Array|null} diff 배열 또는 null
  */
 function getWordDiff(textA, textB) {
     try {
-        const wordsA = textA.split(/\s+/).filter(w => w);
-        const wordsB = textB.split(/\s+/).filter(w => w);
-        
-        // 단어 수가 너무 많으면 null 반환
-        if (wordsA.length > 100 || wordsB.length > 100) {
+        // 공백을 보존하는 토크나이즈 (공백은 앞 단어에 붙임)
+        const tokenize = (text) => {
+            const tokens = [];
+            const regex = /(\S+)(\s*)/g;
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                tokens.push({ word: match[1], space: match[2] || '' });
+            }
+            return tokens;
+        };
+
+        const tokensA = tokenize(textA);
+        const tokensB = tokenize(textB);
+
+        const sameItem = (tA, tB) => ({
+            type: 'same',
+            textA: tA.word, spaceA: tA.space,
+            textB: tB.word, spaceB: tB.space
+        });
+
+        // 공통 접두사 길이 계산
+        const minLen = Math.min(tokensA.length, tokensB.length);
+        let prefixLen = 0;
+        while (prefixLen < minLen && tokensA[prefixLen].word === tokensB[prefixLen].word) {
+            prefixLen++;
+        }
+
+        // 공통 접미사 길이 계산 (접두사와 겹치지 않는 범위)
+        let suffixLen = 0;
+        while (suffixLen < minLen - prefixLen &&
+               tokensA[tokensA.length - 1 - suffixLen].word === tokensB[tokensB.length - 1 - suffixLen].word) {
+            suffixLen++;
+        }
+
+        const midA = tokensA.slice(prefixLen, tokensA.length - suffixLen);
+        const midB = tokensB.slice(prefixLen, tokensB.length - suffixLen);
+
+        // DP 테이블 크기 안전장치 (변경 구간 기준 약 1000x1000 단어까지 허용)
+        if (midA.length * midB.length > 1000000) {
             return null;
         }
-        
-        const dp = computeLCS(wordsA, wordsB);
-        const result = [];
-        let i = wordsA.length, j = wordsB.length;
-        
+
+        const dp = computeLCS(midA.map(t => t.word), midB.map(t => t.word));
+        const middle = [];
+        let i = midA.length, j = midB.length;
+
         while (i > 0 || j > 0) {
-            if (i > 0 && j > 0 && wordsA[i-1] === wordsB[j-1]) {
-                result.unshift({ type: 'same', textA: wordsA[i-1], textB: wordsB[j-1] });
+            if (i > 0 && j > 0 && midA[i-1].word === midB[j-1].word) {
+                middle.unshift(sameItem(midA[i-1], midB[j-1]));
                 i--; j--;
             } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-                result.unshift({ type: 'added', textA: '', textB: wordsB[j-1] });
+                middle.unshift({ type: 'added', textA: '', spaceA: '', textB: midB[j-1].word, spaceB: midB[j-1].space });
                 j--;
             } else if (i > 0) {
-                result.unshift({ type: 'deleted', textA: wordsA[i-1], textB: '' });
+                middle.unshift({ type: 'deleted', textA: midA[i-1].word, spaceA: midA[i-1].space, textB: '', spaceB: '' });
                 i--;
             }
         }
-        
+
+        const result = [];
+        for (let k = 0; k < prefixLen; k++) {
+            result.push(sameItem(tokensA[k], tokensB[k]));
+        }
+        result.push(...middle);
+        for (let k = suffixLen; k > 0; k--) {
+            result.push(sameItem(tokensA[tokensA.length - k], tokensB[tokensB.length - k]));
+        }
+
         return result;
     } catch (e) {
         console.error('getWordDiff error:', e);
@@ -283,25 +327,25 @@ function highlightModifiedLine(textA, textB) {
             };
         }
         
-        // A와 B의 결과를 각각 배열로 구성
+        // A와 B의 결과를 각각 배열로 구성 (원본 공백 보존)
         let partsA = [];
         let partsB = [];
-        
+
         wordDiff.forEach(d => {
             if (d.type === 'same') {
-                partsA.push(escapeHtml(d.textA));
-                partsB.push(escapeHtml(d.textB));
+                partsA.push(escapeHtml(d.textA) + (d.spaceA || ' '));
+                partsB.push(escapeHtml(d.textB) + (d.spaceB || ' '));
             } else if (d.type === 'deleted') {
-                partsA.push(`<span style="${deletedStyle}">${escapeHtml(d.textA)}</span>`);
+                partsA.push(`<span style="${deletedStyle}">${escapeHtml(d.textA)}</span>` + (d.spaceA || ' '));
             } else if (d.type === 'added') {
-                partsB.push(`<span style="${addedStyle}">${escapeHtml(d.textB)}</span>`);
+                partsB.push(`<span style="${addedStyle}">${escapeHtml(d.textB)}</span>` + (d.spaceB || ' '));
             }
         });
-        
-        // 배열을 공백으로 연결하여 최종 HTML 생성
-        const htmlAResult = partsA.join(' ');
-        const htmlBResult = partsB.join(' ');
-        
+
+        // 배열을 연결하여 최종 HTML 생성 (뒤쪽 공백 정리)
+        const htmlAResult = partsA.join('').replace(/\s+$/, '');
+        const htmlBResult = partsB.join('').replace(/\s+$/, '');
+
         return { htmlA: htmlAResult, htmlB: htmlBResult };
     } catch (e) {
         console.error('highlightModifiedLine error:', e);
