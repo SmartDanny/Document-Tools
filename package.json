@@ -4,7 +4,9 @@
   "description": "특허 명세서 작성 및 편집을 위한 웹 기반 문서 처리 도구 모음 (DOCX 전처리/후처리, 한영혼합본, 문서비교, Markdown to PDF)",
   "private": true,
   "scripts": {
-    "generate-template": "node generate_template.js"
+    "generate-template": "node generate_template.js",
+    "sync-version": "node scripts/sync-version.js",
+    "version": "node scripts/sync-version.js && git add -A"
   },
   "repository": {
     "type": "git",

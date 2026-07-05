@@ -97,6 +97,23 @@ document-tools/
 | .txt | .pdf |
 | .md | |
 
+## 🔖 버전 관리
+
+버전의 원본은 `package.json`이며, 아래 명령 한 번으로 프로젝트 전체의 버전 표기
+(index.html 주석·meta 태그, utils.js/styles.css 헤더, README 배지·문의란)와
+Last Updated 날짜가 동기화되고 git 커밋 + 태그까지 생성됩니다:
+
+```bash
+npm version patch   # 1.3.0 → 1.3.1 (버그 수정 등 작은 변경)
+npm version minor   # 1.3.0 → 1.4.0 (기능 추가)
+npm version major   # 1.3.0 → 2.0.0 (호환성이 깨지는 변경)
+```
+
+- 버전 올리기 없이 표기만 다시 맞추려면: `npm run sync-version`
+- 대상 파일의 버전 표기 형식이 바뀌어 패턴을 찾지 못하면 커밋/태그 생성 전에
+  중단됩니다. 이때 `git checkout package.json`으로 되돌린 뒤
+  `scripts/sync-version.js`의 치환 규칙을 수정하고 다시 실행하세요.
+
 ## 🔒 개인정보 보호
 
 - 모든 파일 처리는 **브라우저 내에서 로컬로** 수행됩니다.
