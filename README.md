@@ -97,6 +97,20 @@ document-tools/
 | .txt | .pdf |
 | .md | |
 
+## 🧪 테스트
+
+```bash
+npm test               # 유닛 테스트 (utils.js 순수 함수, 외부 의존성 없음)
+npm run test:browser   # 브라우저 E2E (Playwright + Chromium)
+```
+
+- **유닛 테스트** (`test/unit.test.js`): 이스케이프, diff 알고리즘, 특허 문서
+  판별, DOCX 스타일 생성 등 utils.js의 순수 함수를 Node 내장 `node:test`로 검증.
+- **브라우저 E2E** (`test/browser-test.js`): 실제 페이지를 로드해 DOCX
+  파싱/생성(단락 뒤 0pt 포함), 파일 드롭, 탭 전환 등 주요 흐름을 검증.
+  최초 1회 `npm install` 후 `npx playwright install chromium`이 필요할 수
+  있습니다 (JSZip CDN은 로컬 사본으로 대체되므로 오프라인에서도 동작).
+
 ## 🔖 버전 관리
 
 버전의 원본은 `package.json`이며, 아래 명령 한 번으로 프로젝트 전체의 버전 표기

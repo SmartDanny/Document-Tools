@@ -1,0 +1,320 @@
+/**
+ * 브라우저 E2E 테스트 (Playwright + Chromium)
+ * 실행: npm run test:browser
+ *
+ * 실제 페이지를 로드해 DOCX 파싱/생성, diff, 판별 함수, 드롭존,
+ * 탭 전환 등 주요 흐름을 검증한다. 오프라인 환경을 위해 JSZip CDN
+ * 요청은 node_modules의 로컬 사본으로 대체된다.
+ *
+ * 브라우저 탐색 순서:
+ *   1) Playwright 기본 탐색 (npx playwright install chromium)
+ *   2) CHROMIUM_PATH 환경변수
+ *   3) /opt/pw-browsers/chromium (프리인스톨 환경)
+ */
+const { chromium } = require('playwright');
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.join(__dirname, '..');
+
+// 간단한 정적 서버
+const server = http.createServer((req, res) => {
+    const file = path.join(ROOT, req.url === '/' ? 'index.html' : decodeURIComponent(req.url.split('?')[0]));
+    try {
+        const data = fs.readFileSync(file);
+        const ext = path.extname(file);
+        const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+        res.writeHead(200, { 'Content-Type': types[ext] || 'application/octet-stream' });
+        res.end(data);
+    } catch (e) {
+        res.writeHead(404); res.end('not found');
+    }
+});
+
+(async () => {
+    await new Promise(r => server.listen(0, r));
+    const port = server.address().port;
+    let browser;
+    try {
+        browser = await chromium.launch();
+    } catch (e) {
+        const fallback = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium';
+        browser = await chromium.launch({ executablePath: fallback });
+    }
+    const page = await browser.newPage();
+    const consoleErrors = [];
+    page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text()); });
+    page.on('pageerror', e => consoleErrors.push('PAGEERROR: ' + e.message));
+
+    // CDN JSZip 요청을 로컬 파일로 대체 (프록시 차단 우회)
+    await page.route('**/jszip/3.10.1/jszip.min.js', route => route.fulfill({
+        contentType: 'text/javascript',
+        body: fs.readFileSync(require.resolve('jszip/dist/jszip.min.js'), 'utf-8')
+    }));
+
+    await page.goto(`http://localhost:${port}/`, { waitUntil: 'load', timeout: 60000 });
+    await page.waitForTimeout(1500);
+
+    const results = await page.evaluate(async () => {
+        const out = {};
+        const assert = (name, cond, extra) => { out[name] = cond ? 'PASS' : 'FAIL' + (extra ? ' ' + JSON.stringify(extra) : ''); };
+
+        // ===== 기존 getWordDiffForDocx 구현 (리팩토링 전 원본) =====
+        function oldGetWordDiffForDocx(textA, textB) {
+            const tokenize = (text) => {
+                const tokens = []; const regex = /(\S+)(\s*)/g; let match;
+                while ((match = regex.exec(text)) !== null) tokens.push({ word: match[1], space: match[2] || '' });
+                return tokens;
+            };
+            const tokensA = tokenize(textA), tokensB = tokenize(textB);
+            const m = tokensA.length, n = tokensB.length;
+            const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
+            for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) {
+                if (tokensA[i-1].word === tokensB[j-1].word) dp[i][j] = dp[i-1][j-1] + 1;
+                else dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+            }
+            const diff = []; let i = m, j = n;
+            while (i > 0 || j > 0) {
+                if (i > 0 && j > 0 && tokensA[i-1].word === tokensB[j-1].word) {
+                    diff.unshift({ type: 'same', word: tokensB[j-1].word, space: tokensB[j-1].space }); i--; j--;
+                } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
+                    diff.unshift({ type: 'added', word: tokensB[j-1].word, space: tokensB[j-1].space }); j--;
+                } else {
+                    diff.unshift({ type: 'deleted', word: tokensA[i-1].word, space: '' }); i--;
+                }
+            }
+            return diff;
+        }
+
+        // 1) getWordDiffForDocx 동등성 (다양한 케이스)
+        const cases = [
+            ['the quick brown fox jumps over the lazy dog.', 'the fast brown fox leaps over the dog.'],
+            ['동일한 문장입니다.', '동일한 문장입니다.'],
+            ['', 'new text only'],
+            ['old text only', ''],
+            ['a b c d e', 'x y z'],
+            ['The device includes a processor, a memory, and a display unit.',
+             'The apparatus includes a processor, a storage, and a display unit configured to display images.'],
+            ['word', 'word extra   spaced\ttokens here'],
+        ];
+        let eq = true, firstDiff = null;
+        for (const [a, b] of cases) {
+            const oldR = JSON.stringify(oldGetWordDiffForDocx(a, b));
+            const newR = JSON.stringify(getWordDiffForDocx(a, b));
+            if (oldR !== newR) { eq = false; firstDiff = { a, b, oldR, newR }; break; }
+        }
+        assert('getWordDiffForDocx 동등성', eq, firstDiff);
+
+        // 2) 대용량 폴백 (기존엔 메모리 폭발 위험, 이제 안전장치)
+        const bigA = Array.from({length: 3000}, (_, i) => 'wordA' + i).join(' ');
+        const bigB = Array.from({length: 3000}, (_, i) => 'wordB' + i).join(' ');
+        const bigDiff = getWordDiffForDocx(bigA, bigB);
+        assert('getWordDiffForDocx 대용량 폴백', Array.isArray(bigDiff) && bigDiff.length === 6000 &&
+            bigDiff[0].type === 'deleted' && bigDiff[5999].type === 'added');
+
+        // 3) 판별 함수
+        assert('isClaimsStartLine', isClaimsStartLine('WHAT IS CLAIMED IS:') && isClaimsStartLine('what is claimed is') === true &&
+            isClaimsStartLine('【청구범위】') && !isClaimsStartLine('CLAIMS OVERVIEW'));
+        assert('isCrossRefLine', isCrossRefLine('CROSS-REFERENCE TO RELATED APPLICATIONS') &&
+            isCrossRefLine('cross reference to related application') && !isCrossRefLine('CROSS-REFERENCE NOTES'));
+        assert('isPatentSectionSubtitle', isPatentSectionSubtitle('BACKGROUND') && isPatentSectionSubtitle('【표 1】') &&
+            isPatentSectionSubtitle('1. Field') && !isPatentSectionSubtitle('This is a normal sentence.'));
+        assert('isGenericSubtitle 기본', isGenericSubtitle('【발명의 명칭】') && isGenericSubtitle('DETAILED DESCRIPTION') &&
+            !isGenericSubtitle('Description of Symbols') && !isGenericSubtitle('1. Field'));
+        assert('isGenericSubtitle 옵션', isGenericSubtitle('Description of Symbols', { checkSymbols: true }) &&
+            isGenericSubtitle('1. Field', { checkNumberedHeading: true }) &&
+            !isGenericSubtitle('1. This is a long sentence ending with a period.', { checkNumberedHeading: true }));
+
+        // 4) countParagraphsInText
+        const sampleText = [
+            'TITLE OF THE INVENTION',
+            'CROSS-REFERENCE TO RELATED APPLICATIONS',
+            'This application claims priority.',
+            'BACKGROUND',
+            'This is the first paragraph.',
+            'This is the second paragraph.',
+            'WHAT IS CLAIMED IS:',
+            'A device comprising a sensor.'
+        ].join('\n');
+        assert('countParagraphsInText', countParagraphsInText(sampleText) === 3, countParagraphsInText(sampleText));
+
+        // 5) addParagraphNumbersToText
+        const numbered0 = addParagraphNumbersToText([
+            'CROSS-REFERENCE TO RELATED APPLICATIONS',
+            'This application claims priority.',
+            'BACKGROUND',
+            'First body paragraph.',
+            'WHAT IS CLAIMED IS:',
+            'A device comprising a sensor.'
+        ].join('\n'));
+        const numbered = numbered0.text;
+        assert('addParagraphNumbersToText', numbered.includes('[0001] This application claims priority.') &&
+            numbered.includes('[0002] First body paragraph.') &&
+            numbered0.count === 2 &&
+            !numbered.includes('[0003]'), numbered0);
+
+        // 6) DOCX 파싱 (합성 DOCX 생성 → 추출)
+        if (typeof JSZip !== 'undefined') {
+            const zip = new JSZip();
+            const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:r><w:t>Hello </w:t></w:r><w:r><w:rPr><w:vertAlign w:val="subscript"/></w:rPr><w:t>2</w:t></w:r><w:r><w:t> world</w:t></w:r></w:p>
+<w:p></w:p>
+<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>Numbered para.</w:t></w:r></w:p>
+<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr><w:p><w:r><w:t>cell1</w:t></w:r></w:p></w:tc></w:tr>
+<w:tr><w:tc><w:p><w:r><w:t>c</w:t></w:r><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:t>2</w:t></w:r></w:p></w:tc>
+<w:tc><w:tcPr><w:vMerge/></w:tcPr><w:p></w:p></w:tc></w:tr></w:tbl>
+</w:body></w:document>`;
+            const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimalZero"/><w:lvlText w:val="[00%1]"/></w:lvl></w:abstractNum>
+<w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>
+</w:numbering>`;
+            zip.file('word/document.xml', docXml);
+            zip.file('word/numbering.xml', numberingXml);
+            const blob = await zip.generateAsync({ type: 'blob' });
+            const file = new File([blob], 'test.docx');
+
+            // loadDocxDocument + extractDocxBodyText
+            const { doc } = await loadDocxDocument(file);
+            const bodyText = extractDocxBodyText(doc);
+            assert('extractDocxBodyText', bodyText.split('\n').length === 4 &&
+                bodyText.includes('Hello <sub>2</sub> world') &&
+                bodyText.includes('<td colspan="2">cell1</td>') &&
+                bodyText.includes('c<sup>2</sup>') &&
+                !bodyText.includes('vMerge'), bodyText);
+
+            const bodyTextSkip = extractDocxBodyText(doc, { skipEmptyParagraphs: true });
+            assert('extractDocxBodyText skipEmpty', bodyTextSkip.split('\n').length === 3, bodyTextSkip);
+
+            // countScripts 집계
+            const cs = { sub: 0, sup: 0 };
+            extractDocxBodyText(doc, { countScripts: cs });
+            assert('countScripts 집계', cs.sub === 1 && cs.sup === 1, cs);
+
+            // processDocx1 (탭1 전체 경로: 번호매김 [0001] 부여)
+            const r1 = await processDocx1(file);
+            assert('processDocx1', r1.text.includes('[0001] Numbered para.') &&
+                r1.subscriptCount === 1 && r1.superscriptCount === 1, r1);
+
+            // extractTextFromDocx3 / Simple
+            const t3 = await extractTextFromDocx3(file);
+            const t3s = await extractTextFromDocx3Simple(file);
+            assert('extractTextFromDocx3', t3.split('\n').length === 4 && t3s.split('\n').length === 3);
+
+            // extractTextFromDocx4 (numbering lvlText 패턴 적용: [0001]... decimalZero → 01)
+            const t4 = await extractTextFromDocx4(file);
+            assert('extractTextFromDocx4', t4.includes('[0001] Numbered para.'), t4);
+
+            // extractParagraphsFromDocx
+            const p4 = await extractParagraphsFromDocx(file);
+            assert('extractParagraphsFromDocx', p4.paragraphs.length === 6 && p4.paragraphs[0] === 'Hello 2 world', p4.paragraphs);
+        } else {
+            out['DOCX 테스트'] = 'SKIP (JSZip CDN 로드 실패)';
+        }
+
+        // 7) DOCX 출력물의 단락 뒤 간격 0pt 검증 (다운로드 가로채기)
+        if (typeof JSZip !== 'undefined') {
+            const captured = [];
+            window.saveAs = (blob, name) => captured.push({ blob, name });
+            URL.createObjectURL = (blob) => { captured.push({ blob, name: '(objectURL)' }); return 'blob:fake'; };
+            URL.revokeObjectURL = () => {};
+
+            await generateDocxCommon('첫 단락입니다.\n\n둘째<sub>2</sub> 단락.', 'test_common', document.createElement('div'));
+            await generateDocxBasic('국문 단락입니다.\n둘째 단락.', 'basic.docx');
+            await generateDocxUSPatent([
+                'CROSS-REFERENCE TO RELATED APPLICATIONS',
+                'This application claims priority.',
+                'BACKGROUND',
+                'Body paragraph one.',
+                'WHAT IS CLAIMED IS:',
+                '1.',
+                'A device comprising a sensor.'
+            ].join('\n'), 'us.docx');
+
+            // 문서비교 Track-Changes DOCX
+            docxDataA = { paragraphs: ['same paragraph.', 'old text here.'], zip: null, xml: '' };
+            docxDataB = { paragraphs: ['same paragraph.', 'new text here.'], zip: null, xml: '' };
+            await compareDocxFiles();
+
+            assert('DOCX 생성 4종 캡처', captured.length === 4, captured.map(c => c.name));
+
+            for (let ci = 0; ci < captured.length; ci++) {
+                const z = await JSZip.loadAsync(captured[ci].blob);
+                const stylesFile = z.file('word/styles.xml');
+                const styles = stylesFile ? await stylesFile.async('string') : null;
+                assert(`DOCX #${ci + 1} 단락뒤 0pt`, !!styles && styles.includes('w:after="0"') && !styles.includes('w:after="160"'),
+                    { name: captured[ci].name, hasStyles: !!styles });
+                // 관계/콘텐츠타입에 styles 등록 확인
+                const ct = await z.file('[Content_Types].xml').async('string');
+                const rels = await z.file('word/_rels/document.xml.rels').async('string');
+                assert(`DOCX #${ci + 1} styles 관계등록`, ct.includes('/word/styles.xml') && rels.includes('styles.xml'));
+            }
+        }
+
+        // 8) 헬퍼 통일 검증
+        if (typeof JSZip !== 'undefined') {
+            // setupDropZone: 드롭 이벤트로 파일 로드 + drag-over 클래스 토글
+            const zip2 = new JSZip();
+            zip2.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:r><w:t>드롭 테스트 문장.</w:t></w:r></w:p></w:body></w:document>`);
+            const dropBlob = await zip2.generateAsync({ type: 'blob' });
+            const dt = new DataTransfer();
+            dt.items.add(new File([dropBlob], 'drop.docx'));
+            const el3 = document.getElementById('inputText3');
+            el3.value = '';
+            el3.dispatchEvent(new DragEvent('dragover', { dataTransfer: dt, bubbles: true, cancelable: true }));
+            const hadDragClass = el3.classList.contains('drag-over');
+            el3.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+            await new Promise(r => setTimeout(r, 400));
+            assert('setupDropZone 드롭 로드', hadDragClass && el3.value.includes('드롭 테스트 문장.') &&
+                !el3.classList.contains('drag-over'), el3.value);
+
+            // handleDocxUpload: 확장자 거부
+            let alerted = '';
+            const origAlert = window.alert;
+            window.alert = m => { alerted = m; };
+            await handleFile3(new File([''], 'wrong.txt'));
+            window.alert = origAlert;
+            assert('handleDocxUpload 확장자 거부', alerted.includes('.docx'), alerted);
+        }
+
+        // showMessage 경로 (빈 입력 시 오류 메시지)
+        document.getElementById('textInput1').value = '';
+        addParagraphNumbers();
+        const pnMsg = document.getElementById('paragraphNumMessage');
+        assert('showMessage 오류 표시', pnMsg.textContent.includes('먼저 텍스트를') &&
+            pnMsg.className === 'message error' && !pnMsg.classList.contains('hidden'));
+
+        // 9) formatNumber 확장
+        assert('formatNumber', formatNumber(3, 'decimal') === '3' && formatNumber(3, 'decimalZero') === '03' &&
+            formatNumber(4, 'upperRoman') === 'IV' && formatNumber(2, 'lowerLetter') === 'b' &&
+            formatNumber(5, 'koreanCounting') === '5');
+
+        return out;
+    });
+
+    // 탭 전환 스모크 테스트 (분할된 파일들이 함께 동작하는지)
+    for (const tab of ['tab2', 'tab3', 'tab4', 'tab5', 'tab1']) {
+        await page.click(`.tab-btn[onclick*="'${tab}'"]`);
+        const active = await page.evaluate(t => document.getElementById(t).classList.contains('active'), tab);
+        results[`탭 전환 ${tab}`] = active ? 'PASS' : 'FAIL';
+    }
+    // 탭2 입력 → 미리보기 갱신 (app-core의 inp2 리스너 + stat-nav의 resetStatNavState 연동)
+    await page.click(`.tab-btn[onclick*="'tab2'"]`);
+    await page.fill('#htmlInput2', '테스트 문장<sub>2</sub>입니다.');
+    await page.waitForTimeout(200);
+    const previewOk = await page.evaluate(() => document.getElementById('preview2').innerHTML.includes('<sub>2</sub>'));
+    results['탭2 미리보기 연동'] = previewOk ? 'PASS' : 'FAIL';
+
+    console.log('=== 테스트 결과 ===');
+    for (const [k, v] of Object.entries(results)) console.log(`${v.startsWith('PASS') ? '✅' : '❌'} ${k}: ${v}`);
+    console.log('\n=== 콘솔 에러 ===');
+    console.log(consoleErrors.length ? consoleErrors.join('\n') : '(없음)');
+
+    await browser.close();
+    server.close();
+    process.exit(Object.values(results).some(v => String(v).startsWith('FAIL')) ? 1 : 0);
+})();
