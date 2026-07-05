@@ -1694,15 +1694,16 @@ def fibonacci(n):
             }
 
             const docXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${bodyContent}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr></w:body></w:document>`;
-            const ctXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/></Types>`;
+            const ctXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`;
             const relXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`;
-            const drXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/></Relationships>`;
+            const drXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
             const settingsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
             const zip = new JSZip();
             zip.file('[Content_Types].xml', ctXml);
             zip.folder('_rels').file('.rels', relXml);
             zip.folder('word').file('document.xml', docXml);
             zip.folder('word').file('settings.xml', settingsXml);
+            zip.folder('word').file('styles.xml', makeDocxStylesXml({ fontSize: 24 })); // 단락 뒤 간격 0pt (utils.js)
             zip.folder('word/_rels').file('document.xml.rels', drXml);
             saveAs(await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}), filename+'.docx');
             msgElement.textContent = '✅ 워드 파일(.docx)이 생성되었습니다!';
@@ -3334,13 +3335,7 @@ def fibonacci(n):
 </Relationships>`);
                 
                 // word/styles.xml (font size 12pt)
-                zip.file('word/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:style w:type="paragraph" w:default="1" w:styleId="Normal">
-<w:name w:val="Normal"/>
-<w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
-</w:style>
-</w:styles>`);
+                zip.file('word/styles.xml', makeDocxStylesXml({ fontSize: 24 })); // 단락 뒤 간격 0pt (utils.js)
                 
                 // word/document.xml 생성
                 let bodyContent = '';
@@ -4031,13 +4026,7 @@ def fibonacci(n):
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`);
 
-            zip.file('word/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:style w:type="paragraph" w:default="1" w:styleId="Normal">
-<w:name w:val="Normal"/>
-<w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
-</w:style>
-</w:styles>`);
+            zip.file('word/styles.xml', makeDocxStylesXml({ fontSize: 24 })); // 단락 뒤 간격 0pt (utils.js)
 
             let bodyContent = '';
             const paragraphs = text.split('\n');
@@ -4353,7 +4342,7 @@ def fibonacci(n):
 <w:lang w:val="en-US" w:eastAsia="ko-KR" w:bidi="ar-SA"/>
 </w:rPr></w:rPrDefault>
 <w:pPrDefault><w:pPr>
-<w:spacing w:after="160" w:line="259" w:lineRule="auto"/>
+<w:spacing w:after="0" w:line="259" w:lineRule="auto"/>
 <w:jc w:val="both"/>
 </w:pPr></w:pPrDefault>
 </w:docDefaults>
@@ -5592,13 +5581,7 @@ def fibonacci(n):
 </Relationships>`);
                 
                 // word/styles.xml (font size 12pt)
-                zip.file('word/styles.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:style w:type="paragraph" w:default="1" w:styleId="Normal">
-<w:name w:val="Normal"/>
-<w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
-</w:style>
-</w:styles>`);
+                zip.file('word/styles.xml', makeDocxStylesXml({ fontSize: 24 })); // 단락 뒤 간격 0pt (utils.js)
                 
                 // word/document.xml 생성 (mergeResultPairs 사용)
                 const stripNums = document.getElementById('stripParaNumsOption').checked;
@@ -6529,6 +6512,7 @@ ${bodyContent}
 <Default Extension="xml" ContentType="application/xml"/>
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 <Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
 </Types>`);
                 
                 // _rels/.rels
@@ -6541,7 +6525,11 @@ ${bodyContent}
                 newZip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
 </Relationships>`);
+
+                // word/styles.xml (단락 뒤 간격 0pt 통일, utils.js)
+                newZip.file('word/styles.xml', makeDocxStylesXml());
                 
                 // word/settings.xml (Track Changes 활성화, 서식 비교 제외)
                 newZip.file('word/settings.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

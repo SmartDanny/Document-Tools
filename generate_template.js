@@ -201,7 +201,7 @@ async function generateTemplate() {
 <w:lang w:val="en-US" w:eastAsia="ko-KR" w:bidi="ar-SA"/>
 </w:rPr></w:rPrDefault>
 <w:pPrDefault><w:pPr>
-<w:spacing w:after="160" w:line="259" w:lineRule="auto"/>
+<w:spacing w:after="0" w:line="259" w:lineRule="auto"/>
 <w:jc w:val="both"/>
 </w:pPr></w:pPrDefault>
 </w:docDefaults>

@@ -597,6 +597,29 @@ function extractDocxBodyText(doc, options = {}) {
 }
 
 // ============================================
+// DOCX 생성 헬퍼
+// ============================================
+
+/**
+ * 기본 word/styles.xml 생성 (단락 뒤 간격 0pt로 통일)
+ * @param {Object} [options]
+ * @param {number} [options.fontSize] - 기본 글꼴 크기 (half-point 단위, 예: 24 = 12pt). 생략 시 크기 미지정
+ * @returns {string} styles.xml 문자열
+ */
+function makeDocxStylesXml(options = {}) {
+    const { fontSize = null } = options;
+    const rPr = fontSize ? `
+<w:rPr><w:sz w:val="${fontSize}"/><w:szCs w:val="${fontSize}"/></w:rPr>` : '';
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+<w:name w:val="Normal"/>
+<w:pPr><w:spacing w:after="0"/></w:pPr>${rPr}
+</w:style>
+</w:styles>`;
+}
+
+// ============================================
 // UI 헬퍼 함수
 // ============================================
 
