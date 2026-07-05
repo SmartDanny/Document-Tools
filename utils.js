@@ -259,31 +259,29 @@ function getWordDiffForDocx(textA, textB) {
  * @returns {Object} { htmlA, htmlB } 하이라이트된 HTML
  */
 function highlightModifiedLine(textA, textB) {
-    // 인라인 스타일 정의
-    const deletedStyle = 'background:#ffcccc;color:#721c24;padding:1px 3px;border-radius:3px;text-decoration:line-through;';
-    const addedStyle = 'background:#ccffcc;color:#155724;padding:1px 3px;border-radius:3px;text-decoration:underline;font-weight:600;';
-    
+    // 하이라이트 클래스는 styles.css의 .diff-word-deleted / .diff-word-added 참조
+
     // 빈 텍스트 처리
     if (!textA && !textB) return { htmlA: '', htmlB: '' };
     if (!textA) return { htmlA: '', htmlB: escapeHtml(textB) };
     if (!textB) return { htmlA: escapeHtml(textA), htmlB: '' };
-    
+
     // 텍스트가 동일하면 그대로 반환
     if (textA === textB) {
         return { htmlA: escapeHtml(textA), htmlB: escapeHtml(textB) };
     }
-    
+
     try {
         const wordDiff = getWordDiff(textA, textB);
-        
+
         // wordDiff가 null이면 전체 텍스트를 하이라이트
         if (!wordDiff || wordDiff.length === 0) {
-            return { 
-                htmlA: `<span style="${deletedStyle}">${escapeHtml(textA)}</span>`, 
-                htmlB: `<span style="${addedStyle}">${escapeHtml(textB)}</span>` 
+            return {
+                htmlA: `<span class="diff-word-deleted">${escapeHtml(textA)}</span>`,
+                htmlB: `<span class="diff-word-added">${escapeHtml(textB)}</span>`
             };
         }
-        
+
         // A와 B의 결과를 각각 배열로 구성 (원본 공백 보존)
         let partsA = [];
         let partsB = [];
@@ -293,9 +291,9 @@ function highlightModifiedLine(textA, textB) {
                 partsA.push(escapeHtml(d.textA) + (d.spaceA || ' '));
                 partsB.push(escapeHtml(d.textB) + (d.spaceB || ' '));
             } else if (d.type === 'deleted') {
-                partsA.push(`<span style="${deletedStyle}">${escapeHtml(d.textA)}</span>` + (d.spaceA || ' '));
+                partsA.push(`<span class="diff-word-deleted">${escapeHtml(d.textA)}</span>` + (d.spaceA || ' '));
             } else if (d.type === 'added') {
-                partsB.push(`<span style="${addedStyle}">${escapeHtml(d.textB)}</span>` + (d.spaceB || ' '));
+                partsB.push(`<span class="diff-word-added">${escapeHtml(d.textB)}</span>` + (d.spaceB || ' '));
             }
         });
 

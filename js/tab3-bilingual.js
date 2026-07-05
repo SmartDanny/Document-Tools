@@ -396,7 +396,7 @@
             html = html.replace(/&lt;br&gt;/gi, '<span class="table-tag">&lt;br&gt;</span>');
             
             // 강조 텍스트 (__ __ 형식)
-            html = html.replace(/__([^_]+)__/g, '<span style="color:#e74c3c;font-weight:600;">$1</span>');
+            html = html.replace(/__([^_]+)__/g, '<span class="warn-mark">$1</span>');
             
             // Markdown 문법 강조 (보라색)
             html = html.replace(/\*\*([^*]+)\*\*/g, '<span class="md-tag">**$1**</span>');
@@ -540,7 +540,7 @@
                     return;
                 }
                 if (l.type === 'pagebreak') {
-                    previewHtml += '<div style="border-top:2px dashed #999;margin:10px 0;text-align:center;color:#999;font-size:11px;">── 페이지 나누기 ──</div>';
+                    previewHtml += '<div class="pagebreak-divider-plain">── 페이지 나누기 ──</div>';
                     return;
                 }
                 // 첨자 태그는 렌더링되도록 유지
@@ -914,7 +914,7 @@
                     return;
                 }
                 if (l.type === 'pagebreak') {
-                    previewHtml += '<div style="border-top:2px dashed #999;margin:10px 0;text-align:center;color:#999;font-size:11px;">── 페이지 나누기 ──</div>';
+                    previewHtml += '<div class="pagebreak-divider-plain">── 페이지 나누기 ──</div>';
                     return;
                 }
                 // 첨자 태그는 렌더링되도록 유지
@@ -1236,18 +1236,18 @@
             const text = window.englishRawText3 || '';
             const el = document.getElementById('englishResult3');
             el.innerHTML = text.replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                .replace(/&lt;pagebreak\/&gt;/g,'<div style="border-top:2px dashed #e74c3c;margin:5px 0;padding:3px 0;text-align:center;color:#e74c3c;font-size:0.8em;">--- 페이지 나누기 ---</div>')
+                .replace(/&lt;pagebreak\/&gt;/g,'<div class="pagebreak-divider">--- 페이지 나누기 ---</div>')
                 .replace(/&lt;sub&gt;/g,'<span class="sub-tag">&lt;sub&gt;</span>')
                 .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
                 .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
                 .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>')
-                .replace(/\[(\d+)\]/g,'<span style="color:#27ae60;font-weight:600;">[$1]</span>')
+                .replace(/\[(\d+)\]/g,'<span class="para-num-mark">[$1]</span>')
                 .replace(/\n/g,'<br>');
             
             // 렌더링 미리보기
             const renderEl = document.getElementById('englishRender3');
             if (renderEl) {
-                renderEl.innerHTML = text.replace(/<pagebreak\/>/g,'<div style="border-top:2px dashed #e74c3c;margin:5px 0;padding:3px 0;text-align:center;color:#e74c3c;font-size:0.8em;">--- 페이지 나누기 ---</div>').replace(/\n/g,'<br>');
+                renderEl.innerHTML = text.replace(/<pagebreak\/>/g,'<div class="pagebreak-divider">--- 페이지 나누기 ---</div>').replace(/\n/g,'<br>');
             }
         }
         
@@ -1256,18 +1256,18 @@
             const text = window.koreanRawText3 || '';
             const el = document.getElementById('koreanResult3');
             el.innerHTML = text.replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                .replace(/&lt;pagebreak\/&gt;/g,'<div style="border-top:2px dashed #e74c3c;margin:5px 0;padding:3px 0;text-align:center;color:#e74c3c;font-size:0.8em;">--- 페이지 나누기 ---</div>')
+                .replace(/&lt;pagebreak\/&gt;/g,'<div class="pagebreak-divider">--- 페이지 나누기 ---</div>')
                 .replace(/&lt;sub&gt;/g,'<span class="sub-tag">&lt;sub&gt;</span>')
                 .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
                 .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
                 .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>')
-                .replace(/\[(\d+)\]/g,'<span style="color:#27ae60;font-weight:600;">[$1]</span>')
+                .replace(/\[(\d+)\]/g,'<span class="para-num-mark">[$1]</span>')
                 .replace(/\n/g,'<br>');
             
             // 렌더링 미리보기
             const renderEl = document.getElementById('koreanRender3');
             if (renderEl) {
-                renderEl.innerHTML = text.replace(/<pagebreak\/>/g,'<div style="border-top:2px dashed #e74c3c;margin:5px 0;padding:3px 0;text-align:center;color:#e74c3c;font-size:0.8em;">--- 페이지 나누기 ---</div>').replace(/\n/g,'<br>');
+                renderEl.innerHTML = text.replace(/<pagebreak\/>/g,'<div class="pagebreak-divider">--- 페이지 나누기 ---</div>').replace(/\n/g,'<br>');
             }
         }
         

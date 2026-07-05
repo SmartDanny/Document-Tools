@@ -171,7 +171,7 @@
                 .replace(/&lt;td([^&]*)&gt;/g,'<span class="table-tag">&lt;td$1&gt;</span>')
                 .replace(/&lt;\/td&gt;/g,'<span class="table-tag">&lt;/td&gt;</span>')
                 .replace(/&lt;br&gt;/g,'<span class="table-tag">&lt;br&gt;</span>')
-                .replace(/__([^_]+)__/g,'<span style="color:#e74c3c;font-weight:600;">$1</span>');
+                .replace(/__([^_]+)__/g,'<span class="warn-mark">$1</span>');
             document.getElementById('output1').innerHTML = outputHtml;
             
             // 미리보기 - 표는 실제 HTML로 렌더링
@@ -262,7 +262,7 @@
                 .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
                 .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
                 .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>')
-                .replace(/__([^_]+)__/g,'<span style="color:#e74c3c;font-weight:600;">$1</span>');
+                .replace(/__([^_]+)__/g,'<span class="warn-mark">$1</span>');
             document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>').replace(/__([^_]+)__/g,'<strong>$1</strong>');
             
             showMessage(msg, '✅ Cross-reference가 삽입되었습니다!', 'success');
@@ -634,7 +634,7 @@
                 .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
                 .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
                 .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>')
-                .replace(/\[(\d{4,5})\]/g,'<span style="color:#27ae60;font-weight:600;">[$1]</span>');
+                .replace(/\[(\d{4,5})\]/g,'<span class="para-num-mark">[$1]</span>');
             document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>');
             
             showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${counter - 1}개 단락)`, 'success');

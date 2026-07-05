@@ -289,17 +289,17 @@
                 resultLines.push(line);
                 if (hasKorean) {
                     mergeResultPairs.push({ text: line, type: 'kor' });
-                    resultHtml += `<div style="background:#e8f5e9;padding:8px 12px;margin:4px 0;border-radius:4px;border-left:3px solid #4caf50;">${escapeHtml(line)}</div>`;
+                    resultHtml += `<div class="merge-line-kor">${escapeHtml(line)}</div>`;
                 } else {
                     mergeResultPairs.push({ text: line, type: 'eng' });
-                    resultHtml += `<div style="background:#e3f2fd;padding:8px 12px;margin:4px 0;border-radius:4px;border-left:3px solid #2196f3;">${escapeHtml(line)}</div>`;
+                    resultHtml += `<div class="merge-line-eng">${escapeHtml(line)}</div>`;
                 }
             }
             
             function addEngLine(line) {
                 resultLines.push(line);
                 mergeResultPairs.push({ text: line, type: 'eng' });
-                resultHtml += `<div style="background:#e3f2fd;padding:8px 12px;margin:4px 0;border-radius:4px;border-left:3px solid #2196f3;">${escapeHtml(line)}</div>`;
+                resultHtml += `<div class="merge-line-eng">${escapeHtml(line)}</div>`;
             }
             
             // 섹션 내용 병합 함수
@@ -718,7 +718,7 @@ ${bodyContent}
                 
                 // 페이지 나누기 마커
                 if (trimmed === '<pagebreak/>') {
-                    resultHtml += '<div style="border-top:2px dashed #999;margin:10px 0;text-align:center;color:#999;font-size:11px;">── 페이지 나누기 ──</div>';
+                    resultHtml += '<div class="pagebreak-divider-plain">── 페이지 나누기 ──</div>';
                     return;
                 }
                 
@@ -729,9 +729,9 @@ ${bodyContent}
                 }
                 
                 if (item.type === 'kor') {
-                    resultHtml += `<div style="background:#e8f5e9;padding:8px 12px;margin:4px 0;border-radius:4px;border-left:3px solid #4caf50;">${escapeHtml(item.text)}</div>`;
+                    resultHtml += `<div class="merge-line-kor">${escapeHtml(item.text)}</div>`;
                 } else {
-                    resultHtml += `<div style="background:#e3f2fd;padding:8px 12px;margin:4px 0;border-radius:4px;border-left:3px solid #2196f3;">${escapeHtml(item.text)}</div>`;
+                    resultHtml += `<div class="merge-line-eng">${escapeHtml(item.text)}</div>`;
                 }
             });
             
