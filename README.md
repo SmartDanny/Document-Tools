@@ -1,6 +1,6 @@
 # Document Tools (문서 도구 모음)
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/)
 [![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-red.svg)](https://github.com/)
 
 특허 명세서 작성 및 편집을 위한 웹 기반 문서 처리 도구 모음입니다.
@@ -35,13 +35,13 @@
 
 ### 방법 1: 직접 실행
 1. 저장소를 클론하거나 파일을 다운로드합니다.
-2. 세 파일을 같은 폴더에 저장합니다.
-3. `document_tools.html`을 웹 브라우저로 엽니다.
+2. 폴더 구조를 유지한 채 저장합니다.
+3. `index.html`을 웹 브라우저로 엽니다.
 
 ```bash
 git clone https://github.com/[username]/document-tools.git
 cd document-tools
-# document_tools.html을 브라우저로 열기
+# index.html을 브라우저로 열기
 ```
 
 ### 방법 2: 웹 서버 사용
@@ -49,27 +49,39 @@ cd document-tools
 # Python 간이 서버
 python -m http.server 8000
 
-# 브라우저에서 http://localhost:8000/document_tools.html 접속
+# 브라우저에서 http://localhost:8000/index.html 접속
 ```
 
 ## 📁 파일 구조
 
 ```
 document-tools/
-├── document_tools.html   # 메인 HTML 파일
-├── styles.css            # 스타일시트
-├── utils.js              # 공통 유틸리티 함수
-└── README.md             # 이 파일
+├── index.html               # 메인 HTML (UI 마크업 + 스크립트 로드)
+├── styles.css               # 스타일시트
+├── utils.js                 # 공통 유틸리티 (이스케이프, diff, DOCX 파싱/판별)
+├── js/
+│   ├── app-core.js          # 공통 UI (탭 전환, 플로팅 탭 바, 우선권 모달)
+│   ├── tab1-preprocess.js   # 탭1: 전처리 (DOCX → HTML)
+│   ├── tab2-postprocess.js  # 탭2: 후처리 (HTML → DOCX)
+│   ├── tab3-bilingual.js    # 탭3: 한영혼합본 추출/색변환/DOCX 생성
+│   ├── tab3-merge.js        # 탭3: 한영혼합본 병합
+│   ├── tab4-compare.js      # 탭4: 문서 비교 (텍스트/DOCX Track-Changes)
+│   ├── tab5-mdpdf.js        # 탭5: Markdown to PDF
+│   └── stat-nav.js          # 첨자/표 통계 카드 내비게이션 (공용)
+├── generate_template.js     # US 특허 템플릿 생성 스크립트 (Node.js)
+├── US_patent_template.docx  # 생성된 US 특허 템플릿
+└── README.md                # 이 파일
 ```
 
 ## 🛠 기술 스택
 
 - **Frontend**: HTML5, CSS3, Vanilla JavaScript (ES6+)
-- **Libraries**:
+- **Libraries** (CDN 로드):
   - [JSZip](https://stuk.github.io/jszip/) - DOCX 파일 처리
   - [FileSaver.js](https://github.com/eligrey/FileSaver.js/) - 파일 다운로드
   - [marked.js](https://marked.js.org/) - Markdown 파싱
-  - [html2pdf.js](https://ekoopmans.github.io/html2pdf.js/) - PDF 생성
+  - [KaTeX](https://katex.org/) - 수식 렌더링 (Markdown 미리보기)
+- **PDF 변환**: 브라우저 인쇄 기능(`window.print`)의 "PDF로 저장" 사용
 
 ## 💻 시스템 요구사항
 
@@ -84,6 +96,37 @@ document-tools/
 | .docx | .docx |
 | .txt | .pdf |
 | .md | |
+
+## 🧪 테스트
+
+```bash
+npm test               # 유닛 테스트 (utils.js 순수 함수, 외부 의존성 없음)
+npm run test:browser   # 브라우저 E2E (Playwright + Chromium)
+```
+
+- **유닛 테스트** (`test/unit.test.js`): 이스케이프, diff 알고리즘, 특허 문서
+  판별, DOCX 스타일 생성 등 utils.js의 순수 함수를 Node 내장 `node:test`로 검증.
+- **브라우저 E2E** (`test/browser-test.js`): 실제 페이지를 로드해 DOCX
+  파싱/생성(단락 뒤 0pt 포함), 파일 드롭, 탭 전환 등 주요 흐름을 검증.
+  최초 1회 `npm install` 후 `npx playwright install chromium`이 필요할 수
+  있습니다 (JSZip CDN은 로컬 사본으로 대체되므로 오프라인에서도 동작).
+
+## 🔖 버전 관리
+
+버전의 원본은 `package.json`이며, 아래 명령 한 번으로 프로젝트 전체의 버전 표기
+(index.html 주석·meta 태그, utils.js/styles.css 헤더, README 배지·문의란)와
+Last Updated 날짜가 동기화되고 git 커밋 + 태그까지 생성됩니다:
+
+```bash
+npm version patch   # 1.3.0 → 1.3.1 (버그 수정 등 작은 변경)
+npm version minor   # 1.3.0 → 1.4.0 (기능 추가)
+npm version major   # 1.3.0 → 2.0.0 (호환성이 깨지는 변경)
+```
+
+- 버전 올리기 없이 표기만 다시 맞추려면: `npm run sync-version`
+- 대상 파일의 버전 표기 형식이 바뀌어 패턴을 찾지 못하면 커밋/태그 생성 전에
+  중단됩니다. 이때 `git checkout package.json`으로 되돌린 뒤
+  `scripts/sync-version.js`의 치환 규칙을 수정하고 다시 실행하세요.
 
 ## 🔒 개인정보 보호
 
@@ -101,5 +144,5 @@ Copyright (c) 2026 Smart Danny. All rights reserved.
 ## 📞 문의
 
 - **Author**: Smart Danny
-- **Version**: 1.0.0
-- **Last Updated**: 2026-01-08
+- **Version**: 1.3.0
+- **Last Updated**: 2026-07-05
