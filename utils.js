@@ -1,7 +1,7 @@
 /**
  * Document Tools - utils.js
  * 공통 유틸리티 함수 모음
- * Version: 1.1.0
+ * Version: 1.3.0
  * Last Updated: 2026-07-05
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
@@ -637,14 +637,16 @@ function showMessage(el, msg, type) {
 }
 
 /**
- * 클립보드에 텍스트 복사
+ * 클립보드에 텍스트 복사 (성공 시 3초 후 메시지 자동 숨김)
  * @param {string} text - 복사할 텍스트
  * @param {HTMLElement} msgEl - 메시지 표시 요소 (선택)
+ * @param {string} [successMsg] - 성공 메시지
  */
-function copyToClipboard(text, msgEl) {
+function copyToClipboard(text, msgEl, successMsg = '✅ 클립보드에 복사되었습니다.') {
     navigator.clipboard.writeText(text).then(() => {
         if (msgEl) {
-            showMessage(msgEl, '✅ 클립보드에 복사되었습니다.', 'success');
+            showMessage(msgEl, successMsg, 'success');
+            setTimeout(() => msgEl.classList.add('hidden'), 3000);
         }
     }).catch(err => {
         console.error('복사 실패:', err);
@@ -652,4 +654,53 @@ function copyToClipboard(text, msgEl) {
             showMessage(msgEl, '❌ 복사에 실패했습니다.', 'error');
         }
     });
+}
+
+/**
+ * .docx 파일 업로드 공통 처리 (확장자 검사 + 파일명 표시 + 오류 알림)
+ * @param {File} file - 업로드된 파일
+ * @param {string|null} fileNameElId - 파일명을 표시할 요소 id (선택)
+ * @param {function(File): Promise} processFn - 파일 처리 함수
+ */
+async function handleDocxUpload(file, fileNameElId, processFn) {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.docx')) {
+        alert('❌ .docx 파일만 업로드 가능합니다.');
+        return;
+    }
+    if (fileNameElId) document.getElementById(fileNameElId).textContent = file.name;
+    try {
+        await processFn(file);
+    } catch (error) {
+        alert('오류: ' + error.message);
+    }
+}
+
+/**
+ * 드래그 앤 드롭 영역 설정 (dragover/dragleave 시각 효과 + drop 시 첫 파일 전달)
+ * @param {HTMLElement} el - 드롭 대상 요소
+ * @param {function(File): Promise} onFile - 드롭된 파일 처리 함수
+ * @param {Object} [options]
+ * @param {string} [options.clickOpensInput] - 클릭 시 열 file input의 id
+ */
+function setupDropZone(el, onFile, options = {}) {
+    el.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.add('drag-over');
+    });
+    el.addEventListener('dragleave', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.remove('drag-over');
+    });
+    el.addEventListener('drop', async e => {
+        e.preventDefault();
+        e.stopPropagation();
+        el.classList.remove('drag-over');
+        if (e.dataTransfer.files.length > 0) await onFile(e.dataTransfer.files[0]);
+    });
+    if (options.clickOpensInput) {
+        el.addEventListener('click', () => document.getElementById(options.clickOpensInput).click());
+    }
 }

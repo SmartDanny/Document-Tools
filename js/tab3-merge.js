@@ -13,34 +13,18 @@
         
         // 국문 파일 처리
         async function handleFileKor3(file) {
-            if (!file) return;
-            if (!file.name.toLowerCase().endsWith('.docx')) {
-                alert('❌ .docx 파일만 업로드 가능합니다.');
-                return;
-            }
-            document.getElementById('fileNameKor3').textContent = file.name;
-            try {
+            await handleDocxUpload(file, 'fileNameKor3', async (file) => {
                 const text = await extractTextFromDocx3Simple(file);
                 document.getElementById('inputTextKor3').value = text;
-            } catch (error) {
-                alert('오류: ' + error.message);
-            }
+            });
         }
         
         // 영문 파일 처리
         async function handleFileEng3(file) {
-            if (!file) return;
-            if (!file.name.toLowerCase().endsWith('.docx')) {
-                alert('❌ .docx 파일만 업로드 가능합니다.');
-                return;
-            }
-            document.getElementById('fileNameEng3').textContent = file.name;
-            try {
+            await handleDocxUpload(file, 'fileNameEng3', async (file) => {
                 const text = await extractTextFromDocx3Simple(file);
                 document.getElementById('inputTextEng3').value = text;
-            } catch (error) {
-                alert('오류: ' + error.message);
-            }
+            });
         }
         
         // 간단한 텍스트 추출 함수 (첨자, 표 포함 / 빈 단락 제외)
@@ -59,45 +43,11 @@
         
         // 드래그 앤 드롭 이벤트 (국문)
         const inputTextKor3 = document.getElementById('inputTextKor3');
-        inputTextKor3.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('drag-over');
-        });
-        inputTextKor3.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-        });
-        inputTextKor3.addEventListener('drop', async function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) {
-                await handleFileKor3(e.dataTransfer.files[0]);
-            }
-        });
+        setupDropZone(inputTextKor3, handleFileKor3); // 드래그 앤 드롭 (utils.js)
         
         // 드래그 앤 드롭 이벤트 (영문)
         const inputTextEng3 = document.getElementById('inputTextEng3');
-        inputTextEng3.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('drag-over');
-        });
-        inputTextEng3.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-        });
-        inputTextEng3.addEventListener('drop', async function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) {
-                await handleFileEng3(e.dataTransfer.files[0]);
-            }
-        });
+        setupDropZone(inputTextEng3, handleFileEng3); // 드래그 앤 드롭 (utils.js)
         
         // 병합 실행
         function mergeDocuments3() {
@@ -106,8 +56,7 @@
             const msg = document.getElementById('merge3Message');
             
             if (!korText.trim() || !engText.trim()) {
-                msg.textContent = '❌ 국문명세서와 영문명세서를 모두 입력해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 국문명세서와 영문명세서를 모두 입력해주세요.', 'error');
                 return;
             }
             
@@ -590,11 +539,9 @@
             
             // 메시지
             if (mismatches.length > 0) {
-                msg.textContent = `⚠️ 병합 완료! (부제 ${mismatches.length}개 불일치 - 부제표준화 권장)`;
-                msg.className = 'message error';
+                showMessage(msg, `⚠️ 병합 완료! (부제 ${mismatches.length}개 불일치 - 부제표준화 권장)`, 'error');
             } else {
-                msg.textContent = '✅ 병합 완료! (사무소표준US 기준, 부제 일치)';
-                msg.className = 'message success';
+                showMessage(msg, '✅ 병합 완료! (사무소표준US 기준, 부제 일치)', 'success');
             }
         }
         
@@ -611,28 +558,19 @@
         function copyMergeResult3() {
             const msg = document.getElementById('mergeMessage3');
             if (!mergeResult) {
-                msg.textContent = '❌ 병합 결과가 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 병합 결과가 없습니다.', 'error');
                 return;
             }
             const stripNums = document.getElementById('stripParaNumsOption').checked;
             const text = stripNums ? stripParaNumsFromText(mergeResult) : mergeResult;
-            navigator.clipboard.writeText(text).then(() => {
-                msg.textContent = '✅ 한영혼합본이 클립보드에 복사되었습니다.' + (stripNums ? ' (단락번호 삭제됨)' : '');
-                msg.className = 'message success';
-                setTimeout(() => msg.classList.add('hidden'), 3000);
-            }).catch(() => {
-                msg.textContent = '❌ 복사에 실패했습니다.';
-                msg.className = 'message error';
-            });
+            copyToClipboard(text, msg, '✅ 한영혼합본이 클립보드에 복사되었습니다.' + (stripNums ? ' (단락번호 삭제됨)' : ''));
         }
         
         // DOCX 다운로드 (국문 단락은 갈색 폰트, 영문 단락은 검정)
         async function downloadMergeDocx3() {
             const msg = document.getElementById('mergeMessage3');
             if (!mergeResult || mergeResultPairs.length === 0) {
-                msg.textContent = '❌ 병합 결과가 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 병합 결과가 없습니다.', 'error');
                 return;
             }
             
@@ -709,12 +647,10 @@ ${bodyContent}
                 const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
                 saveAs(blob, fileName + '.docx');
 
-                msg.textContent = '✅ 한영혼합본 DOCX 파일이 다운로드되었습니다!';
-                msg.className = 'message success';
+                showMessage(msg, '✅ 한영혼합본 DOCX 파일이 다운로드되었습니다!', 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (error) {
-                msg.textContent = '❌ 오류: ' + error.message;
-                msg.className = 'message error';
+                showMessage(msg, '❌ 오류: ' + error.message, 'error');
             }
         }
         
@@ -724,16 +660,14 @@ ${bodyContent}
             msg.classList.add('hidden');
             
             if (!mergeResult || mergeResultPairs.length === 0) {
-                msg.textContent = '❌ 먼저 한영혼합본을 생성해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 한영혼합본을 생성해주세요.', 'error');
                 return;
             }
             
             const result = applyFormatStandardization(mergeResult);
             
             if (result.changeCount === 0) {
-                msg.textContent = '❌ 적용할 양식 변경이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 적용할 양식 변경이 없습니다.', 'error');
                 return;
             }
             
@@ -771,8 +705,7 @@ ${bodyContent}
             // 미리보기 갱신
             updateMergePreview3();
             
-            msg.textContent = `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         

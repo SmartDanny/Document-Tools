@@ -1,6 +1,6 @@
 # Document Tools (문서 도구 모음)
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/)
+[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/)
 [![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-red.svg)](https://github.com/)
 
 특허 명세서 작성 및 편집을 위한 웹 기반 문서 처리 도구 모음입니다.
@@ -76,11 +76,12 @@ document-tools/
 ## 🛠 기술 스택
 
 - **Frontend**: HTML5, CSS3, Vanilla JavaScript (ES6+)
-- **Libraries**:
+- **Libraries** (CDN 로드):
   - [JSZip](https://stuk.github.io/jszip/) - DOCX 파일 처리
   - [FileSaver.js](https://github.com/eligrey/FileSaver.js/) - 파일 다운로드
   - [marked.js](https://marked.js.org/) - Markdown 파싱
-  - [html2pdf.js](https://ekoopmans.github.io/html2pdf.js/) - PDF 생성
+  - [KaTeX](https://katex.org/) - 수식 렌더링 (Markdown 미리보기)
+- **PDF 변환**: 브라우저 인쇄 기능(`window.print`)의 "PDF로 저장" 사용
 
 ## 💻 시스템 요구사항
 
@@ -112,5 +113,5 @@ Copyright (c) 2026 Smart Danny. All rights reserved.
 ## 📞 문의
 
 - **Author**: Smart Danny
-- **Version**: 1.0.0
-- **Last Updated**: 2026-01-08
+- **Version**: 1.3.0
+- **Last Updated**: 2026-07-05

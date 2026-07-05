@@ -60,34 +60,18 @@
         
         // 탭4 - 파일 처리 함수 (문서1)
         async function handleFile4a(file) {
-            if (!file) return;
-            if (!file.name.toLowerCase().endsWith('.docx')) {
-                alert('❌ .docx 파일만 업로드 가능합니다.');
-                return;
-            }
-            document.getElementById('fileName4a').textContent = file.name;
-            try {
+            await handleDocxUpload(file, 'fileName4a', async (file) => {
                 const text = await extractTextFromDocx4(file);
                 document.getElementById('inputText4a').value = text;
-            } catch (error) { 
-                alert('오류: ' + error.message); 
-            }
+            });
         }
         
         // 탭4 - 파일 처리 함수 (문서2)
         async function handleFile4b(file) {
-            if (!file) return;
-            if (!file.name.toLowerCase().endsWith('.docx')) {
-                alert('❌ .docx 파일만 업로드 가능합니다.');
-                return;
-            }
-            document.getElementById('fileName4b').textContent = file.name;
-            try {
+            await handleDocxUpload(file, 'fileName4b', async (file) => {
                 const text = await extractTextFromDocx4(file);
                 document.getElementById('inputText4b').value = text;
-            } catch (error) { 
-                alert('오류: ' + error.message); 
-            }
+            });
         }
         
         // 탭4 - 파일 선택 이벤트
@@ -100,45 +84,11 @@
         
         // 탭4 - 드래그 앤 드롭 (문서1)
         const inputText4a = document.getElementById('inputText4a');
-        inputText4a.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('drag-over');
-        });
-        inputText4a.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-        });
-        inputText4a.addEventListener('drop', async function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) {
-                await handleFile4a(e.dataTransfer.files[0]);
-            }
-        });
+        setupDropZone(inputText4a, handleFile4a); // 드래그 앤 드롭 (utils.js)
         
         // 탭4 - 드래그 앤 드롭 (문서2)
         const inputText4b = document.getElementById('inputText4b');
-        inputText4b.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('drag-over');
-        });
-        inputText4b.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-        });
-        inputText4b.addEventListener('drop', async function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) {
-                await handleFile4b(e.dataTransfer.files[0]);
-            }
-        });
+        setupDropZone(inputText4b, handleFile4b); // 드래그 앤 드롭 (utils.js)
         
         // Diff 알고리즘 함수는 utils.js에서 로드됨
         
@@ -414,38 +364,22 @@
         
         // DOCX 파일 처리 (원본)
         async function handleDocxFile4a(file) {
-            if (!file) return;
-            if (!file.name.toLowerCase().endsWith('.docx')) {
-                alert('❌ .docx 파일만 업로드 가능합니다.');
-                return;
-            }
-            docxFileA = file;
-            document.getElementById('fileNameDocx4a').textContent = file.name;
-            try {
+            await handleDocxUpload(file, 'fileNameDocx4a', async (file) => {
+                docxFileA = file;
                 docxDataA = await extractParagraphsFromDocx(file);
                 const preview = docxDataA.paragraphs.filter(p => p.trim()).slice(0, 10).join('\n');
                 document.getElementById('docxPreview4a').value = preview + (docxDataA.paragraphs.length > 10 ? '\n...' : '');
-            } catch (error) {
-                alert('오류: ' + error.message);
-            }
+            });
         }
         
         // DOCX 파일 처리 (수정본)
         async function handleDocxFile4b(file) {
-            if (!file) return;
-            if (!file.name.toLowerCase().endsWith('.docx')) {
-                alert('❌ .docx 파일만 업로드 가능합니다.');
-                return;
-            }
-            docxFileB = file;
-            document.getElementById('fileNameDocx4b').textContent = file.name;
-            try {
+            await handleDocxUpload(file, 'fileNameDocx4b', async (file) => {
+                docxFileB = file;
                 docxDataB = await extractParagraphsFromDocx(file);
                 const preview = docxDataB.paragraphs.filter(p => p.trim()).slice(0, 10).join('\n');
                 document.getElementById('docxPreview4b').value = preview + (docxDataB.paragraphs.length > 10 ? '\n...' : '');
-            } catch (error) {
-                alert('오류: ' + error.message);
-            }
+            });
         }
         
         // 파일 선택 이벤트
@@ -458,51 +392,11 @@
         
         // 드래그 앤 드롭 이벤트 (원본)
         const docxPreview4a = document.getElementById('docxPreview4a');
-        docxPreview4a.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('drag-over');
-        });
-        docxPreview4a.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-        });
-        docxPreview4a.addEventListener('drop', async function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) {
-                await handleDocxFile4a(e.dataTransfer.files[0]);
-            }
-        });
-        docxPreview4a.addEventListener('click', function() {
-            document.getElementById('fileInputDocx4a').click();
-        });
+        setupDropZone(docxPreview4a, handleDocxFile4a, { clickOpensInput: 'fileInputDocx4a' }); // 드래그 앤 드롭 + 클릭 열기 (utils.js)
         
         // 드래그 앤 드롭 이벤트 (수정본)
         const docxPreview4b = document.getElementById('docxPreview4b');
-        docxPreview4b.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('drag-over');
-        });
-        docxPreview4b.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-        });
-        docxPreview4b.addEventListener('drop', async function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-            if (e.dataTransfer.files.length > 0) {
-                await handleDocxFile4b(e.dataTransfer.files[0]);
-            }
-        });
-        docxPreview4b.addEventListener('click', function() {
-            document.getElementById('fileInputDocx4b').click();
-        });
+        setupDropZone(docxPreview4b, handleDocxFile4b, { clickOpensInput: 'fileInputDocx4b' }); // 드래그 앤 드롭 + 클릭 열기 (utils.js)
         
         // 단락 비교를 위한 개선된 알고리즘
         // calculateSimilarity, getWordDiffForDocx는 utils.js에서 로드됨
@@ -671,8 +565,7 @@
             msg.classList.add('hidden');
             
             if (!docxDataA || !docxDataB) {
-                msg.textContent = '❌ 두 개의 DOCX 파일을 모두 업로드해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 두 개의 DOCX 파일을 모두 업로드해주세요.', 'error');
                 return;
             }
             
@@ -816,12 +709,10 @@ ${bodyContent}
                 const blob = await newZip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
                 saveAs(blob, fileName + '.docx');
                 
-                msg.textContent = `✅ 비교 완료! ${fileName}.docx 파일이 다운로드됩니다. MS Word에서 '검토' 탭으로 변경 내용을 확인하세요.`;
-                msg.className = 'message success';
+                showMessage(msg, `✅ 비교 완료! ${fileName}.docx 파일이 다운로드됩니다. MS Word에서 '검토' 탭으로 변경 내용을 확인하세요.`, 'success');
                 
             } catch (error) {
-                msg.textContent = '❌ 오류: ' + error.message;
-                msg.className = 'message error';
+                showMessage(msg, '❌ 오류: ' + error.message, 'error');
             }
         }
         

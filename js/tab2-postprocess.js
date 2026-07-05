@@ -122,17 +122,11 @@
         
         // 탭2 파일 업로드 처리
         async function handleFile2(file) {
-            if (!file) return;
-            if (!file.name.toLowerCase().endsWith('.docx')) {
-                alert('❌ .docx 파일만 업로드 가능합니다.');
-                return;
-            }
-            document.getElementById('fileName2').textContent = file.name;
-            try {
+            await handleDocxUpload(file, 'fileName2', async (file) => {
                 const result = await processDocx1(file); // 동일한 파싱 함수 사용
                 inp2.value = result.text;
                 updatePreview2();
-            } catch (error) { alert('오류: ' + error.message); }
+            });
         }
         
         // 탭2 파일 선택 버튼
@@ -142,28 +136,7 @@
         });
         
         // 탭2 드래그 앤 드롭
-        inp2.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('drag-over');
-        });
-        
-        inp2.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-        });
-        
-        inp2.addEventListener('drop', async function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                await handleFile2(files[0]);
-            }
-        });
+        setupDropZone(inp2, handleFile2); // 드래그 앤 드롭 (utils.js)
         
         // 탭2 Cross-reference 삽입 함수
         function insertCrossReference2() {
@@ -174,22 +147,19 @@
             
             // 텍스트 입력 확인
             if (!currentText.trim()) {
-                msg.textContent = '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.', 'error');
                 return;
             }
             
             // 이미 Cross-reference가 존재하는지 확인
             if (/CROSS-REFERENCE/i.test(currentText)) {
-                msg.textContent = '⚠️ 이미 Cross-reference가 존재합니다.';
-                msg.className = 'message error';
+                showMessage(msg, '⚠️ 이미 Cross-reference가 존재합니다.', 'error');
                 return;
             }
             
             // 우선권출원 정보 확인
             if (priorityList2.length === 0) {
-                msg.textContent = '❌ 우선권출원 정보를 추가해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 우선권출원 정보를 추가해주세요.', 'error');
                 return;
             }
 
@@ -223,8 +193,7 @@
             }
             
             if (insertIndex < 0) {
-                msg.textContent = '❌ BACKGROUND 단락을 찾을 수 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ BACKGROUND 단락을 찾을 수 없습니다.', 'error');
                 return;
             }
             
@@ -235,8 +204,7 @@
             // 미리보기 업데이트
             updatePreview2();
             
-            msg.textContent = '✅ Cross-reference가 삽입되었습니다!';
-            msg.className = 'message success';
+            showMessage(msg, '✅ Cross-reference가 삽입되었습니다!', 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -248,8 +216,7 @@
             const currentText = inp2.value;
             
             if (!currentText.trim()) {
-                msg.textContent = '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.', 'error');
                 return;
             }
             
@@ -472,8 +439,7 @@
             result = resultLines.join('\n');
             
             if (convertedCount === 0) {
-                msg.textContent = '⚠️ 변환할 부제를 찾지 못했습니다. 문서에 국문 또는 영문 부제가 있는지 확인해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '⚠️ 변환할 부제를 찾지 못했습니다. 문서에 국문 또는 영문 부제가 있는지 확인해주세요.', 'error');
                 return;
             }
             
@@ -483,8 +449,7 @@
             // 미리보기 업데이트
             updatePreview2();
             
-            msg.textContent = `✅ 부제표준화 완료! (${standardName} 형식, ${convertedCount}개 부제 변환됨)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 부제표준화 완료! (${standardName} 형식, ${convertedCount}개 부제 변환됨)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 5000);
         }
         
@@ -590,24 +555,21 @@
 
             const text = inp2.value;
             if (!text.trim()) {
-                msg.textContent = '❌ 먼저 텍스트를 입력해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 텍스트를 입력해주세요.', 'error');
                 return;
             }
 
             const result = applyFormatStandardization(text);
 
             if (result.changeCount === 0) {
-                msg.textContent = '❌ 적용할 양식 변경이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 적용할 양식 변경이 없습니다.', 'error');
                 return;
             }
 
             inp2.value = result.text;
             updatePreview2();
 
-            msg.textContent = `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
 
@@ -618,8 +580,7 @@
 
             const text = inp2.value;
             if (!text.trim()) {
-                msg.textContent = '❌ 먼저 텍스트를 입력해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 텍스트를 입력해주세요.', 'error');
                 return;
             }
 
@@ -633,8 +594,7 @@
             window.tab2USFormat = true; // US 특허출원 DOCX 양식 플래그
 
             const changes = result.changeCount > 0 ? ` 양식표준화 ${result.changeCount}개 변경 포함.` : '';
-            msg.textContent = `✅ US양식 적용 완료!${changes} DOCX 다운로드 시 US 특허출원 양식이 적용됩니다.`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ US양식 적용 완료!${changes} DOCX 다운로드 시 US 특허출원 양식이 적용됩니다.`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 5000);
         }
         
@@ -645,15 +605,13 @@
             
             const text = inp2.value;
             if (!text.trim()) {
-                msg.textContent = '❌ 먼저 텍스트를 입력해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 텍스트를 입력해주세요.', 'error');
                 return;
             }
             
             // 이미 단락번호가 있는지 확인 (0으로 시작하는 4~5자리, 뒤에 공백)
             if (/^\[0\d{3,4}\]\s/m.test(text)) {
-                msg.textContent = '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.', 'error');
                 return;
             }
             
@@ -704,8 +662,7 @@
             inp2.value = resultLines.join('\n');
             updatePreview2();
             
-            msg.textContent = `✅ 단락번호가 추가되었습니다! (총 ${counter - 1}개 단락)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${counter - 1}개 단락)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -716,8 +673,7 @@
 
             const text = inp2.value;
             if (!text.trim()) {
-                msg.textContent = '❌ 먼저 텍스트를 입력해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 텍스트를 입력해주세요.', 'error');
                 return;
             }
 
@@ -733,16 +689,14 @@
             });
 
             if (removedCount === 0) {
-                msg.textContent = '❌ 제거할 단락번호가 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 제거할 단락번호가 없습니다.', 'error');
                 return;
             }
 
             inp2.value = resultLines.join('\n');
             updatePreview2();
 
-            msg.textContent = `✅ 단락번호가 제거되었습니다! (${removedCount}개 제거)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 단락번호가 제거되었습니다! (${removedCount}개 제거)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -854,18 +808,18 @@
         async function convertToDocx2() {
             const t = inp2.value.trim(), msg = document.getElementById('message2');
             msg.classList.add('hidden');
-            if (!t) { msg.textContent = '❌ 텍스트를 입력해주세요.'; msg.className = 'message error'; return; }
+            if (!t) { showMessage(msg, '❌ 텍스트를 입력해주세요.', 'error'); return; }
             const fn = document.getElementById('outputFileName2').value.trim() || 'output';
             try {
                 await generateDocxCommon(t, fn, msg);
-            } catch (e) { msg.textContent = '❌ 오류: ' + e.message; msg.className = 'message error'; }
+            } catch (e) { showMessage(msg, '❌ 오류: ' + e.message, 'error'); }
         }
 
         async function downloadUSFormat2() {
             const msg = document.getElementById('message2');
             msg.classList.add('hidden');
             let t = inp2.value.trim();
-            if (!t) { msg.textContent = '❌ 텍스트를 입력해주세요.'; msg.className = 'message error'; return; }
+            if (!t) { showMessage(msg, '❌ 텍스트를 입력해주세요.', 'error'); return; }
             const result = applyFormatStandardization(t);
             if (result.changeCount > 0) {
                 inp2.value = result.text;
@@ -875,9 +829,8 @@
             const fn = document.getElementById('outputFileName2').value.trim() || 'output';
             try {
                 await generateDocxUSPatent(t, fn + '.docx');
-                msg.textContent = '✅ US 특허출원 양식 DOCX 파일이 생성되었습니다!';
-                msg.className = 'message success';
+                showMessage(msg, '✅ US 특허출원 양식 DOCX 파일이 생성되었습니다!', 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
-            } catch (e) { msg.textContent = '❌ 오류: ' + e.message; msg.className = 'message error'; }
+            } catch (e) { showMessage(msg, '❌ 오류: ' + e.message, 'error'); }
         }
         

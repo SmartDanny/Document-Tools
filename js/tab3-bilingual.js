@@ -13,18 +13,10 @@
         
         // 탭3 - 파일 처리 공통 함수
         async function handleFile3(file) {
-            if (!file) return;
-            if (!file.name.toLowerCase().endsWith('.docx')) {
-                alert('❌ .docx 파일만 업로드 가능합니다.');
-                return;
-            }
-            document.getElementById('fileName3').textContent = file.name;
-            try {
+            await handleDocxUpload(file, 'fileName3', async (file) => {
                 const text = await extractTextFromDocx3(file);
                 document.getElementById('inputText3').value = text;
-            } catch (error) { 
-                alert('오류: ' + error.message); 
-            }
+            });
         }
         
         // 탭3 - 파일 선택 버튼
@@ -36,28 +28,7 @@
         // 탭3 - 드래그 앤 드롭 (textarea)
         const inputText3 = document.getElementById('inputText3');
         
-        inputText3.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('drag-over');
-        });
-        
-        inputText3.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-        });
-        
-        inputText3.addEventListener('drop', async function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                await handleFile3(files[0]);
-            }
-        });
+        setupDropZone(inputText3, handleFile3); // 드래그 앤 드롭 (utils.js)
         
         // 탭3
         let lines3 = [], afterClaims = false, afterTitle = false, beforeCross = true;
@@ -438,35 +409,19 @@
             const t = window.koreanRawText3 || '';
             const msg = document.getElementById('korParagraphNumMessage3');
             if (!t || t.includes('없습니다')) {
-                msg.textContent = '❌ 복사할 내용이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 복사할 내용이 없습니다.', 'error');
                 return;
             }
-            navigator.clipboard.writeText(t).then(() => {
-                msg.textContent = '✅ 국문본이 클립보드에 복사되었습니다!';
-                msg.className = 'message success';
-                setTimeout(() => msg.classList.add('hidden'), 3000);
-            }).catch(() => {
-                msg.textContent = '❌ 복사에 실패했습니다.';
-                msg.className = 'message error';
-            });
+            copyToClipboard(t, msg, '✅ 국문본이 클립보드에 복사되었습니다!');
         }
         function copyEnglish3() {
             const t = window.englishRawText3 || '';
             const msg = document.getElementById('engParagraphNumMessage3');
             if (!t || t.includes('없습니다')) {
-                msg.textContent = '❌ 복사할 내용이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 복사할 내용이 없습니다.', 'error');
                 return;
             }
-            navigator.clipboard.writeText(t).then(() => {
-                msg.textContent = '✅ 영문본이 클립보드에 복사되었습니다!';
-                msg.className = 'message success';
-                setTimeout(() => msg.classList.add('hidden'), 3000);
-            }).catch(() => {
-                msg.textContent = '❌ 복사에 실패했습니다.';
-                msg.className = 'message error';
-            });
+            copyToClipboard(t, msg, '✅ 영문본이 클립보드에 복사되었습니다!');
         }
         
         // 국문본 DOCX 다운로드
@@ -474,18 +429,15 @@
             const text = window.koreanRawText3 || '';
             const msg = document.getElementById('korParagraphNumMessage3');
             if (!text || text.includes('없습니다')) {
-                msg.textContent = '❌ 다운로드할 내용이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 다운로드할 내용이 없습니다.', 'error');
                 return;
             }
             try {
                 await generateDocxFromText3(text, 'korean_extracted.docx');
-                msg.textContent = '✅ 국문본 DOCX 파일이 다운로드되었습니다!';
-                msg.className = 'message success';
+                showMessage(msg, '✅ 국문본 DOCX 파일이 다운로드되었습니다!', 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (e) {
-                msg.textContent = '❌ 오류: ' + e.message;
-                msg.className = 'message error';
+                showMessage(msg, '❌ 오류: ' + e.message, 'error');
             }
         }
 
@@ -494,18 +446,15 @@
             const text = window.englishRawText3 || '';
             const msg = document.getElementById('engParagraphNumMessage3');
             if (!text || text.includes('없습니다')) {
-                msg.textContent = '❌ 다운로드할 내용이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 다운로드할 내용이 없습니다.', 'error');
                 return;
             }
             try {
                 await generateDocxBasic(text, 'english_extracted.docx');
-                msg.textContent = '✅ 영문본 DOCX 파일이 다운로드되었습니다!';
-                msg.className = 'message success';
+                showMessage(msg, '✅ 영문본 DOCX 파일이 다운로드되었습니다!', 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (e) {
-                msg.textContent = '❌ 오류: ' + e.message;
-                msg.className = 'message error';
+                showMessage(msg, '❌ 오류: ' + e.message, 'error');
             }
         }
 
@@ -515,8 +464,7 @@
             msg.classList.add('hidden');
             let text = window.englishRawText3 || '';
             if (!text || text.includes('없습니다')) {
-                msg.textContent = '❌ 영문본이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 영문본이 없습니다.', 'error');
                 return;
             }
             const result = applyFormatStandardization(text);
@@ -527,12 +475,10 @@
             }
             try {
                 await generateDocxUSPatent(text, 'english_extracted_US.docx');
-                msg.textContent = '✅ US 특허출원 양식 DOCX 파일이 다운로드되었습니다!';
-                msg.className = 'message success';
+                showMessage(msg, '✅ US 특허출원 양식 DOCX 파일이 다운로드되었습니다!', 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (e) {
-                msg.textContent = '❌ 오류: ' + e.message;
-                msg.className = 'message error';
+                showMessage(msg, '❌ 오류: ' + e.message, 'error');
             }
         }
 
@@ -752,24 +698,15 @@
                 zip.file('word/document.xml', documentXml);
 
                 const blob = await zip.generateAsync({ type: 'blob' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'mixed_korean_colored.docx';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                saveAs(blob, 'mixed_korean_colored.docx');
 
                 const msg = document.getElementById('colorMessage3');
-                msg.textContent = '✅ 한영혼합본 DOCX 파일이 다운로드되었습니다!';
-                msg.className = 'message success';
+                showMessage(msg, '✅ 한영혼합본 DOCX 파일이 다운로드되었습니다!', 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (error) {
                 console.error('DOCX 생성 오류:', error);
                 const msg = document.getElementById('colorMessage3');
-                msg.textContent = '❌ DOCX 생성 중 오류가 발생했습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ DOCX 생성 중 오류가 발생했습니다.', 'error');
             }
         }
         
@@ -818,16 +755,14 @@
             msg.classList.add('hidden');
             
             if (!window.colorLines3 || !window.originalText3) {
-                msg.textContent = '❌ 먼저 국문 색변환을 실행해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 국문 색변환을 실행해주세요.', 'error');
                 return;
             }
             
             const result = applyFormatStandardization(window.originalText3);
             
             if (result.changeCount === 0) {
-                msg.textContent = '❌ 적용할 양식 변경이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 적용할 양식 변경이 없습니다.', 'error');
                 return;
             }
             
@@ -839,8 +774,7 @@
             // 미리보기 갱신
             updateColorPreview3();
             
-            msg.textContent = `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -850,8 +784,7 @@
             msg.classList.add('hidden');
             
             if (!window.colorLines3 || !window.originalText3) {
-                msg.textContent = '❌ 먼저 국문 색변환을 실행해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 국문 색변환을 실행해주세요.', 'error');
                 return;
             }
             
@@ -861,8 +794,7 @@
                 l.type === 'korean' && /^\[0\d{3,4}\]\s/.test(l.text.trim())
             );
             if (hasExistingNumbers) {
-                msg.textContent = '❌ 이미 단락번호가 있습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 이미 단락번호가 있습니다.', 'error');
                 return;
             }
             
@@ -915,8 +847,7 @@
             });
             
             if (addedCount === 0) {
-                msg.textContent = '❌ 단락번호를 추가할 국문단락이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 단락번호를 추가할 국문단락이 없습니다.', 'error');
                 return;
             }
             
@@ -929,8 +860,7 @@
             // 미리보기 갱신
             updateColorPreview3();
             
-            msg.textContent = `✅ 국문단락에 단락번호가 추가되었습니다. (${addedCount}개)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 국문단락에 단락번호가 추가되었습니다. (${addedCount}개)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -940,8 +870,7 @@
             msg.classList.add('hidden');
             
             if (!window.colorLines3 || !window.originalText3) {
-                msg.textContent = '❌ 먼저 국문 색변환을 실행해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 국문 색변환을 실행해주세요.', 'error');
                 return;
             }
             
@@ -957,8 +886,7 @@
             });
             
             if (removedCount === 0) {
-                msg.textContent = '❌ 제거할 단락번호가 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 제거할 단락번호가 없습니다.', 'error');
                 return;
             }
             
@@ -971,8 +899,7 @@
             // 미리보기 갱신
             updateColorPreview3();
             
-            msg.textContent = `✅ 단락번호가 제거되었습니다. (${removedCount}개)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 단락번호가 제거되었습니다. (${removedCount}개)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -1072,24 +999,21 @@
 
             let text = window.englishRawText3 || '';
             if (!text || text.includes('없습니다')) {
-                msg.textContent = '❌ 영문본이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 영문본이 없습니다.', 'error');
                 return;
             }
 
             const result = applyFormatStandardization(text);
 
             if (result.changeCount === 0) {
-                msg.textContent = '❌ 적용할 양식 변경이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 적용할 양식 변경이 없습니다.', 'error');
                 return;
             }
 
             window.englishRawText3 = result.text;
             updateEnglishDisplay3();
 
-            msg.textContent = `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
 
@@ -1100,8 +1024,7 @@
 
             let text = window.englishRawText3 || '';
             if (!text || text.includes('없습니다')) {
-                msg.textContent = '❌ 영문본이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 영문본이 없습니다.', 'error');
                 return;
             }
 
@@ -1115,8 +1038,7 @@
             updateEnglishDisplay3();
 
             const changes = result.changeCount > 0 ? ` 양식표준화 ${result.changeCount}개 변경 포함.` : '';
-            msg.textContent = `✅ US양식 적용 완료!${changes} DOCX 다운로드 시 US 특허출원 양식이 적용됩니다.`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ US양식 적용 완료!${changes} DOCX 다운로드 시 US 특허출원 양식이 적용됩니다.`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 5000);
         }
         
@@ -1127,24 +1049,21 @@
             
             let text = window.koreanRawText3 || '';
             if (!text || text.includes('없습니다')) {
-                msg.textContent = '❌ 국문본이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 국문본이 없습니다.', 'error');
                 return;
             }
             
             const result = applyFormatStandardization(text);
             
             if (result.changeCount === 0) {
-                msg.textContent = '❌ 적용할 양식 변경이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 적용할 양식 변경이 없습니다.', 'error');
                 return;
             }
             
             window.koreanRawText3 = result.text;
             updateKoreanDisplay3();
             
-            msg.textContent = `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 양식표준화 완료! (${result.changeCount}개 변경 적용)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -1155,15 +1074,13 @@
             
             let text = window.englishRawText3 || '';
             if (!text || text.includes('없습니다')) {
-                msg.textContent = '❌ 영문본이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 영문본이 없습니다.', 'error');
                 return;
             }
             
             // 이미 단락번호가 있는지 확인 (0으로 시작하는 4~5자리, 뒤에 공백)
             if (/^\[0\d{3,4}\]\s/m.test(text)) {
-                msg.textContent = '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.', 'error');
                 return;
             }
             
@@ -1171,8 +1088,7 @@
             window.englishRawText3 = result.text;
             updateEnglishDisplay3();
             
-            msg.textContent = `✅ 단락번호가 추가되었습니다! (총 ${result.count}개 단락)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${result.count}개 단락)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -1183,8 +1099,7 @@
 
             let text = window.englishRawText3 || '';
             if (!text || text.includes('없습니다')) {
-                msg.textContent = '❌ 영문본이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 영문본이 없습니다.', 'error');
                 return;
             }
 
@@ -1200,16 +1115,14 @@
             });
             
             if (removedCount === 0) {
-                msg.textContent = '❌ 제거할 단락번호가 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 제거할 단락번호가 없습니다.', 'error');
                 return;
             }
             
             window.englishRawText3 = resultLines.join('\n');
             updateEnglishDisplay3();
             
-            msg.textContent = `✅ 단락번호가 제거되었습니다! (${removedCount}개 제거)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 단락번호가 제거되었습니다! (${removedCount}개 제거)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -1220,15 +1133,13 @@
             
             let text = window.koreanRawText3 || '';
             if (!text || text.includes('없습니다')) {
-                msg.textContent = '❌ 국문본이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 국문본이 없습니다.', 'error');
                 return;
             }
             
             // 이미 단락번호가 있는지 확인 (0으로 시작하는 4~5자리, 뒤에 공백)
             if (/^\[0\d{3,4}\]\s/m.test(text)) {
-                msg.textContent = '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.', 'error');
                 return;
             }
             
@@ -1236,8 +1147,7 @@
             window.koreanRawText3 = result.text;
             updateKoreanDisplay3();
             
-            msg.textContent = `✅ 단락번호가 추가되었습니다! (총 ${result.count}개 단락)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${result.count}개 단락)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -1248,8 +1158,7 @@
 
             let text = window.koreanRawText3 || '';
             if (!text || text.includes('없습니다')) {
-                msg.textContent = '❌ 국문본이 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 국문본이 없습니다.', 'error');
                 return;
             }
 
@@ -1265,16 +1174,14 @@
             });
             
             if (removedCount === 0) {
-                msg.textContent = '❌ 제거할 단락번호가 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 제거할 단락번호가 없습니다.', 'error');
                 return;
             }
             
             window.koreanRawText3 = resultLines.join('\n');
             updateKoreanDisplay3();
             
-            msg.textContent = `✅ 단락번호가 제거되었습니다! (${removedCount}개 제거)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 단락번호가 제거되었습니다! (${removedCount}개 제거)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -1430,14 +1337,7 @@
             zip.file('word/document.xml', documentXml);
 
             const blob = await zip.generateAsync({ type: 'blob' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            saveAs(blob, filename);
         }
 
         // US 특허출원 양식 DOCX 생성 (영문본용)
@@ -1867,14 +1767,7 @@
             zip.file('word/footer3.xml', footerFirstPageXml);
 
             const blob = await zip.generateAsync({ type: 'blob' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            saveAs(blob, filename);
         }
         
         // 텍스트를 DOCX run으로 변환 (sub, sup 처리) - font size 12pt
@@ -2127,27 +2020,16 @@
                 });
 
                 const ta = document.getElementById(`splitTextarea3_${slot.id}`);
-                ta.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); ta.classList.add('drag-over'); });
-                ta.addEventListener('dragleave', e => { e.preventDefault(); e.stopPropagation(); ta.classList.remove('drag-over'); });
-                ta.addEventListener('drop', async function(e) {
-                    e.preventDefault(); e.stopPropagation();
-                    ta.classList.remove('drag-over');
-                    if (e.dataTransfer.files.length > 0) await handleFileSplitSlot3(slot.id, e.dataTransfer.files[0]);
-                });
+                setupDropZone(ta, file => handleFileSplitSlot3(slot.id, file)); // 드래그 앤 드롭 (utils.js)
             });
         }
 
         async function handleFileSplitSlot3(id, file) {
-            if (!file || !file.name.toLowerCase().endsWith('.docx')) {
-                alert('❌ .docx 파일만 업로드 가능합니다.'); return;
-            }
-            const slot = splitSlots3.find(s => s.id === id);
-            if (slot) slot.fileName = file.name;
-            document.getElementById(`splitFileName3_${id}`).textContent = file.name;
-            try {
-                const text = await extractTextFromDocx3(file);
-                document.getElementById(`splitTextarea3_${id}`).value = text;
-            } catch(e) { alert('오류: ' + e.message); }
+            await handleDocxUpload(file, `splitFileName3_${id}`, async (file) => {
+                const slot = splitSlots3.find(s => s.id === id);
+                if (slot) slot.fileName = file.name;
+                document.getElementById(`splitTextarea3_${id}`).value = await extractTextFromDocx3(file);
+            });
         }
 
         function completeSplitInput3() {

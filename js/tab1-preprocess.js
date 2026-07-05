@@ -7,17 +7,11 @@
 
         // 탭1 - 파일 처리 공통 함수
         async function handleFile1(file) {
-            if (!file) return;
-            if (!file.name.toLowerCase().endsWith('.docx')) {
-                alert('❌ .docx 파일만 업로드 가능합니다.');
-                return;
-            }
-            document.getElementById('fileName1').textContent = file.name;
-            try {
+            await handleDocxUpload(file, 'fileName1', async (file) => {
                 const result = await processDocx1(file);
                 document.getElementById('textInput1').value = result.text;
                 displayResult1(result);
-            } catch (error) { alert('오류: ' + error.message); }
+            });
         }
         
         // 파일 선택 버튼
@@ -29,33 +23,7 @@
         // 드래그 앤 드롭 (textarea)
         const textInput1 = document.getElementById('textInput1');
         
-        textInput1.addEventListener('dragover', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.add('drag-over');
-        });
-        
-        textInput1.addEventListener('dragleave', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-        });
-        
-        textInput1.addEventListener('drop', async function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            this.classList.remove('drag-over');
-            
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                await handleFile1(files[0]);
-            }
-        });
-        
-        // textarea 클릭 시 파일 선택 대화상자 열기
-        textInput1.addEventListener('click', function() {
-            document.getElementById('fileInput1').click();
-        });
+        setupDropZone(textInput1, handleFile1, { clickOpensInput: 'fileInput1' }); // 드래그 앤 드롭 + 클릭 열기 (utils.js)
         
         async function processDocx1(file) {
             // loadDocxDocument, parseDocxNumbering, extractDocxParagraphText, convertDocxTableToHtml은 utils.js에서 로드됨
@@ -237,22 +205,19 @@
             
             // 텍스트 입력 확인
             if (!currentText.trim()) {
-                msg.textContent = '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.', 'error');
                 return;
             }
             
             // 이미 Cross-reference가 존재하는지 확인
             if (/CROSS-REFERENCE/i.test(currentText)) {
-                msg.textContent = '⚠️ 이미 Cross-reference가 존재합니다.';
-                msg.className = 'message error';
+                showMessage(msg, '⚠️ 이미 Cross-reference가 존재합니다.', 'error');
                 return;
             }
             
             // 우선권출원 정보 확인
             if (priorityList1.length === 0) {
-                msg.textContent = '❌ 우선권출원 정보를 추가해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 우선권출원 정보를 추가해주세요.', 'error');
                 return;
             }
 
@@ -278,8 +243,7 @@
             }
             
             if (insertIndex < 0) {
-                msg.textContent = '❌ BACKGROUND 단락을 찾을 수 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ BACKGROUND 단락을 찾을 수 없습니다.', 'error');
                 return;
             }
             
@@ -301,8 +265,7 @@
                 .replace(/__([^_]+)__/g,'<span style="color:#e74c3c;font-weight:600;">$1</span>');
             document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>').replace(/__([^_]+)__/g,'<strong>$1</strong>');
             
-            msg.textContent = '✅ Cross-reference가 삽입되었습니다!';
-            msg.className = 'message success';
+            showMessage(msg, '✅ Cross-reference가 삽입되었습니다!', 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -315,8 +278,7 @@
             const currentText = textInput1El.value;
             
             if (!currentText.trim()) {
-                msg.textContent = '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.', 'error');
                 return;
             }
             
@@ -542,8 +504,7 @@
             result = resultLines.join('\n');
             
             if (convertedCount === 0) {
-                msg.textContent = '⚠️ 변환할 부제를 찾지 못했습니다. 문서에 국문 또는 영문 부제가 있는지 확인해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '⚠️ 변환할 부제를 찾지 못했습니다. 문서에 국문 또는 영문 부제가 있는지 확인해주세요.', 'error');
                 return;
             }
             
@@ -559,8 +520,7 @@
                 .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>');
             document.getElementById('preview1').innerHTML = result.replace(/\n/g,'<br>');
             
-            msg.textContent = `✅ 부제표준화 완료! (${standardName} 형식, ${convertedCount}개 부제 변환됨)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 부제표준화 완료! (${standardName} 형식, ${convertedCount}개 부제 변환됨)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 5000);
         }
         
@@ -597,15 +557,13 @@
             
             // 텍스트 입력 확인
             if (!currentText.trim()) {
-                msg.textContent = '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.', 'error');
                 return;
             }
             
             // 이미 단락번호가 존재하는지 확인 (0으로 시작하는 4~5자리, 뒤에 공백)
             if (/^\[0\d{3,4}\]\s/m.test(currentText)) {
-                msg.textContent = '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.', 'error');
                 return;
             }
             
@@ -679,8 +637,7 @@
                 .replace(/\[(\d{4,5})\]/g,'<span style="color:#27ae60;font-weight:600;">[$1]</span>');
             document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>');
             
-            msg.textContent = `✅ 단락번호가 추가되었습니다! (총 ${counter - 1}개 단락)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${counter - 1}개 단락)`, 'success');
             
             // 단락 개수 업데이트
             document.getElementById('paragraphCount1').textContent = counter - 1;
@@ -697,8 +654,7 @@
             
             // 텍스트 입력 확인
             if (!currentText.trim()) {
-                msg.textContent = '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.', 'error');
                 return;
             }
             
@@ -714,8 +670,7 @@
             });
             
             if (removedCount === 0) {
-                msg.textContent = '❌ 제거할 단락번호가 없습니다.';
-                msg.className = 'message error';
+                showMessage(msg, '❌ 제거할 단락번호가 없습니다.', 'error');
                 return;
             }
             
@@ -737,8 +692,7 @@
             // 단락 개수 초기화
             document.getElementById('paragraphCount1').textContent = 0;
             
-            msg.textContent = `✅ 단락번호가 제거되었습니다! (${removedCount}개 제거)`;
-            msg.className = 'message success';
+            showMessage(msg, `✅ 단락번호가 제거되었습니다! (${removedCount}개 제거)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -809,8 +763,7 @@
             zip.folder('word').file('styles.xml', makeDocxStylesXml({ fontSize: 24 })); // 단락 뒤 간격 0pt (utils.js)
             zip.folder('word/_rels').file('document.xml.rels', drXml);
             saveAs(await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}), filename+'.docx');
-            msgElement.textContent = '✅ 워드 파일(.docx)이 생성되었습니다!';
-            msgElement.className = 'message success';
+            showMessage(msgElement, '✅ 워드 파일(.docx)이 생성되었습니다!', 'success');
             setTimeout(() => msgElement.classList.add('hidden'), 3000);
         }
         
