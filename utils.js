@@ -1,8 +1,8 @@
 /**
  * Document Tools - utils.js
  * 공통 유틸리티 함수 모음
- * Version: 1.0.0
- * Last Updated: 2026-01-08
+ * Version: 1.1.0
+ * Last Updated: 2026-07-05
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  * 이 소프트웨어는 저작권법의 보호를 받습니다.
@@ -48,12 +48,13 @@ function escapeXml(text) {
 /**
  * 숫자를 지정된 형식으로 변환
  * @param {number} num - 변환할 숫자
- * @param {string} fmt - 형식 ('decimal', 'upperRoman', 'lowerRoman', 'upperLetter', 'lowerLetter')
+ * @param {string} fmt - 형식 ('decimal', 'decimalZero', 'upperRoman', 'lowerRoman', 'upperLetter', 'lowerLetter')
  * @returns {string} 변환된 문자열
  */
 function formatNumber(num, fmt) {
     switch (fmt) {
         case 'decimal': return String(num);
+        case 'decimalZero': return String(num).padStart(2, '0');
         case 'upperRoman': return toRoman(num).toUpperCase();
         case 'lowerRoman': return toRoman(num).toLowerCase();
         case 'upperLetter': return String.fromCharCode(64 + ((num - 1) % 26) + 1);
@@ -79,6 +80,21 @@ function toRoman(num) {
 // ============================================
 // Diff 알고리즘 함수
 // ============================================
+
+/**
+ * 공백을 보존하는 단어 토크나이즈 (공백은 앞 단어에 붙임)
+ * @param {string} text - 토크나이즈할 텍스트
+ * @returns {Array<{word: string, space: string}>} 토큰 배열
+ */
+function tokenizeWords(text) {
+    const tokens = [];
+    const regex = /(\S+)(\s*)/g;
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+        tokens.push({ word: match[1], space: match[2] || '' });
+    }
+    return tokens;
+}
 
 /**
  * LCS(Longest Common Subsequence) DP 테이블 계산
@@ -151,19 +167,8 @@ function calculateSimilarity(textA, textB) {
  */
 function getWordDiff(textA, textB) {
     try {
-        // 공백을 보존하는 토크나이즈 (공백은 앞 단어에 붙임)
-        const tokenize = (text) => {
-            const tokens = [];
-            const regex = /(\S+)(\s*)/g;
-            let match;
-            while ((match = regex.exec(text)) !== null) {
-                tokens.push({ word: match[1], space: match[2] || '' });
-            }
-            return tokens;
-        };
-
-        const tokensA = tokenize(textA);
-        const tokensB = tokenize(textB);
+        const tokensA = tokenizeWords(textA);
+        const tokensB = tokenizeWords(textB);
 
         const sameItem = (tA, tB) => ({
             type: 'same',
@@ -228,71 +233,23 @@ function getWordDiff(textA, textB) {
 
 /**
  * 단어 단위 diff 계산 (DOCX 비교용 - word/space 속성 반환)
+ * getWordDiff를 재사용하므로 공통 접두사/접미사 최적화와 크기 안전장치가 함께 적용됨
  * @param {string} textA - 원본 텍스트
  * @param {string} textB - 비교 텍스트
  * @returns {Array} diff 배열
  */
 function getWordDiffForDocx(textA, textB) {
-    // 단어 경계로 분리 (공백은 이전 단어에 포함)
-    const tokenize = (text) => {
-        const tokens = [];
-        const regex = /(\S+)(\s*)/g;
-        let match;
-        while ((match = regex.exec(text)) !== null) {
-            tokens.push({
-                word: match[1],
-                space: match[2] || ''
-            });
-        }
-        return tokens;
-    };
-    
-    const tokensA = tokenize(textA);
-    const tokensB = tokenize(textB);
-    
-    const m = tokensA.length, n = tokensB.length;
-    
-    // LCS DP 테이블
-    const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-    for (let i = 1; i <= m; i++) {
-        for (let j = 1; j <= n; j++) {
-            if (tokensA[i-1].word === tokensB[j-1].word) {
-                dp[i][j] = dp[i-1][j-1] + 1;
-            } else {
-                dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
-            }
-        }
+    const diff = getWordDiff(textA, textB);
+    if (diff) {
+        return diff.map(d => d.type === 'deleted'
+            ? { type: 'deleted', word: d.textA, space: '' }
+            : { type: d.type, word: d.textB, space: d.spaceB });
     }
-    
-    // Backtrack하여 diff 생성
-    const diff = [];
-    let i = m, j = n;
-    while (i > 0 || j > 0) {
-        if (i > 0 && j > 0 && tokensA[i-1].word === tokensB[j-1].word) {
-            diff.unshift({ 
-                type: 'same', 
-                word: tokensB[j-1].word,
-                space: tokensB[j-1].space
-            });
-            i--; j--;
-        } else if (j > 0 && (i === 0 || dp[i][j-1] >= dp[i-1][j])) {
-            diff.unshift({ 
-                type: 'added', 
-                word: tokensB[j-1].word,
-                space: tokensB[j-1].space
-            });
-            j--;
-        } else {
-            diff.unshift({ 
-                type: 'deleted', 
-                word: tokensA[i-1].word,
-                space: ''
-            });
-            i--;
-        }
-    }
-    
-    return diff;
+    // 크기 안전장치 초과(또는 오류) 시 전체 삭제 + 전체 추가로 폴백
+    return [
+        ...tokenizeWords(textA).map(t => ({ type: 'deleted', word: t.word, space: '' })),
+        ...tokenizeWords(textB).map(t => ({ type: 'added', word: t.word, space: t.space }))
+    ];
 }
 
 /**
@@ -351,6 +308,292 @@ function highlightModifiedLine(textA, textB) {
         console.error('highlightModifiedLine error:', e);
         return { htmlA: escapeHtml(textA), htmlB: escapeHtml(textB) };
     }
+}
+
+// ============================================
+// 특허 문서 판별 함수
+// ============================================
+
+/**
+ * 정확히 일치하는 특허 명세서 표준 섹션 부제목 목록
+ */
+const PATENT_SECTION_TITLES = [
+    'CROSS-REFERENCE TO RELATED APPLICATIONS',
+    'BACKGROUND OF THE INVENTION',
+    'BACKGROUND',
+    'SUMMARY OF THE INVENTION',
+    'SUMMARY',
+    'BRIEF DESCRIPTION OF THE DRAWINGS',
+    'DETAILED DESCRIPTION OF THE EMBODIMENTS',
+    'DETAILED DESCRIPTION OF THE PREFERRED EMBODIMENTS',
+    'DETAILED DESCRIPTION',
+    'DESCRIPTION OF SYMBOLS',
+    '<DESCRIPTION OF SYMBOLS>',
+    'WHAT IS CLAIMED IS:',
+    'WHAT IS CLAIMED IS',
+    'TITLE OF THE INVENTION',
+    'ABSTRACT OF DISCLOSURE',
+    'ABSTRACT'
+];
+
+/**
+ * 청구항 섹션 시작 라인 판별
+ * @param {string} line - 검사할 라인
+ * @returns {boolean}
+ */
+function isClaimsStartLine(line) {
+    const trimmed = line.trim();
+    const upper = trimmed.toUpperCase();
+    if (upper === 'WHAT IS CLAIMED IS:' || upper === 'WHAT IS CLAIMED IS') return true;
+    if (trimmed === '【CLAIMS】' || trimmed === '【청구의 범위】' || trimmed === '【청구범위】') return true;
+    return false;
+}
+
+/**
+ * CROSS-REFERENCE 섹션 제목 라인 판별
+ * @param {string} line - 검사할 라인
+ * @returns {boolean}
+ */
+function isCrossRefLine(line) {
+    const t = line.trim().toUpperCase();
+    return t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' ||
+           t === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
+           t === 'CROSS REFERENCE TO RELATED APPLICATIONS' ||
+           t === 'CROSS REFERENCE TO RELATED APPLICATION';
+}
+
+/**
+ * 특허 명세서 부제목 판별 (단락번호 부여/단락 개수 계산 기준)
+ * @param {string} line - 검사할 라인
+ * @returns {boolean}
+ */
+function isPatentSectionSubtitle(line) {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+
+    // 정확히 일치하는 부제목들
+    if (PATENT_SECTION_TITLES.some(s => trimmed.toUpperCase() === s.toUpperCase())) return true;
+
+    // 【】로 묶인 부제 패턴 (PCT형식 포함)
+    if (/^【[^】]+】$/.test(trimmed)) return true;
+
+    // <Description of Symbols> 형식 체크
+    if (/^<?\s*Description\s+of\s+Symbols\s*>?$/i.test(trimmed)) return true;
+
+    // 표 타이틀 패턴: 【표 1】, [표 1], 【Table 1】, [Table 1] 등
+    if (/^[【\[]표\s*\d+[】\]]$/i.test(trimmed)) return true;
+    if (/^[【\[]Table\s*\d+[】\]]$/i.test(trimmed)) return true;
+
+    // 수학식/화학식/반응식/분자식 등 타이틀 패턴
+    if (/^[【\[](수학식|화학식|반응식|분자식)\s*\d*[】\]]$/.test(trimmed)) return true;
+    if (/^[【\[](Mathematical|Chemical|Reaction|Molecular)\s*(Formula)?\s*\d*[】\]]$/i.test(trimmed)) return true;
+
+    // 실시예, 실험예 등을 포함하면서 마침표 없이 끝나는 경우
+    if (/^(실시예|실험예|비교예|참고예|제조예|Example|Comparative\s*Example|Reference\s*Example)/i.test(trimmed) && !trimmed.includes('.')) return true;
+
+    // (a), (b), (c) 등으로 시작하는 부제목
+    if (/^\([a-zA-Z]\)\s+/.test(trimmed)) return true;
+
+    // 1., 2., 3. 등 숫자로 시작하는 부제목 (숫자. 텍스트 형식)
+    if (/^\d+\.\s+[A-Z]/.test(trimmed)) return true;
+
+    // 전체가 대문자인 짧은 제목 (단어 수 6개 이하)
+    const words = trimmed.split(/\s+/);
+    if (words.length <= 6 && /^[A-Z\s]+$/.test(trimmed) && trimmed.length > 3) return true;
+
+    return false;
+}
+
+/**
+ * 일반 부제목 휴리스틱 판별 (괄호 묶음/대문자 제목 기준)
+ * @param {string} line - 검사할 라인
+ * @param {Object} [options] - 추가 판별 옵션
+ * @param {boolean} [options.checkSymbols] - 'Description of Symbols' 형식도 부제목으로 판별
+ * @param {boolean} [options.checkNumberedHeading] - '1. Field' 형식의 번호 헤딩도 부제목으로 판별
+ * @returns {boolean}
+ */
+function isGenericSubtitle(line, options = {}) {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+
+    // 【】로 묶인 타이틀
+    if (/^【[^】]+】$/.test(trimmed)) return true;
+
+    // [] 로 묶인 타이틀
+    if (/^\[[^\]]+\]$/.test(trimmed) && trimmed.length <= 30) return true;
+
+    // 영어 대문자로만 이루어진 부제목
+    const upperCount = (trimmed.match(/[A-Z]/g) || []).length;
+    const lowerCount = (trimmed.match(/[a-z]/g) || []).length;
+    if (upperCount >= 2 && lowerCount === 0 && /^[A-Z0-9\s\-:\/,]+$/.test(trimmed)) return true;
+
+    // Description of Symbols
+    if (options.checkSymbols && /^<?\s*Description\s+of\s+Symbols\s*>?$/i.test(trimmed)) return true;
+
+    // 1. Field 등 번호 헤딩 (마침표로 끝나지 않는 짧은 제목)
+    if (options.checkNumberedHeading && /^\d+\.\s+[A-Z]/.test(trimmed) && trimmed.length <= 60 && !/\.$/.test(trimmed)) return true;
+
+    return false;
+}
+
+// ============================================
+// DOCX 파싱 함수
+// ============================================
+
+/**
+ * DOCX 파일에서 word/document.xml을 파싱
+ * @param {File} file - 업로드된 .docx 파일
+ * @returns {Promise<{zip: Object, xml: string, doc: Document}>}
+ */
+async function loadDocxDocument(file) {
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const xml = await zip.file('word/document.xml').async('string');
+    const doc = new DOMParser().parseFromString(xml, 'application/xml');
+    return { zip, xml, doc };
+}
+
+/**
+ * DOCX의 word/numbering.xml에서 번호 매김 정의 파싱
+ * @param {Object} zip - JSZip 인스턴스
+ * @returns {Promise<Object>} numId → ilvl → { numFmt, lvlText, start, counter } 매핑
+ */
+async function parseDocxNumbering(zip) {
+    const numberingDefs = {};
+    const numberingFile = zip.file('word/numbering.xml');
+    if (!numberingFile) return numberingDefs;
+
+    const numXml = await numberingFile.async('string');
+    const numDoc = new DOMParser().parseFromString(numXml, 'application/xml');
+
+    // abstractNum 정의 파싱
+    const abstractNumDefs = {};
+    for (const absNum of numDoc.getElementsByTagName('w:abstractNum')) {
+        const absNumId = absNum.getAttribute('w:abstractNumId');
+        const levels = {};
+        for (const lvl of absNum.getElementsByTagName('w:lvl')) {
+            const ilvl = lvl.getAttribute('w:ilvl');
+            const numFmt = lvl.getElementsByTagName('w:numFmt')[0]?.getAttribute('w:val') || 'decimal';
+            const lvlText = lvl.getElementsByTagName('w:lvlText')[0]?.getAttribute('w:val') || '%1.';
+            const start = parseInt(lvl.getElementsByTagName('w:start')[0]?.getAttribute('w:val') || '1');
+            levels[ilvl] = { numFmt, lvlText, start };
+        }
+        abstractNumDefs[absNumId] = levels;
+    }
+
+    // num -> abstractNum 매핑 (counter는 start로 초기화)
+    for (const num of numDoc.getElementsByTagName('w:num')) {
+        const numId = num.getAttribute('w:numId');
+        const absNumIdRef = num.getElementsByTagName('w:abstractNumId')[0]?.getAttribute('w:val');
+        if (absNumIdRef && abstractNumDefs[absNumIdRef]) {
+            numberingDefs[numId] = {};
+            for (const ilvl in abstractNumDefs[absNumIdRef]) {
+                numberingDefs[numId][ilvl] = { ...abstractNumDefs[absNumIdRef][ilvl], counter: abstractNumDefs[absNumIdRef][ilvl].start };
+            }
+        }
+    }
+    return numberingDefs;
+}
+
+/**
+ * 단락(w:p)에서 텍스트 추출 - 첨자는 <sub>/<sup> 태그로 변환
+ * @param {Element} p - w:p 요소
+ * @param {{sub: number, sup: number}} [countScripts] - 첨자 개수 집계 객체 (선택)
+ * @returns {string}
+ */
+function extractDocxParagraphText(p, countScripts) {
+    let text = '';
+    for (const r of p.getElementsByTagName('w:r')) {
+        let t = '';
+        for (const x of r.getElementsByTagName('w:t')) t += x.textContent || '';
+        if (!t) continue;
+        const rPr = r.getElementsByTagName('w:rPr')[0];
+        const va = rPr?.getElementsByTagName('w:vertAlign')[0]?.getAttribute('w:val');
+        if (va === 'subscript') { text += `<sub>${t}</sub>`; if (countScripts) countScripts.sub++; }
+        else if (va === 'superscript') { text += `<sup>${t}</sup>`; if (countScripts) countScripts.sup++; }
+        else text += t;
+    }
+    return text;
+}
+
+/**
+ * 단락(w:p)에서 서식 없이 순수 텍스트만 추출
+ * @param {Element} p - w:p 요소
+ * @returns {string}
+ */
+function extractDocxPlainText(p) {
+    let text = '';
+    for (const r of p.getElementsByTagName('w:r')) {
+        for (const t of r.getElementsByTagName('w:t')) {
+            text += t.textContent || '';
+        }
+    }
+    return text;
+}
+
+/**
+ * 표(w:tbl)를 HTML <table>로 변환 (셀 병합 처리 포함)
+ * @param {Element} tbl - w:tbl 요소
+ * @param {{sub: number, sup: number}} [countScripts] - 첨자 개수 집계 객체 (선택)
+ * @returns {string}
+ */
+function convertDocxTableToHtml(tbl, countScripts) {
+    let html = '<table border="1">';
+    for (const tr of tbl.getElementsByTagName('w:tr')) {
+        html += '<tr>';
+        for (const tc of tr.getElementsByTagName('w:tc')) {
+            // 셀 병합 처리
+            const tcPr = tc.getElementsByTagName('w:tcPr')[0];
+            const gridSpan = tcPr?.getElementsByTagName('w:gridSpan')[0]?.getAttribute('w:val');
+            const vMerge = tcPr?.getElementsByTagName('w:vMerge')[0];
+
+            // vMerge가 있고 val이 없으면 병합된 셀 (continue)
+            if (vMerge && !vMerge.getAttribute('w:val')) {
+                continue;
+            }
+
+            let colspan = gridSpan ? ` colspan="${gridSpan}"` : '';
+
+            // 셀 내용 추출
+            let cellContent = '';
+            for (const p of tc.getElementsByTagName('w:p')) {
+                const pText = extractDocxParagraphText(p, countScripts);
+                if (cellContent && pText) cellContent += '<br>';
+                cellContent += pText;
+            }
+            html += `<td${colspan}>${cellContent}</td>`;
+        }
+        html += '</tr>';
+    }
+    html += '</table>';
+    return html;
+}
+
+/**
+ * 문서 body의 단락/표를 순서대로 텍스트로 변환
+ * @param {Document} doc - 파싱된 word/document.xml
+ * @param {Object} [options]
+ * @param {boolean} [options.skipEmptyParagraphs] - 빈 단락 제외 여부
+ * @param {{sub: number, sup: number}} [options.countScripts] - 첨자 개수 집계 객체
+ * @returns {string}
+ */
+function extractDocxBodyText(doc, options = {}) {
+    const { skipEmptyParagraphs = false, countScripts = null } = options;
+    const results = [];
+    const body = doc.getElementsByTagName('w:body')[0];
+    if (!body) return '';
+
+    // body의 직접 자식만 순회 (표 내부 단락 중복 방지)
+    for (const child of body.childNodes) {
+        if (child.nodeName === 'w:p') {
+            const text = extractDocxParagraphText(child, countScripts);
+            if (!skipEmptyParagraphs || text.trim()) {
+                results.push(text);
+            }
+        } else if (child.nodeName === 'w:tbl') {
+            results.push(convertDocxTableToHtml(child, countScripts));
+        }
+    }
+    return results.join('\n');
 }
 
 // ============================================

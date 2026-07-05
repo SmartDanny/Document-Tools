@@ -886,48 +886,18 @@ def fibonacci(n):
         }, { threshold: 0 }).observe(_tabNavEl);
 
         // 단락 개수 계산 헬퍼 (단락번호 추가 기준과 동일한 규칙 적용)
+        // isPatentSectionSubtitle, isClaimsStartLine, isCrossRefLine은 utils.js에서 로드됨
         function countParagraphsInText(text) {
-            function _isSub(line) {
-                const t = line.trim();
-                if (!t) return false;
-                const exact = ['CROSS-REFERENCE TO RELATED APPLICATIONS','BACKGROUND OF THE INVENTION','BACKGROUND',
-                    'SUMMARY OF THE INVENTION','SUMMARY','BRIEF DESCRIPTION OF THE DRAWINGS',
-                    'DETAILED DESCRIPTION OF THE EMBODIMENTS','DETAILED DESCRIPTION OF THE PREFERRED EMBODIMENTS',
-                    'DETAILED DESCRIPTION','DESCRIPTION OF SYMBOLS','Description of Symbols',
-                    '<Description of Symbols>','<DESCRIPTION OF SYMBOLS>','WHAT IS CLAIMED IS:',
-                    'WHAT IS CLAIMED IS','TITLE OF THE INVENTION','ABSTRACT OF DISCLOSURE','ABSTRACT'];
-                if (exact.some(s => t.toUpperCase() === s.toUpperCase())) return true;
-                if (/^【[^】]+】$/.test(t)) return true;
-                if (/^<?\s*Description\s+of\s+Symbols\s*>?$/i.test(t)) return true;
-                if (/^[【\[]표\s*\d+[】\]]$/i.test(t) || /^[【\[]Table\s*\d+[】\]]$/i.test(t)) return true;
-                if (/^[【\[](수학식|화학식|반응식|분자식)\s*\d*[】\]]$/.test(t)) return true;
-                if (/^[【\[](Mathematical|Chemical|Reaction|Molecular)\s*(Formula)?\s*\d*[】\]]$/i.test(t)) return true;
-                if (/^(실시예|실험예|비교예|참고예|제조예|Example|Comparative\s*Example|Reference\s*Example)/i.test(t) && !t.includes('.')) return true;
-                if (/^\([a-zA-Z]\)\s+/.test(t)) return true;
-                if (/^\d+\.\s+[A-Z]/.test(t)) return true;
-                const words = t.split(/\s+/);
-                if (words.length <= 6 && /^[A-Z\s]+$/.test(t) && t.length > 3) return true;
-                return false;
-            }
             const lines = text.split('\n');
-            let stopIdx = -1, crossIdx = -1;
-            for (let i = 0; i < lines.length; i++) {
-                const t = lines[i].trim(), tu = t.toUpperCase();
-                if (tu === 'WHAT IS CLAIMED IS:' || tu === 'WHAT IS CLAIMED IS' ||
-                    t === '【CLAIMS】' || t === '【청구의 범위】' || t === '【청구범위】') { stopIdx = i; break; }
-            }
-            for (let i = 0; i < lines.length; i++) {
-                const tu = lines[i].trim().toUpperCase();
-                if (tu === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || tu === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
-                    tu === 'CROSS REFERENCE TO RELATED APPLICATIONS' || tu === 'CROSS REFERENCE TO RELATED APPLICATION') { crossIdx = i; break; }
-            }
+            const stopIdx = lines.findIndex(isClaimsStartLine);
+            const crossIdx = lines.findIndex(isCrossRefLine);
             let count = 0, inTable = false;
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i], t = line.trim();
                 if (t.startsWith('<table')) inTable = true;
                 if (t.endsWith('</table>')) { inTable = false; continue; }
                 const stopped = (stopIdx >= 0 && i >= stopIdx) || (crossIdx >= 0 && i < crossIdx);
-                if (!stopped && t && !_isSub(line) && !inTable && /[.。]["']?$/.test(t) && !/^\[\d{4,5}\]\s/.test(t)) count++;
+                if (!stopped && t && !isPatentSectionSubtitle(line) && !inTable && /[.。]["']?$/.test(t) && !/^\[\d{4,5}\]\s/.test(t)) count++;
             }
             return count;
         }
@@ -985,117 +955,10 @@ def fibonacci(n):
         });
         
         async function processDocx1(file) {
-            const zip = await JSZip.loadAsync(await file.arrayBuffer());
-            const xml = await zip.file('word/document.xml').async('string');
-            const doc = new DOMParser().parseFromString(xml, 'application/xml');
-            
-            // numbering.xml 파싱
-            let numberingDefs = {};
-            const numberingFile = zip.file('word/numbering.xml');
-            if (numberingFile) {
-                const numXml = await numberingFile.async('string');
-                const numDoc = new DOMParser().parseFromString(numXml, 'application/xml');
-                
-                // abstractNum 정의 파싱
-                const abstractNumDefs = {};
-                for (const absNum of numDoc.getElementsByTagName('w:abstractNum')) {
-                    const absNumId = absNum.getAttribute('w:abstractNumId');
-                    const levels = {};
-                    for (const lvl of absNum.getElementsByTagName('w:lvl')) {
-                        const ilvl = lvl.getAttribute('w:ilvl');
-                        const numFmt = lvl.getElementsByTagName('w:numFmt')[0]?.getAttribute('w:val') || 'decimal';
-                        const lvlText = lvl.getElementsByTagName('w:lvlText')[0]?.getAttribute('w:val') || '%1.';
-                        const start = parseInt(lvl.getElementsByTagName('w:start')[0]?.getAttribute('w:val') || '1');
-                        levels[ilvl] = { numFmt, lvlText, start };
-                    }
-                    abstractNumDefs[absNumId] = levels;
-                }
-                
-                // num -> abstractNum 매핑
-                for (const num of numDoc.getElementsByTagName('w:num')) {
-                    const numId = num.getAttribute('w:numId');
-                    const absNumIdRef = num.getElementsByTagName('w:abstractNumId')[0]?.getAttribute('w:val');
-                    if (absNumIdRef && abstractNumDefs[absNumIdRef]) {
-                        numberingDefs[numId] = JSON.parse(JSON.stringify(abstractNumDefs[absNumIdRef]));
-                        for (const lvl in numberingDefs[numId]) {
-                            numberingDefs[numId][lvl].counter = numberingDefs[numId][lvl].start;
-                        }
-                    }
-                }
-            }
-            
-            // 번호 포맷팅 (단락번호는 4자리 유지)
-            function formatNumber(num, fmt) {
-                switch (fmt) {
-                    case 'decimal': return num.toString().padStart(4, '0');
-                    case 'lowerLetter': return String.fromCharCode(96 + ((num - 1) % 26) + 1);
-                    case 'upperLetter': return String.fromCharCode(64 + ((num - 1) % 26) + 1);
-                    case 'lowerRoman': return toRoman(num).toLowerCase();
-                    case 'upperRoman': return toRoman(num);
-                    default: return num.toString().padStart(4, '0');
-                }
-            }
-            function toRoman(num) {
-                const roman = {M:1000,CM:900,D:500,CD:400,C:100,XC:90,L:50,XL:40,X:10,IX:9,V:5,IV:4,I:1};
-                let str = '';
-                for (let i of Object.keys(roman)) {
-                    let q = Math.floor(num / roman[i]);
-                    num -= q * roman[i];
-                    str += i.repeat(q);
-                }
-                return str;
-            }
-            
-            // 단락에서 텍스트 추출 (첨자 포함)
-            function extractParagraphText(p, countScripts) {
-                let text = '';
-                for (const r of p.getElementsByTagName('w:r')) {
-                    let t = '';
-                    for (const x of r.getElementsByTagName('w:t')) t += x.textContent || '';
-                    if (!t) continue;
-                    const rPr = r.getElementsByTagName('w:rPr')[0];
-                    const va = rPr?.getElementsByTagName('w:vertAlign')[0]?.getAttribute('w:val');
-                    if (va === 'subscript') { text += `<sub>${t}</sub>`; if (countScripts) countScripts.sub++; }
-                    else if (va === 'superscript') { text += `<sup>${t}</sup>`; if (countScripts) countScripts.sup++; }
-                    else text += t;
-                }
-                return text;
-            }
-            
-            // 표를 HTML로 변환
-            function convertTableToHtml(tbl, countScripts) {
-                let html = '<table border="1">';
-                for (const tr of tbl.getElementsByTagName('w:tr')) {
-                    html += '<tr>';
-                    for (const tc of tr.getElementsByTagName('w:tc')) {
-                        // 셀 병합 처리
-                        const tcPr = tc.getElementsByTagName('w:tcPr')[0];
-                        const gridSpan = tcPr?.getElementsByTagName('w:gridSpan')[0]?.getAttribute('w:val');
-                        const vMerge = tcPr?.getElementsByTagName('w:vMerge')[0];
-                        
-                        // vMerge가 있고 val이 없으면 병합된 셀 (continue)
-                        if (vMerge && !vMerge.getAttribute('w:val')) {
-                            continue;
-                        }
-                        
-                        let colspan = gridSpan ? ` colspan="${gridSpan}"` : '';
-                        
-                        // 셀 내용 추출
-                        let cellContent = '';
-                        for (const p of tc.getElementsByTagName('w:p')) {
-                            const pText = extractParagraphText(p, countScripts);
-                            if (cellContent && pText) cellContent += '<br>';
-                            cellContent += pText;
-                        }
-                        html += `<td${colspan}>${cellContent}</td>`;
-                    }
-                    html += '</tr>';
-                }
-                html += '</table>';
-                return html;
-            }
-            
-            let subCount = 0, supCount = 0;
+            // loadDocxDocument, parseDocxNumbering, extractDocxParagraphText, convertDocxTableToHtml은 utils.js에서 로드됨
+            const { zip, doc } = await loadDocxDocument(file);
+            const numberingDefs = await parseDocxNumbering(zip);
+
             const countScripts = { sub: 0, sup: 0 };
             const results = [];
             
@@ -1123,12 +986,12 @@ def fibonacci(n):
                             }
                         }
                         
-                        text += extractParagraphText(child, countScripts);
+                        text += extractDocxParagraphText(child, countScripts);
                         if (text.trim()) results.push(text);
-                        
+
                     } else if (tagName === 'w:tbl') {
                         // 표 처리
-                        const tableHtml = convertTableToHtml(child, countScripts);
+                        const tableHtml = convertDocxTableToHtml(child, countScripts);
                         results.push(tableHtml);
                     }
                 }
@@ -1652,95 +1515,14 @@ def fibonacci(n):
             const textInput1El = document.getElementById('textInput1');
             const currentText = textInput1El.value;
             
-            // 부제목 판별 함수
-            function isSubtitle(line) {
-                const trimmed = line.trim();
-                if (!trimmed) return false;
-                
-                // 정확히 일치하는 부제목들
-                const exactSubtitles = [
-                    'CROSS-REFERENCE TO RELATED APPLICATIONS',
-                    'BACKGROUND OF THE INVENTION',
-                    'BACKGROUND',
-                    'SUMMARY OF THE INVENTION',
-                    'SUMMARY',
-                    'BRIEF DESCRIPTION OF THE DRAWINGS',
-                    'DETAILED DESCRIPTION OF THE EMBODIMENTS',
-                    'DETAILED DESCRIPTION OF THE PREFERRED EMBODIMENTS',
-                    'DETAILED DESCRIPTION',
-                    'DESCRIPTION OF SYMBOLS',
-                    'Description of Symbols',
-                    '<Description of Symbols>',
-                    '<DESCRIPTION OF SYMBOLS>',
-                    'WHAT IS CLAIMED IS:',
-                    'WHAT IS CLAIMED IS',
-                    'TITLE OF THE INVENTION',
-                    'ABSTRACT OF DISCLOSURE',
-                    'ABSTRACT'
-                ];
-                if (exactSubtitles.some(s => trimmed.toUpperCase() === s.toUpperCase() || trimmed === s)) return true;
-                
-                // 【】로 묶인 부제 패턴 (PCT형식 포함)
-                if (/^【[^】]+】$/.test(trimmed)) return true;
-                
-                // <Description of Symbols> 형식 체크
-                if (/^<?\s*Description\s+of\s+Symbols\s*>?$/i.test(trimmed)) return true;
-                
-                // 표 타이틀 패턴: 【표 1】, [표 1], 【Table 1】, [Table 1] 등
-                if (/^[【\[]표\s*\d+[】\]]$/i.test(trimmed)) return true;
-                if (/^[【\[]Table\s*\d+[】\]]$/i.test(trimmed)) return true;
-                
-                // 수학식/화학식/반응식/분자식 등 타이틀 패턴
-                if (/^[【\[](수학식|화학식|반응식|분자식)\s*\d*[】\]]$/.test(trimmed)) return true;
-                if (/^[【\[](Mathematical\s*Formula|Chemical\s*Formula|Reaction\s*Formula|Molecular\s*Formula)\s*\d*[】\]]$/i.test(trimmed)) return true;
-                
-                // 실시예, 실험예 등을 포함하면서 마침표 없이 끝나는 경우
-                if (/^(실시예|실험예|비교예|참고예|제조예|Example|Comparative\s*Example|Reference\s*Example)/i.test(trimmed) && !trimmed.includes('.')) return true;
-                
-                // (a), (b), (c) 등으로 시작하는 부제목
-                if (/^\([a-zA-Z]\)\s+/.test(trimmed)) return true;
-                
-                // 1., 2., 3. 등 숫자로 시작하는 부제목 (숫자. 텍스트 형식)
-                if (/^\d+\.\s+[A-Z]/.test(trimmed)) return true;
-                
-                // 전체가 대문자인 짧은 제목 (단어 수 6개 이하)
-                const words = trimmed.split(/\s+/);
-                if (words.length <= 6 && /^[A-Z\s]+$/.test(trimmed) && trimmed.length > 3) return true;
-                
-                return false;
-            }
-            
-            // 청구항 시작 판별 함수 (종료 지점)
-            function isClaimsStart(line) {
-                const trimmed = line.trim();
-                const upper = trimmed.toUpperCase();
-                // WHAT IS CLAIMED IS: 또는 【CLAIMS】
-                if (upper === 'WHAT IS CLAIMED IS:' || upper === 'WHAT IS CLAIMED IS') return true;
-                if (trimmed === '【CLAIMS】' || trimmed === '【청구의 범위】' || trimmed === '【청구범위】') return true;
-                return false;
-            }
-            
+            // 부제목/청구항/CROSS-REFERENCE 판별 함수는 utils.js에서 로드됨
             const lines = currentText.split('\n');
 
             // CROSS-REFERENCE 시작 위치 찾기 (이전 줄은 단락번호 부여 안함)
-            let crossRefIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-                const t = lines[i].trim().toUpperCase();
-                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
-                    t === 'CROSS REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS REFERENCE TO RELATED APPLICATION') {
-                    crossRefIndex = i;
-                    break;
-                }
-            }
+            const crossRefIndex = lines.findIndex(isCrossRefLine);
 
             // 종료 지점 찾기 (WHAT IS CLAIMED IS: 또는 【CLAIMS】)
-            let stopIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-                if (isClaimsStart(lines[i])) {
-                    stopIndex = i;
-                    break;
-                }
-            }
+            const stopIndex = lines.findIndex(isClaimsStartLine);
 
             let counter = 1;
             let insideTable = false;
@@ -1764,7 +1546,7 @@ def fibonacci(n):
                 let stopNumbering = (stopIndex >= 0 && i >= stopIndex) || (crossRefIndex >= 0 && i < crossRefIndex);
                 
                 // 번호 붙이기 로직 (표 내용에는 번호 부여하지 않음, 마침표로 끝나는 단락만)
-                if (!stopNumbering && trimmed && !isSubtitle(line) && !insideTable && /[.。]["']?$/.test(trimmed)) {
+                if (!stopNumbering && trimmed && !isPatentSectionSubtitle(line) && !insideTable && /[.。]["']?$/.test(trimmed)) {
                     // 이미 단락번호가 있는지 확인 (4~5자리)
                     if (!/^\[\d{4,5}\]\s/.test(trimmed)) {
                         const paraNum = '[' + counter.toString().padStart(4, '0') + '] ';
@@ -2625,58 +2407,14 @@ def fibonacci(n):
                 return;
             }
             
-            // 부제목 판별 함수
-            function isSubtitle2(line) {
-                const trimmed = line.trim();
-                if (!trimmed) return false;
-                
-                // 【】로 묶인 타이틀
-                if (/^【[^】]+】$/.test(trimmed)) return true;
-                
-                // [] 로 묶인 타이틀
-                if (/^\[[^\]]+\]$/.test(trimmed) && trimmed.length <= 30) return true;
-                
-                // 영어 대문자로만 이루어진 부제목
-                const upperCount = (trimmed.match(/[A-Z]/g) || []).length;
-                const lowerCount = (trimmed.match(/[a-z]/g) || []).length;
-                if (upperCount >= 2 && lowerCount === 0 && /^[A-Z0-9\s\-:\/,]+$/.test(trimmed)) return true;
-                
-                // Description of Symbols
-                if (/^<?\s*Description\s+of\s+Symbols\s*>?$/i.test(trimmed)) return true;
-                
-                return false;
-            }
-            
-            // 청구항 시작 판별 함수 (종료 지점)
-            function isClaimsStart2(line) {
-                const trimmed = line.trim();
-                const upper = trimmed.toUpperCase();
-                if (upper === 'WHAT IS CLAIMED IS:' || upper === 'WHAT IS CLAIMED IS') return true;
-                if (trimmed === '【CLAIMS】' || trimmed === '【청구의 범위】' || trimmed === '【청구범위】') return true;
-                return false;
-            }
-            
+            // 부제목/청구항/CROSS-REFERENCE 판별 함수는 utils.js에서 로드됨
             const lines = text.split('\n');
 
             // CROSS-REFERENCE 시작 위치 찾기 (이전 줄은 단락번호 부여 안함)
-            let crossRefIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-                const t = lines[i].trim().toUpperCase();
-                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
-                    t === 'CROSS REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS REFERENCE TO RELATED APPLICATION') {
-                    crossRefIndex = i;
-                    break;
-                }
-            }
+            const crossRefIndex = lines.findIndex(isCrossRefLine);
 
             // 종료 지점 찾기 (WHAT IS CLAIMED IS: 또는 【CLAIMS】)
-            let stopIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-                if (isClaimsStart2(lines[i])) {
-                    stopIndex = i;
-                    break;
-                }
-            }
+            const stopIndex = lines.findIndex(isClaimsStartLine);
 
             let counter = 1;
             let insideTable = false;
@@ -2700,7 +2438,7 @@ def fibonacci(n):
                 let stopNumbering = (stopIndex >= 0 && i >= stopIndex) || (crossRefIndex >= 0 && i < crossRefIndex);
 
                 // 번호 붙이기 로직 (마침표로 끝나는 단락만)
-                if (!stopNumbering && trimmed && !isSubtitle2(line) && !insideTable && /[.。]["']?$/.test(trimmed)) {
+                if (!stopNumbering && trimmed && !isGenericSubtitle(line, { checkSymbols: true }) && !insideTable && /[.。]["']?$/.test(trimmed)) {
                     if (!/^\[\d{4,5}\]\s/.test(trimmed)) {
                         const paraNum = '[' + counter.toString().padStart(4, '0') + '] ';
                         resultLines.push(paraNum + line);
@@ -2893,83 +2631,10 @@ def fibonacci(n):
             } catch (e) { msg.textContent = '❌ 오류: ' + e.message; msg.className = 'message error'; }
         }
         
-        // 탭3 - 워드 파일에서 텍스트 추출
+        // 탭3 - 워드 파일에서 텍스트 추출 (첨자/표 포함, 공통 함수는 utils.js에서 로드됨)
         async function extractTextFromDocx3(file) {
-            const zip = await JSZip.loadAsync(await file.arrayBuffer());
-            const xml = await zip.file('word/document.xml').async('string');
-            const doc = new DOMParser().parseFromString(xml, 'application/xml');
-            
-            // 단락에서 텍스트 추출 (첨자 포함)
-            function extractParagraphText(p) {
-                let text = '';
-                for (const r of p.getElementsByTagName('w:r')) {
-                    let t = '';
-                    for (const x of r.getElementsByTagName('w:t')) t += x.textContent || '';
-                    if (!t) continue;
-                    const rPr = r.getElementsByTagName('w:rPr')[0];
-                    const va = rPr?.getElementsByTagName('w:vertAlign')[0]?.getAttribute('w:val');
-                    if (va === 'subscript') { 
-                        text += `<sub>${t}</sub>`; 
-                    } else if (va === 'superscript') { 
-                        text += `<sup>${t}</sup>`; 
-                    } else {
-                        text += t;
-                    }
-                }
-                return text;
-            }
-            
-            // 표를 HTML로 변환
-            function convertTableToHtml(tbl) {
-                let html = '<table border="1">';
-                for (const tr of tbl.getElementsByTagName('w:tr')) {
-                    html += '<tr>';
-                    for (const tc of tr.getElementsByTagName('w:tc')) {
-                        // 셀 병합 처리
-                        const tcPr = tc.getElementsByTagName('w:tcPr')[0];
-                        const gridSpan = tcPr?.getElementsByTagName('w:gridSpan')[0]?.getAttribute('w:val');
-                        const vMerge = tcPr?.getElementsByTagName('w:vMerge')[0];
-                        
-                        // vMerge가 있고 val이 없으면 병합된 셀 (continue)
-                        if (vMerge && !vMerge.getAttribute('w:val')) {
-                            continue;
-                        }
-                        
-                        let colspan = gridSpan ? ` colspan="${gridSpan}"` : '';
-                        
-                        // 셀 내용 추출
-                        let cellContent = '';
-                        for (const p of tc.getElementsByTagName('w:p')) {
-                            const pText = extractParagraphText(p);
-                            if (cellContent && pText) cellContent += '<br>';
-                            cellContent += pText;
-                        }
-                        html += `<td${colspan}>${cellContent}</td>`;
-                    }
-                    html += '</tr>';
-                }
-                html += '</table>';
-                return html;
-            }
-            
-            const results = [];
-            const body = doc.getElementsByTagName('w:body')[0];
-            if (!body) return '';
-            
-            // body의 직접 자식만 순회 (표 내부 단락 중복 방지)
-            for (const child of body.childNodes) {
-                if (child.nodeName === 'w:p') {
-                    // 일반 단락
-                    const text = extractParagraphText(child);
-                    results.push(text);
-                } else if (child.nodeName === 'w:tbl') {
-                    // 표
-                    const tableHtml = convertTableToHtml(child);
-                    results.push(tableHtml);
-                }
-            }
-            
-            return results.join('\n');
+            const { doc } = await loadDocxDocument(file);
+            return extractDocxBodyText(doc);
         }
         
         // 탭3 - 파일 처리 공통 함수
@@ -4246,58 +3911,17 @@ def fibonacci(n):
         }
         
         // 텍스트에 단락번호 추가 (공통 함수)
+        // 부제목/청구항/CROSS-REFERENCE 판별 함수는 utils.js에서 로드됨
         function addParagraphNumbersToText(text) {
-            // 부제목 판별 함수
-            function isSubtitle(line) {
-                const trimmed = line.trim();
-                if (!trimmed) return false;
-                
-                // 【】로 묶인 타이틀
-                if (/^【[^】]+】$/.test(trimmed)) return true;
-                
-                // [] 로 묶인 타이틀
-                if (/^\[[^\]]+\]$/.test(trimmed) && trimmed.length <= 30) return true;
-                
-                // 영어 대문자로만 이루어진 부제목
-                const upperCount = (trimmed.match(/[A-Z]/g) || []).length;
-                const lowerCount = (trimmed.match(/[a-z]/g) || []).length;
-                if (upperCount >= 2 && lowerCount === 0 && /^[A-Z0-9\s\-:\/,]+$/.test(trimmed)) return true;
-                
-                return false;
-            }
-            
-            // 청구항 시작 판별 함수 (종료 지점)
-            function isClaimsStart(line) {
-                const trimmed = line.trim();
-                const upper = trimmed.toUpperCase();
-                if (upper === 'WHAT IS CLAIMED IS:' || upper === 'WHAT IS CLAIMED IS') return true;
-                if (trimmed === '【CLAIMS】' || trimmed === '【청구의 범위】' || trimmed === '【청구범위】') return true;
-                return false;
-            }
-            
             const lines = text.split('\n');
             let counter = 1;
-            let stopIndex = -1;
             let insideTable = false;
 
             // CROSS-REFERENCE 시작 위치 찾기 (이전 줄은 단락번호 부여 안함)
-            let crossRefIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-                const t = lines[i].trim().toUpperCase();
-                if (t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
-                    t === 'CROSS REFERENCE TO RELATED APPLICATIONS' || t === 'CROSS REFERENCE TO RELATED APPLICATION') {
-                    crossRefIndex = i;
-                    break;
-                }
-            }
+            const crossRefIndex = lines.findIndex(isCrossRefLine);
 
             // 청구항 시작 위치 찾기
-            for (let i = 0; i < lines.length; i++) {
-                if (isClaimsStart(lines[i])) {
-                    stopIndex = i;
-                    break;
-                }
-            }
+            const stopIndex = lines.findIndex(isClaimsStartLine);
 
             const resultLines = [];
             for (let i = 0; i < lines.length; i++) {
@@ -4316,7 +3940,7 @@ def fibonacci(n):
                 let stopNumbering = (stopIndex >= 0 && i >= stopIndex) || (crossRefIndex >= 0 && i < crossRefIndex);
                 
                 // 번호 붙이기 로직 (마침표로 끝나는 단락만)
-                if (!stopNumbering && trimmed && !isSubtitle(line) && !insideTable && /[.。]["']?$/.test(trimmed)) {
+                if (!stopNumbering && trimmed && !isGenericSubtitle(line) && !insideTable && /[.。]["']?$/.test(trimmed)) {
                     if (!/^\[\d{4,5}\]\s/.test(trimmed)) {
                         const paraNum = '[' + counter.toString().padStart(4, '0') + '] ';
                         resultLines.push(paraNum + line);
@@ -4461,29 +4085,9 @@ def fibonacci(n):
         async function generateDocxUSPatent(text, filename) {
             const zip = new JSZip();
 
-            // === 부제목/청구항 판별 헬퍼 ===
+            // === 부제목/청구항 판별 헬퍼 (utils.js의 공통 판별 함수 사용) ===
             function isSubtitleLine(line) {
-                const t = line.trim();
-                if (!t) return false;
-                if (/^【[^】]+】$/.test(t)) return true;
-                if (/^\[[^\]]+\]$/.test(t) && t.length <= 30) return true;
-                const uc = (t.match(/[A-Z]/g)||[]).length;
-                const lc = (t.match(/[a-z]/g)||[]).length;
-                if (uc >= 2 && lc === 0 && /^[A-Z0-9\s\-:\/,]+$/.test(t)) return true;
-                if (/^<?\s*Description\s+of\s+Symbols\s*>?$/i.test(t)) return true;
-                if (/^\d+\.\s+[A-Z]/.test(t) && t.length <= 60 && !/\.$/.test(t)) return true;
-                return false;
-            }
-
-            function isClaimsStartLine(line) {
-                const t = line.trim().toUpperCase();
-                return t === 'WHAT IS CLAIMED IS:' || t === 'WHAT IS CLAIMED IS';
-            }
-
-            function isCrossRefBefore(line) {
-                const t = line.trim().toUpperCase();
-                return t === 'CROSS-REFERENCE TO RELATED APPLICATIONS' ||
-                       t === 'CROSS-REFERENCE TO RELATED APPLICATION';
+                return isGenericSubtitle(line, { checkSymbols: true, checkNumberedHeading: true });
             }
 
             function stripTextParagraphNumber(line) {
@@ -4543,10 +4147,7 @@ def fibonacci(n):
             let inAbstract = false;
             let inTable = false;
 
-            let crossRefIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-                if (isCrossRefBefore(lines[i])) { crossRefIndex = i; break; }
-            }
+            const crossRefIndex = lines.findIndex(isCrossRefLine);
 
             for (let i = 0; i < lines.length; i++) {
                 const para = lines[i];
@@ -5373,78 +4974,10 @@ def fibonacci(n):
             }
         }
         
-        // 간단한 텍스트 추출 함수 (첨자, 표 포함)
+        // 간단한 텍스트 추출 함수 (첨자, 표 포함 / 빈 단락 제외)
         async function extractTextFromDocx3Simple(file) {
-            const zip = await JSZip.loadAsync(await file.arrayBuffer());
-            const xml = await zip.file('word/document.xml').async('string');
-            const doc = new DOMParser().parseFromString(xml, 'application/xml');
-            
-            // 단락에서 텍스트 추출 (첨자 포함)
-            function extractParagraphText(p) {
-                let text = '';
-                for (const r of p.getElementsByTagName('w:r')) {
-                    let t = '';
-                    for (const x of r.getElementsByTagName('w:t')) t += x.textContent || '';
-                    if (!t) continue;
-                    const rPr = r.getElementsByTagName('w:rPr')[0];
-                    const va = rPr?.getElementsByTagName('w:vertAlign')[0]?.getAttribute('w:val');
-                    if (va === 'subscript') { 
-                        text += `<sub>${t}</sub>`; 
-                    } else if (va === 'superscript') { 
-                        text += `<sup>${t}</sup>`; 
-                    } else {
-                        text += t;
-                    }
-                }
-                return text;
-            }
-            
-            // 표를 HTML로 변환
-            function convertTableToHtml(tbl) {
-                let html = '<table border="1">';
-                for (const tr of tbl.getElementsByTagName('w:tr')) {
-                    html += '<tr>';
-                    for (const tc of tr.getElementsByTagName('w:tc')) {
-                        const tcPr = tc.getElementsByTagName('w:tcPr')[0];
-                        const gridSpan = tcPr?.getElementsByTagName('w:gridSpan')[0]?.getAttribute('w:val');
-                        const vMerge = tcPr?.getElementsByTagName('w:vMerge')[0];
-                        
-                        if (vMerge && !vMerge.getAttribute('w:val')) {
-                            continue;
-                        }
-                        
-                        let colspan = gridSpan ? ` colspan="${gridSpan}"` : '';
-                        let cellContent = '';
-                        for (const p of tc.getElementsByTagName('w:p')) {
-                            const pText = extractParagraphText(p);
-                            if (cellContent && pText) cellContent += '<br>';
-                            cellContent += pText;
-                        }
-                        html += `<td${colspan}>${cellContent}</td>`;
-                    }
-                    html += '</tr>';
-                }
-                html += '</table>';
-                return html;
-            }
-            
-            const results = [];
-            const body = doc.getElementsByTagName('w:body')[0];
-            if (!body) return '';
-            
-            for (const child of body.childNodes) {
-                if (child.nodeName === 'w:p') {
-                    const text = extractParagraphText(child);
-                    if (text.trim()) {
-                        results.push(text);
-                    }
-                } else if (child.nodeName === 'w:tbl') {
-                    const tableHtml = convertTableToHtml(child);
-                    results.push(tableHtml);
-                }
-            }
-            
-            return results.join('\n');
+            const { doc } = await loadDocxDocument(file);
+            return extractDocxBodyText(doc, { skipEmptyParagraphs: true });
         }
         
         // 파일 선택 이벤트
@@ -6233,70 +5766,14 @@ ${bodyContent}
         
         // 탭4 - 워드 파일에서 텍스트 추출 (번호 매기기 포함)
         async function extractTextFromDocx4(file) {
-            const zip = await JSZip.loadAsync(await file.arrayBuffer());
-            const xml = await zip.file('word/document.xml').async('string');
-            const doc = new DOMParser().parseFromString(xml, 'application/xml');
-            
-            // numbering.xml 파싱
-            let numberingDefs = {};
-            const numberingFile = zip.file('word/numbering.xml');
-            if (numberingFile) {
-                const numXml = await numberingFile.async('string');
-                const numDoc = new DOMParser().parseFromString(numXml, 'application/xml');
-                
-                // abstractNum 정의 읽기
-                const abstractNums = {};
-                for (const abs of numDoc.getElementsByTagName('w:abstractNum')) {
-                    const absId = abs.getAttribute('w:abstractNumId');
-                    abstractNums[absId] = {};
-                    for (const lvl of abs.getElementsByTagName('w:lvl')) {
-                        const ilvl = lvl.getAttribute('w:ilvl');
-                        const numFmt = lvl.getElementsByTagName('w:numFmt')[0]?.getAttribute('w:val') || 'decimal';
-                        const lvlText = lvl.getElementsByTagName('w:lvlText')[0]?.getAttribute('w:val') || '%1.';
-                        const start = parseInt(lvl.getElementsByTagName('w:start')[0]?.getAttribute('w:val') || '1');
-                        abstractNums[absId][ilvl] = { numFmt, lvlText, start, counter: start };
-                    }
-                }
-                
-                // num -> abstractNum 매핑
-                for (const num of numDoc.getElementsByTagName('w:num')) {
-                    const numId = num.getAttribute('w:numId');
-                    const absIdRef = num.getElementsByTagName('w:abstractNumId')[0]?.getAttribute('w:val');
-                    if (absIdRef && abstractNums[absIdRef]) {
-                        numberingDefs[numId] = {};
-                        for (const ilvl in abstractNums[absIdRef]) {
-                            numberingDefs[numId][ilvl] = { ...abstractNums[absIdRef][ilvl] };
-                        }
-                    }
-                }
-            }
-            
-            // 번호 포맷팅 함수
-            function formatNumber(num, fmt) {
-                if (fmt === 'decimal') return num.toString();
-                if (fmt === 'decimalZero') return num.toString().padStart(2, '0'); // 01, 02, ..., 10, 11, ...
-                if (fmt === 'lowerLetter') return String.fromCharCode(96 + ((num - 1) % 26) + 1);
-                if (fmt === 'upperLetter') return String.fromCharCode(64 + ((num - 1) % 26) + 1);
-                if (fmt === 'lowerRoman') return toRoman(num).toLowerCase();
-                if (fmt === 'upperRoman') return toRoman(num);
-                if (fmt === 'koreanCounting') return num.toString();
-                return num.toString();
-            }
-            function toRoman(num) {
-                const roman = {M:1000,CM:900,D:500,CD:400,C:100,XC:90,L:50,XL:40,X:10,IX:9,V:5,IV:4,I:1};
-                let str = '';
-                for (let i of Object.keys(roman)) {
-                    let q = Math.floor(num / roman[i]);
-                    num -= q * roman[i];
-                    str += i.repeat(q);
-                }
-                return str;
-            }
-            
+            // loadDocxDocument, parseDocxNumbering, formatNumber, extractDocxPlainText는 utils.js에서 로드됨
+            const { zip, doc } = await loadDocxDocument(file);
+            const numberingDefs = await parseDocxNumbering(zip);
+
             const paras = [];
             for (const p of doc.getElementsByTagName('w:p')) {
                 let text = '';
-                
+
                 // 단락 번호 처리
                 const pPr = p.getElementsByTagName('w:pPr')[0];
                 const numPr = pPr?.getElementsByTagName('w:numPr')[0];
@@ -6312,12 +5789,8 @@ ${bodyContent}
                         lvlDef.counter++;
                     }
                 }
-                
-                for (const r of p.getElementsByTagName('w:r')) {
-                    for (const t of r.getElementsByTagName('w:t')) {
-                        text += t.textContent || '';
-                    }
-                }
+
+                text += extractDocxPlainText(p);
                 paras.push(text);
             }
             return paras.join('\n');
@@ -6688,19 +6161,10 @@ ${bodyContent}
         
         // DOCX 파일에서 텍스트 추출 (단락별)
         async function extractParagraphsFromDocx(file) {
-            const zip = await JSZip.loadAsync(await file.arrayBuffer());
-            const xml = await zip.file('word/document.xml').async('string');
-            const doc = new DOMParser().parseFromString(xml, 'application/xml');
+            const { zip, xml, doc } = await loadDocxDocument(file);
             const paragraphs = [];
-            
             for (const p of doc.getElementsByTagName('w:p')) {
-                let text = '';
-                for (const r of p.getElementsByTagName('w:r')) {
-                    for (const t of r.getElementsByTagName('w:t')) {
-                        text += t.textContent || '';
-                    }
-                }
-                paragraphs.push(text);
+                paragraphs.push(extractDocxPlainText(p));
             }
             return { paragraphs, zip, xml };
         }
