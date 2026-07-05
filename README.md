@@ -35,13 +35,13 @@
 
 ### 방법 1: 직접 실행
 1. 저장소를 클론하거나 파일을 다운로드합니다.
-2. 세 파일을 같은 폴더에 저장합니다.
-3. `document_tools.html`을 웹 브라우저로 엽니다.
+2. 폴더 구조를 유지한 채 저장합니다.
+3. `index.html`을 웹 브라우저로 엽니다.
 
 ```bash
 git clone https://github.com/[username]/document-tools.git
 cd document-tools
-# document_tools.html을 브라우저로 열기
+# index.html을 브라우저로 열기
 ```
 
 ### 방법 2: 웹 서버 사용
@@ -49,17 +49,28 @@ cd document-tools
 # Python 간이 서버
 python -m http.server 8000
 
-# 브라우저에서 http://localhost:8000/document_tools.html 접속
+# 브라우저에서 http://localhost:8000/index.html 접속
 ```
 
 ## 📁 파일 구조
 
 ```
 document-tools/
-├── document_tools.html   # 메인 HTML 파일
-├── styles.css            # 스타일시트
-├── utils.js              # 공통 유틸리티 함수
-└── README.md             # 이 파일
+├── index.html               # 메인 HTML (UI 마크업 + 스크립트 로드)
+├── styles.css               # 스타일시트
+├── utils.js                 # 공통 유틸리티 (이스케이프, diff, DOCX 파싱/판별)
+├── js/
+│   ├── app-core.js          # 공통 UI (탭 전환, 플로팅 탭 바, 우선권 모달)
+│   ├── tab1-preprocess.js   # 탭1: 전처리 (DOCX → HTML)
+│   ├── tab2-postprocess.js  # 탭2: 후처리 (HTML → DOCX)
+│   ├── tab3-bilingual.js    # 탭3: 한영혼합본 추출/색변환/DOCX 생성
+│   ├── tab3-merge.js        # 탭3: 한영혼합본 병합
+│   ├── tab4-compare.js      # 탭4: 문서 비교 (텍스트/DOCX Track-Changes)
+│   ├── tab5-mdpdf.js        # 탭5: Markdown to PDF
+│   └── stat-nav.js          # 첨자/표 통계 카드 내비게이션 (공용)
+├── generate_template.js     # US 특허 템플릿 생성 스크립트 (Node.js)
+├── US_patent_template.docx  # 생성된 US 특허 템플릿
+└── README.md                # 이 파일
 ```
 
 ## 🛠 기술 스택
