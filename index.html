@@ -575,8 +575,10 @@
                     <span><strong>비교 조건:</strong> 폰트, 단락 형식 등 서식은 무시하고 <strong>문자 내용만</strong> 비교합니다. 단락번호([0001] 등), 앞뒤 공백, <strong>빈줄</strong>은 자동 제거 후 비교됩니다.</span>
                 </div>
                 <div class="btn-group">
+                    <button class="btn btn-primary" onclick="standardizeFormat4Text()">📐 양식표준화</button>
                     <button class="btn btn-primary" onclick="compareDocuments()">🔍 문서 비교</button>
                 </div>
+                <div id="formatMessage4" class="message hidden"></div>
                 <div id="compare4Section" class="section hidden">
                     <div class="section-title">3단계: 비교 결과</div>
                     <div class="stats-row">
@@ -646,6 +648,7 @@
                         <span>.docx</span>
                     </div>
                     <div class="btn-group">
+                        <button class="btn btn-primary" onclick="standardizeFormat4Docx()">📐 양식표준화</button>
                         <button class="btn btn-primary" onclick="compareDocxFiles()">🔍 DOCX 비교 및 다운로드</button>
                     </div>
                     <div id="docxCompareMessage" class="message hidden"></div>

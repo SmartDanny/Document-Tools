@@ -317,6 +317,28 @@ const server = http.createServer((req, res) => {
                 assert('비교: 수정본 styles 유지', cs.includes('w:after="0"'));
             }
 
+            // 탭4 양식표준화 (텍스트 비교) - 다른 탭과 동일 규칙
+            document.getElementById('inputText4a').value =
+                'Intro line\nBACKGROUND\nWHAT IS CLAIMED IS:\n1. A sensor device.\nSecond claim line.';
+            document.getElementById('inputText4b').value = '';
+            standardizeFormat4Text();
+            const stdText = document.getElementById('inputText4a').value;
+            assert('탭4 텍스트 양식표준화', stdText.includes('Intro line\n\nBACKGROUND') &&
+                stdText.includes('<pagebreak/>\nWHAT IS CLAIMED IS:\n') &&
+                stdText.includes('1.\tA sensor device.'), stdText);
+
+            // 탭4 양식표준화 (DOCX 비교) - DOM 버전 동일 규칙
+            const fileStd = await makeComparePkg('<w:p><w:r><w:t>Intro line.</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t xml:space="preserve">BACKGROUND   </w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>WHAT IS CLAIMED IS:</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>1. A sensor device.</w:t></w:r></w:p>');
+            docxDataA = await loadDocxForCompare(fileStd);
+            docxDataB = null;
+            standardizeFormat4Docx();
+            const stdBlocks = docxDataA.blocks.map(b => b.text);
+            assert('탭4 DOCX 양식표준화', JSON.stringify(stdBlocks) === JSON.stringify(
+                ['Intro line.', '', 'BACKGROUND', '\n', 'WHAT IS CLAIMED IS:', '', '1.\tA sensor device.']), stdBlocks);
+
             // 텍스트 비교 내보내기 결과 검증
             if (captured[4]) {
                 const zt = await JSZip.loadAsync(captured[4].blob);

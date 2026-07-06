@@ -348,21 +348,27 @@
                 return (item && item.origText) || d.textB || '';
             };
 
+            // 페이지 나누기 마커는 실제 페이지 나누기로 변환 (다른 탭의 DOCX 생성과 동일)
+            const lineRunsXml = (text, isDel) => {
+                if (text.trim() === '<pagebreak/>') return '<w:r><w:br w:type="page"/></w:r>';
+                return segsToRunsXml([{ text, rPr: '' }], isDel);
+            };
+
             let bodyContent = '';
             diff.forEach(d => {
                 if (d.type === 'same') {
-                    bodyContent += '<w:p>' + segsToRunsXml([{ text: origB(d), rPr: '' }], false) + '</w:p>';
+                    bodyContent += '<w:p>' + lineRunsXml(origB(d), false) + '</w:p>';
                 } else if (d.type === 'modified') {
                     const ops = diffTokenLists(tokensFromPlainText(origA(d)), tokensFromPlainText(origB(d)));
                     bodyContent += '<w:p>' + emitTrackedOps(ops, ctx) + '</w:p>';
                 } else if (d.type === 'added') {
                     // 단락 기호도 삽입으로 표시하여 거부 시 단락 자체가 사라지도록 함
                     bodyContent += `<w:p><w:pPr><w:rPr><w:ins w:id="${ctx.nextId()}" w:author="${ctx.author}" w:date="${ctx.dateStr}"/></w:rPr></w:pPr>`
-                        + `<w:ins w:id="${ctx.nextId()}" w:author="${ctx.author}" w:date="${ctx.dateStr}">${segsToRunsXml([{ text: origB(d), rPr: '' }], false)}</w:ins></w:p>`;
+                        + `<w:ins w:id="${ctx.nextId()}" w:author="${ctx.author}" w:date="${ctx.dateStr}">${lineRunsXml(origB(d), false)}</w:ins></w:p>`;
                 } else if (d.type === 'deleted') {
                     // 단락 기호도 삭제로 표시하여 수락 시 단락 자체가 사라지도록 함
                     bodyContent += `<w:p><w:pPr><w:rPr><w:del w:id="${ctx.nextId()}" w:author="${ctx.author}" w:date="${ctx.dateStr}"/></w:rPr></w:pPr>`
-                        + `<w:del w:id="${ctx.nextId()}" w:author="${ctx.author}" w:date="${ctx.dateStr}">${segsToRunsXml([{ text: origA(d), rPr: '' }], true)}</w:del></w:p>`;
+                        + `<w:del w:id="${ctx.nextId()}" w:author="${ctx.author}" w:date="${ctx.dateStr}">${lineRunsXml(origA(d), true)}</w:del></w:p>`;
                 }
             });
 
@@ -370,9 +376,40 @@
             await downloadTrackChangeDocx(bodyContent, fileName);
         }
 
+        // 텍스트 비교 - 양식표준화 (다른 탭과 동일한 공통 규칙을 문서1/문서2에 적용)
+        function standardizeFormat4Text() {
+            const msg = document.getElementById('formatMessage4');
+            msg.classList.add('hidden');
+
+            const elA = document.getElementById('inputText4a');
+            const elB = document.getElementById('inputText4b');
+            if (!elA.value.trim() && !elB.value.trim()) {
+                showMessage(msg, '❌ 먼저 텍스트를 입력해주세요.', 'error');
+                return;
+            }
+
+            const parts = [];
+            let total = 0;
+            [['문서1', elA], ['문서2', elB]].forEach(([label, el]) => {
+                if (!el.value.trim()) return;
+                const result = applyFormatStandardization(el.value); // 공통 로직 (tab2-postprocess.js)
+                el.value = result.text;
+                parts.push(`${label} ${result.changeCount}개`);
+                total += result.changeCount;
+            });
+
+            if (total === 0) {
+                showMessage(msg, '❌ 적용할 양식 변경이 없습니다.', 'error');
+                return;
+            }
+            showMessage(msg, `✅ 양식표준화 완료! (${parts.join(', ')} 변경 적용)`, 'success');
+            setTimeout(() => msg.classList.add('hidden'), 3000);
+        }
+
         function clearAll4() {
             if (!confirm('모든 내용을 지우시겠습니까?')) return;
             lastTextDiff4 = null;
+            document.getElementById('formatMessage4').classList.add('hidden');
             document.getElementById('inputText4a').value = '';
             document.getElementById('inputText4b').value = '';
             document.getElementById('fileName4a').textContent = '또는 아래에 .docx 파일을 드래그하세요';
@@ -708,7 +745,159 @@ ${bodyContent}
         // 드래그 앤 드롭 이벤트 (수정본)
         const docxPreview4b = document.getElementById('docxPreview4b');
         setupDropZone(docxPreview4b, handleDocxFile4b, { clickOpensInput: 'fileInputDocx4b' }); // 드래그 앤 드롭 + 클릭 열기 (utils.js)
-        
+
+        // ===== DOCX 양식표준화 (applyFormatStandardization과 동일 규칙의 DOM 버전) =====
+
+        function makeEmptyParagraph(doc) {
+            return doc.createElementNS(DOCX_W_NS, 'w:p');
+        }
+
+        function makePageBreakParagraph(doc) {
+            const p = doc.createElementNS(DOCX_W_NS, 'w:p');
+            const r = doc.createElementNS(DOCX_W_NS, 'w:r');
+            const br = doc.createElementNS(DOCX_W_NS, 'w:br');
+            br.setAttributeNS(DOCX_W_NS, 'w:type', 'page');
+            r.appendChild(br);
+            p.appendChild(r);
+            return p;
+        }
+
+        // 단락 끝 공백 제거 (w:t 텍스트를 뒤에서부터 정리)
+        function stripParagraphTrailingSpaces(p) {
+            const texts = Array.from(p.getElementsByTagName('w:t'));
+            let changed = false;
+            for (let i = texts.length - 1; i >= 0; i--) {
+                const t = texts[i];
+                const stripped = (t.textContent || '').replace(/\s+$/, '');
+                if (stripped !== t.textContent) { t.textContent = stripped; changed = true; }
+                if (stripped !== '') break; // 더 이상 단락 끝 공백이 아님
+            }
+            return changed;
+        }
+
+        // 청구항 번호(X.)와 첫 단어 사이에 탭 삽입
+        function insertClaimNumberTab(p, doc) {
+            const texts = Array.from(p.getElementsByTagName('w:t'));
+            if (!texts.length) return false;
+            const t0 = texts[0];
+            const m = (t0.textContent || '').match(/^(\s*\d+\.)([\s\S]*)$/);
+            if (!m) return false;
+            // 이미 번호 바로 뒤에 탭 요소가 있으면 유지
+            if (!m[2] && t0.nextSibling && t0.nextSibling.nodeName === 'w:tab') return false;
+            const rest = m[2].replace(/^[ \t]*/, '');
+            t0.textContent = m[1];
+            const tab = doc.createElementNS(DOCX_W_NS, 'w:tab');
+            t0.parentNode.insertBefore(tab, t0.nextSibling);
+            if (rest) {
+                const nt = doc.createElementNS(DOCX_W_NS, 'w:t');
+                nt.setAttributeNS(XML_SPACE_NS, 'xml:space', 'preserve');
+                nt.textContent = rest;
+                t0.parentNode.insertBefore(nt, tab.nextSibling);
+            } else if (texts[1]) {
+                texts[1].textContent = (texts[1].textContent || '').replace(/^[ \t]*/, '');
+            }
+            return true;
+        }
+
+        // DOCX 문서에 양식표준화 규칙 적용 (텍스트 양식표준화와 동일 규칙/순서)
+        function applyFormatStandardizationToDoc(doc) {
+            const body = doc.getElementsByTagName('w:body')[0];
+            if (!body) return 0;
+            let changeCount = 0;
+
+            const blocks = [];
+            for (const c of body.childNodes) {
+                if (c.nodeName === 'w:p' || c.nodeName === 'w:tbl') blocks.push(c);
+            }
+
+            // 1단계: 단락 뒤 불필요한 공백 제거
+            for (const node of blocks) {
+                if (node.nodeName === 'w:p' && getBlockText(node).trim() && stripParagraphTrailingSpaces(node)) {
+                    changeCount++;
+                }
+            }
+
+            // 2단계: 양식표준화 규칙 적용
+            let inClaims = false;
+            const isNonEmpty = (node) => node.nodeName === 'w:tbl' || getBlockText(node).trim() !== '';
+
+            for (let i = 0; i < blocks.length; i++) {
+                const node = blocks[i];
+                if (node.nodeName !== 'w:p') continue;
+                const trimmed = getBlockText(node).trim();
+                const upper = trimmed.toUpperCase();
+
+                // CROSS-REFERENCE / BACKGROUND 앞에 빈 단락 추가
+                if (upper === 'CROSS-REFERENCE TO RELATED APPLICATIONS' || upper === 'CROSS-REFERENCE TO RELATED APPLICATION' ||
+                    upper === 'BACKGROUND' || upper === 'BACKGROUND OF THE INVENTION') {
+                    if (i > 0 && isNonEmpty(blocks[i - 1])) {
+                        body.insertBefore(makeEmptyParagraph(doc), node);
+                        changeCount++;
+                    }
+                    continue;
+                }
+
+                // WHAT IS CLAIMED IS: 앞에 페이지 나누기, 다음에 빈 단락 추가
+                if (upper === 'WHAT IS CLAIMED IS:' || upper === 'WHAT IS CLAIMED IS') {
+                    body.insertBefore(makePageBreakParagraph(doc), node);
+                    body.insertBefore(makeEmptyParagraph(doc), node.nextSibling);
+                    inClaims = true;
+                    changeCount++;
+                    continue;
+                }
+
+                // ABSTRACT 앞에 페이지 나누기
+                if (upper === 'ABSTRACT' || upper === 'ABSTRACT OF DISCLOSURE') {
+                    body.insertBefore(makePageBreakParagraph(doc), node);
+                    inClaims = false;
+                    changeCount++;
+                    continue;
+                }
+
+                // 청구항 구간: 번호 뒤 탭 삽입 + 마침표로 끝나는 영문 단락 다음 빈 단락 추가
+                if (inClaims) {
+                    const isKorean = /[가-힣]/.test(trimmed);
+                    if (!isKorean && /^\d+\./.test(trimmed) && insertClaimNumberTab(node, doc)) {
+                        changeCount++;
+                    }
+                    if (!isKorean && /\.\s*$/.test(trimmed) && i + 1 < blocks.length && isNonEmpty(blocks[i + 1])) {
+                        body.insertBefore(makeEmptyParagraph(doc), node.nextSibling);
+                        changeCount++;
+                    }
+                }
+            }
+            return changeCount;
+        }
+
+        // DOCX 비교 - 양식표준화 (업로드된 원본/수정본에 동일 규칙 적용)
+        function standardizeFormat4Docx() {
+            const msg = document.getElementById('docxCompareMessage');
+            msg.classList.add('hidden');
+
+            if (!docxDataA && !docxDataB) {
+                showMessage(msg, '❌ 먼저 DOCX 파일을 업로드해주세요.', 'error');
+                return;
+            }
+
+            const parts = [];
+            let total = 0;
+            [['원본', docxDataA, 'docxPreview4a'], ['수정본', docxDataB, 'docxPreview4b']].forEach(([label, data, previewId]) => {
+                if (!data) return;
+                const count = applyFormatStandardizationToDoc(data.doc);
+                data.blocks = getBodyBlocks(data.doc); // 블록 목록 갱신
+                const texts = data.blocks.map(b => b.text).filter(t => t.trim());
+                document.getElementById(previewId).value = texts.slice(0, 10).join('\n') + (texts.length > 10 ? '\n...' : '');
+                parts.push(`${label} ${count}개`);
+                total += count;
+            });
+
+            if (total === 0) {
+                showMessage(msg, '❌ 적용할 양식 변경이 없습니다.', 'error');
+                return;
+            }
+            showMessage(msg, `✅ 양식표준화 완료! (${parts.join(', ')} 변경 적용) 이제 'DOCX 비교 및 다운로드'를 실행하세요.`, 'success');
+        }
+
         // 단락 비교를 위한 개선된 알고리즘
         // calculateSimilarity는 utils.js에서 로드됨
 
