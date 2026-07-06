@@ -207,9 +207,10 @@ const server = http.createServer((req, res) => {
             const t4 = await extractTextFromDocx4(file);
             assert('extractTextFromDocx4', t4.includes('[0001] Numbered para.'), t4);
 
-            // extractParagraphsFromDocx
-            const p4 = await extractParagraphsFromDocx(file);
-            assert('extractParagraphsFromDocx', p4.paragraphs.length === 6 && p4.paragraphs[0] === 'Hello 2 world', p4.paragraphs);
+            // loadDocxForCompare (body 직접 자식 블록: 단락 3 + 표 1, 빈 단락 유지)
+            const p4 = await loadDocxForCompare(file);
+            assert('loadDocxForCompare', p4.blocks.length === 4 && p4.blocks[0].text === 'Hello 2 world' &&
+                p4.blocks[1].text === '' && p4.blocks[3].kind === 'tbl', p4.blocks.map(b => ({ kind: b.kind, text: b.text })));
         } else {
             out['DOCX 테스트'] = 'SKIP (JSZip CDN 로드 실패)';
         }
@@ -233,14 +234,56 @@ const server = http.createServer((req, res) => {
                 'A device comprising a sensor.'
             ].join('\n'), 'us.docx');
 
-            // 문서비교 Track-Changes DOCX
-            docxDataA = { paragraphs: ['same paragraph.', 'old text here.'], zip: null, xml: '' };
-            docxDataB = { paragraphs: ['same paragraph.', 'new text here.'], zip: null, xml: '' };
+            // 문서비교 Track-Changes DOCX (수정본 패키지 기반, 서식/빈줄/표 보존)
+            const makeComparePkg = async (bodyXml) => {
+                const z = new JSZip();
+                z.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`);
+                z.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
+                z.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`);
+                z.file('word/styles.xml', makeDocxStylesXml());
+                z.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${bodyXml}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>`);
+                const b = await z.generateAsync({ type: 'blob' });
+                return new File([b], 'cmp.docx');
+            };
+            const subPara = (tail) => `<w:p><w:r><w:t xml:space="preserve">The value H</w:t></w:r>` +
+                `<w:r><w:rPr><w:vertAlign w:val="subscript"/></w:rPr><w:t>2</w:t></w:r>` +
+                `<w:r><w:t xml:space="preserve">O was ${tail}.</w:t></w:r></w:p>`;
+            const tblXml = (cell) => `<w:tbl><w:tblPr/><w:tblGrid><w:gridCol/></w:tblGrid>` +
+                `<w:tr><w:tc><w:tcPr/><w:p><w:r><w:t>${cell}</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`;
+            const fileCmpA = await makeComparePkg(
+                `<w:p><w:r><w:t>Same paragraph here.</w:t></w:r></w:p><w:p/>` + subPara('old') +
+                `<w:p><w:r><w:t>Removed old sentence entirely.</w:t></w:r></w:p>` + tblXml('cell old'));
+            const fileCmpB = await makeComparePkg(
+                `<w:p><w:r><w:t>Same paragraph here.</w:t></w:r></w:p><w:p/>` + subPara('new') +
+                tblXml('cell new') + `<w:p><w:r><w:t>Brand fresh inserted line.</w:t></w:r></w:p>`);
+            docxDataA = await loadDocxForCompare(fileCmpA);
+            docxDataB = await loadDocxForCompare(fileCmpB);
             await compareDocxFiles();
 
-            assert('DOCX 생성 4종 캡처', captured.length === 4, captured.map(c => c.name));
+            // 텍스트 비교 → 변경내용 DOCX 내보내기
+            document.getElementById('inputText4a').value = 'Line one same\nOld middle here';
+            document.getElementById('inputText4b').value = 'Line one same\nNew middle here\nTotally fresh addition';
+            compareDocuments();
+            await exportTextCompareDocx();
 
-            for (let ci = 0; ci < captured.length; ci++) {
+            assert('DOCX 생성 5종 캡처', captured.length === 5, captured.map(c => c.name));
+
+            // 자체 생성 패키지(공통/기본/US특허/텍스트비교)의 스타일 검증
+            for (const ci of [0, 1, 2, 4]) {
+                if (!captured[ci]) continue;
                 const z = await JSZip.loadAsync(captured[ci].blob);
                 const stylesFile = z.file('word/styles.xml');
                 const styles = stylesFile ? await stylesFile.async('string') : null;
@@ -250,6 +293,60 @@ const server = http.createServer((req, res) => {
                 const ct = await z.file('[Content_Types].xml').async('string');
                 const rels = await z.file('word/_rels/document.xml.rels').async('string');
                 assert(`DOCX #${ci + 1} styles 관계등록`, ct.includes('/word/styles.xml') && rels.includes('styles.xml'));
+            }
+
+            // DOCX 비교 결과 검증 (MS Word 검토>비교와 같은 형태)
+            if (captured[3]) {
+                const zc = await JSZip.loadAsync(captured[3].blob);
+                const cmpXml = await zc.file('word/document.xml').async('string');
+                assert('비교: 유효한 개정 날짜(xsd:dateTime)', /w:date="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"/.test(cmpXml));
+                assert('비교: 빈 단락 유지', /<w:p( [^>]*)?\/>/.test(cmpXml), cmpXml.slice(0, 800));
+                assert('비교: 표 유지 + 셀 단위 개정', cmpXml.includes('<w:tbl') &&
+                    /<w:delText[^>]*>old<\/w:delText>/.test(cmpXml) &&
+                    /<w:t[^>]*>new<\/w:t>/.test(cmpXml), cmpXml.slice(0, 800));
+                assert('비교: 첨자 서식 유지', cmpXml.includes('vertAlign'), cmpXml);
+                assert('비교: 삭제 단락 delText + 단락기호 삭제', cmpXml.includes('Removed old sentence entirely.') &&
+                    /<w:delText[^>]*>Removed old sentence entirely\.<\/w:delText>/.test(cmpXml) &&
+                    /<w:rPr><w:del /.test(cmpXml), cmpXml);
+                assert('비교: 추가 단락 ins + 단락기호 삽입', /<w:ins [^>]*><w:r><w:t[^>]*>Brand fresh inserted line\.<\/w:t><\/w:r><\/w:ins>/.test(cmpXml) &&
+                    /<w:rPr><w:ins /.test(cmpXml), cmpXml);
+                assert('비교: 수정 단락 단어 단위 그룹화', /<w:delText[^>]*>old\.\s*<\/w:delText>/.test(cmpXml) &&
+                    /old\./.test(cmpXml) && /new\./.test(cmpXml), cmpXml);
+                // 수정본 패키지 유지 확인 (styles.xml 승계)
+                const cs = await zc.file('word/styles.xml').async('string');
+                assert('비교: 수정본 styles 유지', cs.includes('w:after="0"'));
+            }
+
+            // 탭4 양식표준화 (텍스트 비교) - 다른 탭과 동일 규칙
+            document.getElementById('inputText4a').value =
+                'Intro line\nBACKGROUND\nWHAT IS CLAIMED IS:\n1. A sensor device.\nSecond claim line.';
+            document.getElementById('inputText4b').value = '';
+            standardizeFormat4Text();
+            const stdText = document.getElementById('inputText4a').value;
+            assert('탭4 텍스트 양식표준화', stdText.includes('Intro line\n\nBACKGROUND') &&
+                stdText.includes('<pagebreak/>\nWHAT IS CLAIMED IS:\n') &&
+                stdText.includes('1.\tA sensor device.'), stdText);
+
+            // 탭4 양식표준화 (DOCX 비교) - DOM 버전 동일 규칙
+            const fileStd = await makeComparePkg('<w:p><w:r><w:t>Intro line.</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t xml:space="preserve">BACKGROUND   </w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>WHAT IS CLAIMED IS:</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>1. A sensor device.</w:t></w:r></w:p>');
+            docxDataA = await loadDocxForCompare(fileStd);
+            docxDataB = null;
+            standardizeFormat4Docx();
+            const stdBlocks = docxDataA.blocks.map(b => b.text);
+            assert('탭4 DOCX 양식표준화', JSON.stringify(stdBlocks) === JSON.stringify(
+                ['Intro line.', '', 'BACKGROUND', '\n', 'WHAT IS CLAIMED IS:', '', '1.\tA sensor device.']), stdBlocks);
+
+            // 텍스트 비교 내보내기 결과 검증
+            if (captured[4]) {
+                const zt = await JSZip.loadAsync(captured[4].blob);
+                const txtXml = await zt.file('word/document.xml').async('string');
+                assert('텍스트 내보내기: 개정 표시', txtXml.includes('<w:del ') && txtXml.includes('<w:ins ') &&
+                    txtXml.includes('Old') && txtXml.includes('New') &&
+                    txtXml.includes('Totally fresh addition'), txtXml);
+                assert('텍스트 내보내기: 날짜 형식', /w:date="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"/.test(txtXml));
             }
         }
 
