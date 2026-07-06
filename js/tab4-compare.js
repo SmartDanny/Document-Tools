@@ -191,9 +191,12 @@
             // 비교용 텍스트 배열
             const linesA = nonEmptyA.map(item => item.text);
             const linesB = nonEmptyB.map(item => item.text);
-            
+
             const diff = getDiff(linesA, linesB);
-            
+
+            // DOCX 내보내기용으로 비교 결과 보관
+            lastTextDiff4 = { diff, nonEmptyA, nonEmptyB };
+
             // 통계 계산
             let sameCount = 0, modifiedCount = 0, addedCount = 0, deletedCount = 0;
             diff.forEach(d => {
@@ -323,8 +326,53 @@
             if (indicator) indicator.textContent = `${currentIdx + 1} / ${elements.length}`;
         }
 
+        // 텍스트 비교 결과 (DOCX 내보내기용)
+        let lastTextDiff4 = null;
+
+        // 텍스트 비교 결과를 Track Changes DOCX로 내보내기
+        async function exportTextCompareDocx() {
+            if (!lastTextDiff4) {
+                alert('먼저 문서 비교를 실행해주세요.');
+                return;
+            }
+            const { diff, nonEmptyA, nonEmptyB } = lastTextDiff4;
+            const ctx = createRevisionContext();
+
+            // 화면 표시와 동일하게 원본 라인 텍스트 사용
+            const origA = (d) => {
+                const item = (d.lineA && d.lineA > 0 && d.lineA <= nonEmptyA.length) ? nonEmptyA[d.lineA - 1] : null;
+                return (item && item.origText) || d.textA || '';
+            };
+            const origB = (d) => {
+                const item = (d.lineB && d.lineB > 0 && d.lineB <= nonEmptyB.length) ? nonEmptyB[d.lineB - 1] : null;
+                return (item && item.origText) || d.textB || '';
+            };
+
+            let bodyContent = '';
+            diff.forEach(d => {
+                if (d.type === 'same') {
+                    bodyContent += '<w:p>' + segsToRunsXml([{ text: origB(d), rPr: '' }], false) + '</w:p>';
+                } else if (d.type === 'modified') {
+                    const ops = diffTokenLists(tokensFromPlainText(origA(d)), tokensFromPlainText(origB(d)));
+                    bodyContent += '<w:p>' + emitTrackedOps(ops, ctx) + '</w:p>';
+                } else if (d.type === 'added') {
+                    // 단락 기호도 삽입으로 표시하여 거부 시 단락 자체가 사라지도록 함
+                    bodyContent += `<w:p><w:pPr><w:rPr><w:ins w:id="${ctx.nextId()}" w:author="${ctx.author}" w:date="${ctx.dateStr}"/></w:rPr></w:pPr>`
+                        + `<w:ins w:id="${ctx.nextId()}" w:author="${ctx.author}" w:date="${ctx.dateStr}">${segsToRunsXml([{ text: origB(d), rPr: '' }], false)}</w:ins></w:p>`;
+                } else if (d.type === 'deleted') {
+                    // 단락 기호도 삭제로 표시하여 수락 시 단락 자체가 사라지도록 함
+                    bodyContent += `<w:p><w:pPr><w:rPr><w:del w:id="${ctx.nextId()}" w:author="${ctx.author}" w:date="${ctx.dateStr}"/></w:rPr></w:pPr>`
+                        + `<w:del w:id="${ctx.nextId()}" w:author="${ctx.author}" w:date="${ctx.dateStr}">${segsToRunsXml([{ text: origA(d), rPr: '' }], true)}</w:del></w:p>`;
+                }
+            });
+
+            const fileName = '텍스트비교결과';
+            await downloadTrackChangeDocx(bodyContent, fileName);
+        }
+
         function clearAll4() {
             if (!confirm('모든 내용을 지우시겠습니까?')) return;
+            lastTextDiff4 = null;
             document.getElementById('inputText4a').value = '';
             document.getElementById('inputText4b').value = '';
             document.getElementById('fileName4a').textContent = '또는 아래에 .docx 파일을 드래그하세요';
@@ -346,39 +394,302 @@
             }
         }
         
+        // ========== Track Changes 생성 공통 헬퍼 ==========
+        const DOCX_W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+        const XML_SPACE_NS = 'http://www.w3.org/XML/1998/namespace';
+
+        function serializeXmlNode(node) {
+            return new XMLSerializer().serializeToString(node);
+        }
+
+        // 개정(ins/del) 컨텍스트 - 문서 전체에서 고유한 w:id 발급 + xsd:dateTime 형식 날짜
+        function createRevisionContext() {
+            const dateStr = new Date().toISOString().split('.')[0] + 'Z';
+            return { author: 'user', dateStr, _id: 1, nextId() { return this._id++; } };
+        }
+
+        // 블록(단락/표/셀)에서 현재 본문 텍스트 추출 (삭제된 개정 내용과 속성 요소 제외)
+        const BLOCK_TEXT_SKIP = new Set(['w:del', 'w:pPr', 'w:rPr', 'w:tblPr', 'w:trPr', 'w:tcPr', 'w:tblGrid', 'w:sectPr', 'w:instrText']);
+        function getBlockText(node) {
+            let out = '';
+            for (const child of node.childNodes) {
+                const name = child.nodeName;
+                if (BLOCK_TEXT_SKIP.has(name)) continue;
+                if (name === 'w:t') out += child.textContent || '';
+                else if (name === 'w:tab') out += '\t';
+                else if (name === 'w:br' || name === 'w:cr') out += '\n';
+                else if (name === 'w:p') out += getBlockText(child) + '\n';
+                else if (child.childNodes && child.childNodes.length) out += getBlockText(child);
+            }
+            return out;
+        }
+
+        // 문서 body의 직접 자식 블록(단락/표) 목록 추출 - 빈 단락도 유지
+        function getBodyBlocks(doc) {
+            const body = doc.getElementsByTagName('w:body')[0];
+            const blocks = [];
+            if (!body) return blocks;
+            for (const child of body.childNodes) {
+                if (child.nodeName === 'w:p') blocks.push({ kind: 'p', el: child, text: getBlockText(child) });
+                else if (child.nodeName === 'w:tbl') blocks.push({ kind: 'tbl', el: child, text: getBlockText(child) });
+                else if (child.nodeType === 1 && child.nodeName !== 'w:sectPr') blocks.push({ kind: 'raw', el: child, text: '' });
+            }
+            return blocks;
+        }
+
+        // 단락(w:p)에서 단어 토큰 추출 - 각 토큰은 run 서식(rPr)을 유지하는 세그먼트로 구성
+        // (아래첨자/위첨자 등 서식이 다른 run에 걸친 단어도 하나의 토큰으로 묶어 비교)
+        function extractParagraphTokens(p) {
+            const tokens = [];
+            let open = null;
+
+            const runs = [];
+            (function collectRuns(node) {
+                for (const child of node.childNodes) {
+                    if (child.nodeName === 'w:r') runs.push(child);
+                    else if (child.nodeName === 'w:del' || child.nodeName === 'w:pPr') continue; // 이미 삭제된 개정/단락 속성 제외
+                    else if (child.childNodes && child.childNodes.length) collectRuns(child);
+                }
+            })(p);
+
+            const flushOpen = () => { if (open) { tokens.push(open); open = null; } };
+
+            for (const r of runs) {
+                let rPr = '';
+                for (const c of r.childNodes) {
+                    if (c.nodeName === 'w:rPr') { rPr = serializeXmlNode(c); break; }
+                }
+                for (const child of r.childNodes) {
+                    if (child.nodeName === 'w:t') {
+                        const text = child.textContent || '';
+                        const re = /\s+|\S+/g;
+                        let m;
+                        while ((m = re.exec(text)) !== null) {
+                            const chunk = m[0];
+                            if (/\s/.test(chunk[0])) {
+                                if (open) { open.space += chunk; flushOpen(); }
+                                else if (tokens.length) tokens[tokens.length - 1].space += chunk;
+                                // 단락 선두 공백은 무시
+                            } else {
+                                if (!open) open = { key: '', space: '', segs: [] };
+                                open.key += chunk;
+                                const last = open.segs[open.segs.length - 1];
+                                if (last && !last.special && last.rPr === rPr) last.text += chunk;
+                                else open.segs.push({ text: chunk, rPr });
+                            }
+                        }
+                    } else if (child.nodeName === 'w:tab' || child.nodeName === 'w:br') {
+                        flushOpen();
+                        tokens.push({
+                            key: child.nodeName === 'w:tab' ? '\t' : '\n',
+                            space: '',
+                            segs: [{ special: child.nodeName, rPr }]
+                        });
+                    }
+                }
+            }
+            flushOpen();
+            return tokens;
+        }
+
+        // 일반 텍스트 → 토큰 배열 (텍스트 비교 내보내기용, 서식 없음)
+        function tokensFromPlainText(text) {
+            return tokenizeWords(text || '').map(t => ({ key: t.word, space: t.space, segs: [{ text: t.word, rPr: '' }] }));
+        }
+
+        // 토큰 목록 diff (LCS, 공통 접두/접미 최적화 + 크기 안전장치)
+        function diffTokenLists(tokensA, tokensB) {
+            const lenA = tokensA.length, lenB = tokensB.length;
+            const minLen = Math.min(lenA, lenB);
+            let pre = 0;
+            while (pre < minLen && tokensA[pre].key === tokensB[pre].key) pre++;
+            let suf = 0;
+            while (suf < minLen - pre && tokensA[lenA - 1 - suf].key === tokensB[lenB - 1 - suf].key) suf++;
+
+            const midA = tokensA.slice(pre, lenA - suf);
+            const midB = tokensB.slice(pre, lenB - suf);
+
+            const ops = [];
+            for (let k = 0; k < pre; k++) ops.push({ type: 'same', a: tokensA[k], b: tokensB[k] });
+
+            if (midA.length * midB.length > 1000000) {
+                // 안전장치 초과 시 전체 삭제 + 전체 추가로 폴백
+                midA.forEach(t => ops.push({ type: 'del', a: t }));
+                midB.forEach(t => ops.push({ type: 'ins', b: t }));
+            } else {
+                const dp = computeLCS(midA.map(t => t.key), midB.map(t => t.key));
+                const mid = [];
+                let i = midA.length, j = midB.length;
+                while (i > 0 || j > 0) {
+                    if (i > 0 && j > 0 && midA[i - 1].key === midB[j - 1].key) {
+                        mid.unshift({ type: 'same', a: midA[i - 1], b: midB[j - 1] });
+                        i--; j--;
+                    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+                        mid.unshift({ type: 'ins', b: midB[j - 1] });
+                        j--;
+                    } else {
+                        mid.unshift({ type: 'del', a: midA[i - 1] });
+                        i--;
+                    }
+                }
+                ops.push(...mid);
+            }
+
+            for (let k = suf; k > 0; k--) ops.push({ type: 'same', a: tokensA[lenA - k], b: tokensB[lenB - k] });
+            return ops;
+        }
+
+        // 세그먼트 목록 → run XML (동일 서식의 연속 세그먼트는 하나의 run으로 병합)
+        function segsToRunsXml(segs, isDel) {
+            let xml = '';
+            let buf = null;
+            const flush = () => {
+                if (buf && buf.text) {
+                    const tag = isDel ? 'w:delText' : 'w:t';
+                    xml += `<w:r>${buf.rPr}<${tag} xml:space="preserve">${escapeXml(buf.text)}</${tag}></w:r>`;
+                }
+                buf = null;
+            };
+            for (const s of segs) {
+                if (s.special) {
+                    flush();
+                    xml += `<w:r>${s.rPr || ''}<${s.special}/></w:r>`;
+                } else if (buf && buf.rPr === (s.rPr || '')) {
+                    buf.text += s.text;
+                } else {
+                    flush();
+                    buf = { rPr: s.rPr || '', text: s.text };
+                }
+            }
+            flush();
+            return xml;
+        }
+
+        // 토큰 diff 결과 → Track Changes run XML
+        // 연속된 삭제/추가를 하나의 w:del/w:ins로 그룹화하고(MS Word 방식),
+        // 공백만 달라진 경우도 삭제/추가로 정확히 표시한다
+        function emitTrackedOps(ops, ctx) {
+            let xml = '';
+            let sameSegs = [], delSegs = [], insSegs = [];
+            const lastRPr = (segs) => segs.length ? (segs[segs.length - 1].rPr || '') : '';
+
+            const flushSame = () => {
+                if (sameSegs.length) { xml += segsToRunsXml(sameSegs, false); sameSegs = []; }
+            };
+            const flushChanges = () => {
+                if (delSegs.length) {
+                    xml += `<w:del w:id="${ctx.nextId()}" w:author="${escapeXml(ctx.author)}" w:date="${ctx.dateStr}">${segsToRunsXml(delSegs, true)}</w:del>`;
+                    delSegs = [];
+                }
+                if (insSegs.length) {
+                    xml += `<w:ins w:id="${ctx.nextId()}" w:author="${escapeXml(ctx.author)}" w:date="${ctx.dateStr}">${segsToRunsXml(insSegs, false)}</w:ins>`;
+                    insSegs = [];
+                }
+            };
+
+            for (const op of ops) {
+                if (op.type === 'same') {
+                    flushChanges();
+                    sameSegs.push(...op.b.segs);
+                    if (op.a.space === op.b.space) {
+                        if (op.b.space) sameSegs.push({ text: op.b.space, rPr: lastRPr(op.b.segs) });
+                    } else {
+                        // 단어는 같지만 뒤 공백이 달라진 경우: 원본 공백 삭제 + 수정본 공백 추가
+                        flushSame();
+                        if (op.a.space) delSegs.push({ text: op.a.space, rPr: lastRPr(op.a.segs) });
+                        if (op.b.space) insSegs.push({ text: op.b.space, rPr: lastRPr(op.b.segs) });
+                    }
+                } else if (op.type === 'del') {
+                    flushSame();
+                    delSegs.push(...op.a.segs);
+                    if (op.a.space) delSegs.push({ text: op.a.space, rPr: lastRPr(op.a.segs) });
+                } else {
+                    flushSame();
+                    insSegs.push(...op.b.segs);
+                    if (op.b.space) insSegs.push({ text: op.b.space, rPr: lastRPr(op.b.segs) });
+                }
+            }
+            flushSame();
+            flushChanges();
+            return xml;
+        }
+
+        // 텍스트 비교용 최소 구성 Track Changes DOCX 다운로드 (기존 출력 포맷과 동일)
+        async function downloadTrackChangeDocx(bodyContent, fileName) {
+            const newZip = new JSZip();
+
+            newZip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`);
+
+            newZip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
+
+            newZip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`);
+
+            // 단락 뒤 간격 0pt 통일 (utils.js)
+            newZip.file('word/styles.xml', makeDocxStylesXml());
+
+            newZip.file('word/settings.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:trackRevisions/>
+<w:revisionView w:formatting="0"/>
+<w:defaultTabStop w:val="720"/>
+<w:characterSpacingControl w:val="doNotCompress"/>
+</w:settings>`);
+
+            newZip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+${bodyContent}
+<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+</w:body>
+</w:document>`);
+
+            const blob = await newZip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+            saveAs(blob, fileName + '.docx');
+        }
+
         // ========== DOCX 비교 기능 ==========
         let docxFileA = null;
         let docxFileB = null;
         let docxDataA = null;
         let docxDataB = null;
-        
-        // DOCX 파일에서 텍스트 추출 (단락별)
-        async function extractParagraphsFromDocx(file) {
+
+        // DOCX 파일 로드 (비교용) - 원본 XML/DOM/zip과 블록(단락/표) 목록 유지
+        async function loadDocxForCompare(file) {
             const { zip, xml, doc } = await loadDocxDocument(file);
-            const paragraphs = [];
-            for (const p of doc.getElementsByTagName('w:p')) {
-                paragraphs.push(extractDocxPlainText(p));
-            }
-            return { paragraphs, zip, xml };
+            return { zip, xml, doc, blocks: getBodyBlocks(doc) };
         }
-        
+
         // DOCX 파일 처리 (원본)
         async function handleDocxFile4a(file) {
             await handleDocxUpload(file, 'fileNameDocx4a', async (file) => {
                 docxFileA = file;
-                docxDataA = await extractParagraphsFromDocx(file);
-                const preview = docxDataA.paragraphs.filter(p => p.trim()).slice(0, 10).join('\n');
-                document.getElementById('docxPreview4a').value = preview + (docxDataA.paragraphs.length > 10 ? '\n...' : '');
+                docxDataA = await loadDocxForCompare(file);
+                const texts = docxDataA.blocks.map(b => b.text).filter(t => t.trim());
+                document.getElementById('docxPreview4a').value = texts.slice(0, 10).join('\n') + (texts.length > 10 ? '\n...' : '');
             });
         }
-        
+
         // DOCX 파일 처리 (수정본)
         async function handleDocxFile4b(file) {
             await handleDocxUpload(file, 'fileNameDocx4b', async (file) => {
                 docxFileB = file;
-                docxDataB = await extractParagraphsFromDocx(file);
-                const preview = docxDataB.paragraphs.filter(p => p.trim()).slice(0, 10).join('\n');
-                document.getElementById('docxPreview4b').value = preview + (docxDataB.paragraphs.length > 10 ? '\n...' : '');
+                docxDataB = await loadDocxForCompare(file);
+                const texts = docxDataB.blocks.map(b => b.text).filter(t => t.trim());
+                document.getElementById('docxPreview4b').value = texts.slice(0, 10).join('\n') + (texts.length > 10 ? '\n...' : '');
             });
         }
         
@@ -399,51 +710,49 @@
         setupDropZone(docxPreview4b, handleDocxFile4b, { clickOpensInput: 'fileInputDocx4b' }); // 드래그 앤 드롭 + 클릭 열기 (utils.js)
         
         // 단락 비교를 위한 개선된 알고리즘
-        // calculateSimilarity, getWordDiffForDocx는 utils.js에서 로드됨
-        
-        // 순서 기반 단락 비교 알고리즘 (MS Word 스타일)
-        function getParagraphDiffWithMatching(parasA, parasB) {
-            const normA = parasA.map(p => p.trim()).filter(p => p);
-            const normB = parasB.map(p => p.trim()).filter(p => p);
-            
+        // calculateSimilarity는 utils.js에서 로드됨
+
+        // 순서 기반 블록(단락/표) 비교 알고리즘 (MS Word 스타일)
+        // 빈 단락도 블록으로 유지하여 문서 레이아웃(빈줄) 변경까지 추적한다
+        function getBlockDiffWithMatching(blocksA, blocksB) {
+            const m = blocksA.length;
+            const n = blocksB.length;
             const result = [];
-            
-            // LCS를 사용하여 단락 순서 매칭
-            const m = normA.length;
-            const n = normB.length;
-            
-            // DP 테이블 생성 (단락 단위 LCS)
-            const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
-            
-            // 유사도 캐시
+
+            // 완전 일치: 종류(단락/표)와 텍스트가 정확히 같음 (빈 단락끼리도 일치)
+            const eq = (a, b) => a.kind === b.kind && a.text === b.text;
+
+            // 유사도 캐시 (종류가 다르거나 한쪽이 비어 있으면 0)
             const simCache = {};
             const getSim = (i, j) => {
+                const a = blocksA[i], b = blocksB[j];
+                if (a.kind !== b.kind || a.kind === 'raw' || !a.text.trim() || !b.text.trim()) return 0;
                 const key = `${i}-${j}`;
                 if (!(key in simCache)) {
-                    simCache[key] = calculateSimilarity(normA[i], normB[j]);
+                    simCache[key] = calculateSimilarity(a.text, b.text);
                 }
                 return simCache[key];
             };
-            
-            // DP 채우기 - 유사도 15% 이상이면 매칭 가능
+            const matchable = (i, j) => eq(blocksA[i], blocksB[j]) || getSim(i, j) >= 0.15;
+
+            // DP 테이블 (블록 단위 LCS) - 유사도 15% 이상이면 매칭 가능
+            const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
             for (let i = 1; i <= m; i++) {
                 for (let j = 1; j <= n; j++) {
-                    const sim = getSim(i - 1, j - 1);
-                    if (sim >= 0.15 || normA[i-1] === normB[j-1]) {
+                    if (matchable(i - 1, j - 1)) {
                         dp[i][j] = dp[i-1][j-1] + 1;
                     } else {
                         dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
                     }
                 }
             }
-            
+
             // Backtrack하여 매칭 결과 생성
             const matches = [];
             let i = m, j = n;
             while (i > 0 && j > 0) {
-                const sim = getSim(i - 1, j - 1);
-                if ((sim >= 0.15 || normA[i-1] === normB[j-1]) && dp[i][j] === dp[i-1][j-1] + 1) {
-                    matches.unshift({ idxA: i - 1, idxB: j - 1, similarity: sim });
+                if (matchable(i - 1, j - 1) && dp[i][j] === dp[i-1][j-1] + 1) {
+                    matches.unshift({ idxA: i - 1, idxB: j - 1 });
                     i--; j--;
                 } else if (dp[i-1][j] >= dp[i][j-1]) {
                     i--;
@@ -451,131 +760,240 @@
                     j--;
                 }
             }
-            
+
+            const pushPair = (a, b) => {
+                if (eq(a, b)) result.push({ type: 'same', a, b });
+                else result.push({ type: 'modified', a, b });
+            };
+
             // 매칭 결과를 기반으로 diff 생성
             let ptrA = 0, ptrB = 0;
-            const usedA = new Set(matches.map(m => m.idxA));
-            const usedB = new Set(matches.map(m => m.idxB));
-            
+            const usedA = new Set(matches.map(x => x.idxA));
+            const usedB = new Set(matches.map(x => x.idxB));
+
             for (const match of matches) {
-                // 매칭되기 전 A의 삭제된 단락들
+                // 매칭되기 전 A의 삭제된 블록들 (인접한 B의 추가 블록과 병합 시도)
                 while (ptrA < match.idxA) {
                     if (!usedA.has(ptrA)) {
-                        // 삭제된 단락과 인접한 추가 단락이 있으면 병합
                         let merged = false;
-                        if (ptrB < match.idxB && !usedB.has(ptrB)) {
-                            // 유사도 체크 후 병합
-                            const mergeSim = calculateSimilarity(normA[ptrA], normB[ptrB]);
-                            if (mergeSim >= 0.05) { // 매우 낮은 임계값 - 같은 위치면 병합
-                                result.push({
-                                    type: 'modified',
-                                    textA: normA[ptrA],
-                                    textB: normB[ptrB],
-                                    wordDiff: getWordDiffForDocx(normA[ptrA], normB[ptrB])
-                                });
-                                ptrB++;
-                                merged = true;
-                            }
+                        if (ptrB < match.idxB && !usedB.has(ptrB) && getSim(ptrA, ptrB) >= 0.05) {
+                            result.push({ type: 'modified', a: blocksA[ptrA], b: blocksB[ptrB] });
+                            ptrB++;
+                            merged = true;
                         }
                         if (!merged) {
-                            result.push({ type: 'deleted', textA: normA[ptrA] });
+                            result.push({ type: 'deleted', a: blocksA[ptrA] });
                         }
                     }
                     ptrA++;
                 }
-                
-                // 매칭되기 전 B의 추가된 단락들
+
+                // 매칭되기 전 B의 추가된 블록들
                 while (ptrB < match.idxB) {
                     if (!usedB.has(ptrB)) {
-                        result.push({ type: 'added', textB: normB[ptrB] });
+                        result.push({ type: 'added', b: blocksB[ptrB] });
                     }
                     ptrB++;
                 }
-                
-                // 매칭된 단락 비교
-                if (normA[match.idxA] === normB[match.idxB]) {
-                    result.push({ type: 'same', textA: normA[match.idxA], textB: normB[match.idxB] });
-                } else {
-                    result.push({
-                        type: 'modified',
-                        textA: normA[match.idxA],
-                        textB: normB[match.idxB],
-                        wordDiff: getWordDiffForDocx(normA[match.idxA], normB[match.idxB])
-                    });
-                }
+
+                pushPair(blocksA[match.idxA], blocksB[match.idxB]);
                 ptrA = match.idxA + 1;
                 ptrB = match.idxB + 1;
             }
-            
-            // 남은 단락들 처리 (삭제와 추가를 짝지어 병합 시도)
+
+            // 남은 블록들 처리 (삭제와 추가를 짝지어 병합 시도)
             const remainingA = [];
             const remainingB = [];
-            
-            while (ptrA < m) {
-                if (!usedA.has(ptrA)) {
-                    remainingA.push(ptrA);
-                }
-                ptrA++;
-            }
-            
-            while (ptrB < n) {
-                if (!usedB.has(ptrB)) {
-                    remainingB.push(ptrB);
-                }
-                ptrB++;
-            }
-            
-            // 남은 단락들을 순서대로 병합 또는 삭제/추가 처리
+            while (ptrA < m) { if (!usedA.has(ptrA)) remainingA.push(ptrA); ptrA++; }
+            while (ptrB < n) { if (!usedB.has(ptrB)) remainingB.push(ptrB); ptrB++; }
+
             const maxRemaining = Math.max(remainingA.length, remainingB.length);
             for (let k = 0; k < maxRemaining; k++) {
                 const hasA = k < remainingA.length;
                 const hasB = k < remainingB.length;
-                
-                if (hasA && hasB) {
-                    const idxA = remainingA[k];
-                    const idxB = remainingB[k];
-                    const sim = calculateSimilarity(normA[idxA], normB[idxB]);
-                    
-                    if (sim >= 0.05) {
-                        // 병합
-                        result.push({
-                            type: 'modified',
-                            textA: normA[idxA],
-                            textB: normB[idxB],
-                            wordDiff: getWordDiffForDocx(normA[idxA], normB[idxB])
-                        });
-                    } else {
-                        // 별도 처리
-                        result.push({ type: 'deleted', textA: normA[idxA] });
-                        result.push({ type: 'added', textB: normB[idxB] });
-                    }
-                } else if (hasA) {
-                    result.push({ type: 'deleted', textA: normA[remainingA[k]] });
-                } else if (hasB) {
-                    result.push({ type: 'added', textB: normB[remainingB[k]] });
+                if (hasA && hasB && getSim(remainingA[k], remainingB[k]) >= 0.05) {
+                    result.push({ type: 'modified', a: blocksA[remainingA[k]], b: blocksB[remainingB[k]] });
+                } else {
+                    if (hasA) result.push({ type: 'deleted', a: blocksA[remainingA[k]] });
+                    if (hasB) result.push({ type: 'added', b: blocksB[remainingB[k]] });
                 }
             }
-            
+
             return result;
         }
+
+        // ===== 블록 → Track Changes XML 변환 =====
+
+        function setRevisionAttrs(el, ctx) {
+            el.setAttributeNS(DOCX_W_NS, 'w:id', String(ctx.nextId()));
+            el.setAttributeNS(DOCX_W_NS, 'w:author', ctx.author);
+            el.setAttributeNS(DOCX_W_NS, 'w:date', ctx.dateStr);
+        }
+
+        // run 내 w:t → w:delText 변환 (삭제 표시용)
+        function convertRunTextToDelText(r) {
+            const doc = r.ownerDocument;
+            for (const t of Array.from(r.getElementsByTagName('w:t'))) {
+                const delT = doc.createElementNS(DOCX_W_NS, 'w:delText');
+                delT.setAttributeNS(XML_SPACE_NS, 'xml:space', 'preserve');
+                delT.textContent = t.textContent;
+                t.parentNode.replaceChild(delT, t);
+            }
+        }
+
+        // 컨테이너의 직접 자식 run들을 연속 그룹 단위로 w:ins/w:del로 감싸기
+        function wrapRunsInRevision(parent, kind, ctx) {
+            const doc = parent.ownerDocument;
+            let wrapper = null;
+            for (const child of Array.from(parent.childNodes)) {
+                if (child.nodeName === 'w:r') {
+                    if (kind === 'del') convertRunTextToDelText(child);
+                    if (!wrapper) {
+                        wrapper = doc.createElementNS(DOCX_W_NS, kind === 'del' ? 'w:del' : 'w:ins');
+                        setRevisionAttrs(wrapper, ctx);
+                        parent.insertBefore(wrapper, child);
+                    }
+                    wrapper.appendChild(child);
+                } else {
+                    wrapper = null;
+                }
+            }
+        }
+
+        // 단락 기호(paragraph mark)에 삽입/삭제 개정 표시
+        // (수락/거부 시 단락 자체가 합쳐지거나 사라지도록 - MS Word 비교와 동일)
+        function markParagraphMark(p, kind, ctx) {
+            const doc = p.ownerDocument;
+            let pPr = null;
+            for (const c of p.childNodes) if (c.nodeName === 'w:pPr') { pPr = c; break; }
+            if (!pPr) {
+                pPr = doc.createElementNS(DOCX_W_NS, 'w:pPr');
+                p.insertBefore(pPr, p.firstChild);
+            }
+            let rPr = null;
+            for (const c of pPr.childNodes) if (c.nodeName === 'w:rPr') { rPr = c; break; }
+            if (!rPr) {
+                rPr = doc.createElementNS(DOCX_W_NS, 'w:rPr');
+                let sectPr = null;
+                for (const c of pPr.childNodes) if (c.nodeName === 'w:sectPr') { sectPr = c; break; }
+                pPr.insertBefore(rPr, sectPr);
+            }
+            const rev = doc.createElementNS(DOCX_W_NS, kind === 'del' ? 'w:del' : 'w:ins');
+            setRevisionAttrs(rev, ctx);
+            rPr.insertBefore(rev, rPr.firstChild);
+        }
+
+        // 단락 전체를 삽입/삭제로 표시 (원본 서식 유지)
+        function buildRevisedParagraph(pEl, kind, ctx) {
+            const p = pEl.cloneNode(true);
+            wrapRunsInRevision(p, kind, ctx);
+            markParagraphMark(p, kind, ctx);
+            return serializeXmlNode(p);
+        }
+
+        // 표 전체를 삽입/삭제로 표시 (행 단위 개정 표시 + 셀 내용 개정 표시)
+        function buildRevisedTable(tblEl, kind, ctx) {
+            const doc = tblEl.ownerDocument;
+            const tbl = tblEl.cloneNode(true);
+            for (const tr of Array.from(tbl.getElementsByTagName('w:tr'))) {
+                let trPr = null;
+                for (const c of tr.childNodes) if (c.nodeName === 'w:trPr') { trPr = c; break; }
+                if (!trPr) {
+                    trPr = doc.createElementNS(DOCX_W_NS, 'w:trPr');
+                    tr.insertBefore(trPr, tr.firstChild);
+                }
+                const rev = doc.createElementNS(DOCX_W_NS, kind === 'del' ? 'w:del' : 'w:ins');
+                setRevisionAttrs(rev, ctx);
+                trPr.appendChild(rev);
+            }
+            for (const p of Array.from(tbl.getElementsByTagName('w:p'))) {
+                wrapRunsInRevision(p, kind, ctx);
+            }
+            return serializeXmlNode(tbl);
+        }
+
+        // 수정된 단락: 수정본(B)의 단락 속성을 유지하며 단어 단위 개정 표시
+        function buildModifiedParagraph(pA, pB, ctx) {
+            const ops = diffTokenLists(extractParagraphTokens(pA), extractParagraphTokens(pB));
+            let pPrXml = '';
+            for (const c of pB.childNodes) if (c.nodeName === 'w:pPr') { pPrXml = serializeXmlNode(c); break; }
+            return '<w:p>' + pPrXml + emitTrackedOps(ops, ctx) + '</w:p>';
+        }
+
+        function directChildren(el, name) {
+            const out = [];
+            for (const c of el.childNodes) if (c.nodeName === name) out.push(c);
+            return out;
+        }
+
+        // 수정된 표: 행/열 구조가 같으면 셀 단위로 비교, 다르면 표 전체 삭제+추가
+        function buildModifiedTable(tblA, tblB, ctx) {
+            const rowsA = directChildren(tblA, 'w:tr');
+            const rowsB = directChildren(tblB, 'w:tr');
+            const sameShape = rowsA.length === rowsB.length &&
+                rowsA.every((tr, idx) => directChildren(tr, 'w:tc').length === directChildren(rowsB[idx], 'w:tc').length);
+            if (!sameShape) {
+                return buildRevisedTable(tblA, 'del', ctx) + buildRevisedTable(tblB, 'ins', ctx);
+            }
+            let xml = '<w:tbl>';
+            for (const c of tblB.childNodes) {
+                if (c.nodeName === 'w:tblPr' || c.nodeName === 'w:tblGrid') xml += serializeXmlNode(c);
+            }
+            for (let idx = 0; idx < rowsB.length; idx++) {
+                xml += '<w:tr>';
+                for (const c of rowsB[idx].childNodes) {
+                    if (c.nodeName === 'w:trPr') xml += serializeXmlNode(c);
+                }
+                const cellsA = directChildren(rowsA[idx], 'w:tc');
+                const cellsB = directChildren(rowsB[idx], 'w:tc');
+                for (let cIdx = 0; cIdx < cellsB.length; cIdx++) {
+                    xml += buildModifiedCell(cellsA[cIdx], cellsB[cIdx], ctx);
+                }
+                xml += '</w:tr>';
+            }
+            xml += '</w:tbl>';
+            return xml;
+        }
+
+        function buildModifiedCell(tcA, tcB, ctx) {
+            if (getBlockText(tcA) === getBlockText(tcB)) return serializeXmlNode(tcB);
+            let xml = '<w:tc>';
+            for (const c of tcB.childNodes) if (c.nodeName === 'w:tcPr') xml += serializeXmlNode(c);
+            const pAs = directChildren(tcA, 'w:p');
+            const pBs = directChildren(tcB, 'w:p');
+            const maxLen = Math.max(pAs.length, pBs.length);
+            for (let k = 0; k < maxLen; k++) {
+                const pA = pAs[k], pB = pBs[k];
+                if (pA && pB) {
+                    xml += getBlockText(pA) === getBlockText(pB)
+                        ? serializeXmlNode(pB)
+                        : buildModifiedParagraph(pA, pB, ctx);
+                } else if (pA) {
+                    xml += buildRevisedParagraph(pA, 'del', ctx);
+                } else {
+                    xml += buildRevisedParagraph(pB, 'ins', ctx);
+                }
+            }
+            xml += '</w:tc>';
+            return xml;
+        }
         
-        // Track Changes가 적용된 DOCX 파일 생성 (단어 단위 비교 적용)
+        // Track Changes가 적용된 DOCX 파일 생성
+        // 수정본(B)의 패키지(스타일/글꼴/머리글/섹션 설정)를 기반으로 결과를 생성하여
+        // 첨자·표·빈줄·단락 나누기 등 원본 서식을 유지한다 (MS Word 검토>비교와 동일한 방식)
         async function compareDocxFiles() {
             const msg = document.getElementById('docxCompareMessage');
             msg.classList.add('hidden');
-            
+
             if (!docxDataA || !docxDataB) {
                 showMessage(msg, '❌ 두 개의 DOCX 파일을 모두 업로드해주세요.', 'error');
                 return;
             }
-            
+
             try {
-                const parasA = docxDataA.paragraphs;
-                const parasB = docxDataB.paragraphs;
-                
-                // 개선된 diff 계산 (유사 단락 매칭 + 단어 단위 비교)
-                const diff = getParagraphDiffWithMatching(parasA, parasB);
-                
+                // 블록(단락/표) 단위 diff 계산 (유사 블록 매칭 + 단어 단위 비교)
+                const diff = getBlockDiffWithMatching(docxDataA.blocks, docxDataB.blocks);
+
                 // 통계 계산
                 let sameCount = 0, modifiedCount = 0, addedCount = 0, deletedCount = 0;
                 diff.forEach(d => {
@@ -584,133 +1002,61 @@
                     else if (d.type === 'added') addedCount++;
                     else if (d.type === 'deleted') deletedCount++;
                 });
-                
+
                 document.getElementById('docxTotalPara').textContent = diff.length;
                 document.getElementById('docxSamePara').textContent = sameCount;
                 document.getElementById('docxModifiedPara').textContent = modifiedCount;
                 document.getElementById('docxAddedPara').textContent = addedCount;
                 document.getElementById('docxDeletedPara').textContent = deletedCount;
                 document.getElementById('docxCompareStats').classList.remove('hidden');
-                
-                // 현재 날짜/시간
-                const now = new Date();
-                const dateStr = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
-                
+
+                const ctx = createRevisionContext();
+
                 // Track Changes XML 생성
                 let bodyContent = '';
-                let revisionId = 1;
-                
                 diff.forEach(d => {
                     if (d.type === 'same') {
-                        // 동일한 단락
-                        bodyContent += `<w:p><w:r><w:t xml:space="preserve">${escapeXml(d.textA)}</w:t></w:r></w:p>`;
+                        // 동일한 블록: 수정본 원본 그대로 (서식 완전 보존)
+                        bodyContent += serializeXmlNode(d.b.el);
                     } else if (d.type === 'deleted') {
-                        // 완전히 삭제된 단락
-                        bodyContent += `<w:p><w:del w:id="${revisionId}" w:author="user" w:date="${dateStr}"><w:r><w:delText xml:space="preserve">${escapeXml(d.textA)}</w:delText></w:r></w:del></w:p>`;
-                        revisionId++;
+                        if (d.a.kind === 'raw') return; // 북마크 등 비본문 요소는 생략
+                        bodyContent += d.a.kind === 'tbl'
+                            ? buildRevisedTable(d.a.el, 'del', ctx)
+                            : buildRevisedParagraph(d.a.el, 'del', ctx);
                     } else if (d.type === 'added') {
-                        // 완전히 추가된 단락
-                        bodyContent += `<w:p><w:ins w:id="${revisionId}" w:author="user" w:date="${dateStr}"><w:r><w:t xml:space="preserve">${escapeXml(d.textB)}</w:t></w:r></w:ins></w:p>`;
-                        revisionId++;
+                        if (d.b.kind === 'raw') { bodyContent += serializeXmlNode(d.b.el); return; }
+                        bodyContent += d.b.kind === 'tbl'
+                            ? buildRevisedTable(d.b.el, 'ins', ctx)
+                            : buildRevisedParagraph(d.b.el, 'ins', ctx);
                     } else if (d.type === 'modified') {
-                        // 수정된 단락 - 단어 단위로 변경 표시
-                        bodyContent += '<w:p>';
-                        
-                        const wordDiff = d.wordDiff;
-                        
-                        for (let idx = 0; idx < wordDiff.length; idx++) {
-                            const wd = wordDiff[idx];
-                            const nextWd = wordDiff[idx + 1];
-                            const prevWd = wordDiff[idx - 1];
-                            
-                            // 단어 + 공백 조합
-                            let wordText = wd.word;
-                            
-                            // 공백 처리:
-                            // 1. same/added 타입은 원본 공백 사용
-                            // 2. deleted 타입은 다음 단어가 added가 아니면 공백 추가
-                            // 3. deleted→added 연속은 공백 없음 (대체)
-                            if (wd.type === 'deleted') {
-                                // 삭제된 단어 뒤에 추가된 단어가 바로 오면 공백 없음
-                                if (!nextWd || nextWd.type !== 'added') {
-                                    wordText += ' ';
-                                }
-                            } else {
-                                // same 또는 added는 원본 공백 사용
-                                wordText += wd.space || '';
-                            }
-                            
-                            if (wd.type === 'same') {
-                                bodyContent += `<w:r><w:t xml:space="preserve">${escapeXml(wordText)}</w:t></w:r>`;
-                            } else if (wd.type === 'deleted') {
-                                bodyContent += `<w:del w:id="${revisionId}" w:author="user" w:date="${dateStr}"><w:r><w:delText xml:space="preserve">${escapeXml(wordText)}</w:delText></w:r></w:del>`;
-                                revisionId++;
-                            } else if (wd.type === 'added') {
-                                bodyContent += `<w:ins w:id="${revisionId}" w:author="user" w:date="${dateStr}"><w:r><w:t xml:space="preserve">${escapeXml(wordText)}</w:t></w:r></w:ins>`;
-                                revisionId++;
-                            }
-                        }
-                        
-                        bodyContent += '</w:p>';
+                        bodyContent += d.a.kind === 'tbl'
+                            ? buildModifiedTable(d.a.el, d.b.el, ctx)
+                            : buildModifiedParagraph(d.a.el, d.b.el, ctx);
                     }
                 });
-                
-                // 새 DOCX 파일 생성
-                const newZip = new JSZip();
-                
-                // [Content_Types].xml
-                newZip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-<Default Extension="xml" ContentType="application/xml"/>
-<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
-<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
-</Types>`);
-                
-                // _rels/.rels
-                newZip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`);
-                
-                // word/_rels/document.xml.rels
-                newZip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>
-<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`);
 
-                // word/styles.xml (단락 뒤 간격 0pt 통일, utils.js)
-                newZip.file('word/styles.xml', makeDocxStylesXml());
-                
-                // word/settings.xml (Track Changes 활성화, 서식 비교 제외)
-                newZip.file('word/settings.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:trackRevisions/>
-<w:revisionView w:formatting="0"/>
-<w:defaultTabStop w:val="720"/>
-<w:characterSpacingControl w:val="doNotCompress"/>
-</w:settings>`);
-                
-                // word/document.xml
-                const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:body>
-${bodyContent}
-<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
-</w:body>
-</w:document>`;
-                
-                newZip.file('word/document.xml', documentXml);
-                
+                // 수정본(B) 문서를 기반으로 결과 생성 - body만 교체하고 나머지 부품은 그대로 유지
+                const srcXml = docxDataB.xml;
+                const bodyOpen = srcXml.match(/<w:body[^>]*>/);
+                if (!bodyOpen) throw new Error('수정본 문서에서 본문(w:body)을 찾을 수 없습니다.');
+                const head = srcXml.slice(0, bodyOpen.index + bodyOpen[0].length);
+
+                // 수정본 body의 섹션 설정(용지/여백) 유지
+                let tailSect = '';
+                const bodyB = docxDataB.doc.getElementsByTagName('w:body')[0];
+                for (const c of bodyB.childNodes) {
+                    if (c.nodeName === 'w:sectPr') tailSect = serializeXmlNode(c);
+                }
+
+                docxDataB.zip.file('word/document.xml', head + bodyContent + tailSect + '</w:body></w:document>');
+
                 // DOCX 파일 생성 및 다운로드
                 const fileName = document.getElementById('outputFileNameDocx4').value.trim() || '비교결과';
-                const blob = await newZip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+                const blob = await docxDataB.zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
                 saveAs(blob, fileName + '.docx');
-                
+
                 showMessage(msg, `✅ 비교 완료! ${fileName}.docx 파일이 다운로드됩니다. MS Word에서 '검토' 탭으로 변경 내용을 확인하세요.`, 'success');
-                
+
             } catch (error) {
                 showMessage(msg, '❌ 오류: ' + error.message, 'error');
             }
