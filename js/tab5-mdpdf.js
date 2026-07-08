@@ -444,6 +444,25 @@
             return `<w:tblBorders>${b}</w:tblBorders>`;
         }
 
+        // 미리보기에서 렌더된 각 열의 실제 폭(px)을 측정 (셀 내용 기반 자동 폭)
+        function mdMeasureColumnPx(rows, maxCols) {
+            const colPx = new Array(maxCols).fill(0);
+            for (const row of rows) {
+                const cells = row.querySelectorAll('th,td');
+                let colIdx = 0;
+                for (const cell of cells) {
+                    if (colIdx >= maxCols) break;
+                    const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10));
+                    const rect = cell.getBoundingClientRect ? cell.getBoundingClientRect() : { width: 0 };
+                    const per = (rect.width || 0) / span; // colspan 셀은 균등 배분
+                    for (let s = 0; s < span && colIdx < maxCols; s++, colIdx++) {
+                        if (per > colPx[colIdx]) colPx[colIdx] = per;
+                    }
+                }
+            }
+            return colPx;
+        }
+
         function mdTableToDocx(tableEl, ctx) {
             const rows = Array.from(tableEl.querySelectorAll('tr'));
             if (rows.length === 0) return '';
@@ -451,30 +470,40 @@
             rows.forEach(r => { maxCols = Math.max(maxCols, r.querySelectorAll('th,td').length); });
             if (maxCols === 0) return '';
 
-            // 용지 방향/여백 기준 콘텐츠 폭에 맞춰 표를 페이지 폭으로 채움
+            // 용지 방향/여백 기준 콘텐츠 폭에 맞춰 표를 페이지 폭으로 채우되,
+            // 미리보기의 열 폭 비율(내용 기반 자동 폭)을 그대로 반영한다.
             const contentWidth = ctx.contentWidth || mdDocxContentWidth(mdCurrentOrientation);
-            const gridCol = Math.floor(contentWidth / maxCols);
-            const tableWidth = gridCol * maxCols;
-            let grid = '';
-            for (let i = 0; i < maxCols; i++) grid += `<w:gridCol w:w="${gridCol}"/>`;
+            const colPx = mdMeasureColumnPx(rows, maxCols);
+            const widths = mdDistributeColumnWidths(colPx, contentWidth);
+            const tableWidth = widths.reduce((a, b) => a + b, 0);
 
-            // 고정 레이아웃(w:tblLayout fixed) + 명시적 폭 → 방향 전환 시 표가 페이지에 맞춰짐
+            let grid = '';
+            for (let i = 0; i < maxCols; i++) grid += `<w:gridCol w:w="${widths[i]}"/>`;
+
+            // 고정 레이아웃 + 열별 명시 폭 → 미리보기 비율 유지 + 페이지 폭에 맞춤
             let xml = `<w:tbl><w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/><w:tblLayout w:type="fixed"/>${mdTableBorders()}<w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>`;
             for (const row of rows) {
                 xml += '<w:tr>';
                 const cells = Array.from(row.querySelectorAll('th,td'));
+                let colIdx = 0;
                 for (const cell of cells) {
+                    if (colIdx >= maxCols) break;
                     const isHeader = cell.tagName.toLowerCase() === 'th';
                     const runs = mdChildrenToRuns(cell, ctx, isHeader ? { bold: true } : {});
                     const align = (cell.style && cell.style.textAlign) || '';
                     const jc = align === 'center' ? '<w:jc w:val="center"/>' : align === 'right' ? '<w:jc w:val="right"/>' : '';
                     const shd = isHeader ? '<w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>' : '';
-                    xml += `<w:tc><w:tcPr><w:tcW w:w="${gridCol}" w:type="dxa"/>${shd}</w:tcPr>`
+                    const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10));
+                    let cellW = 0;
+                    for (let s = 0; s < span && colIdx + s < maxCols; s++) cellW += widths[colIdx + s];
+                    const spanXml = span > 1 ? `<w:gridSpan w:val="${Math.min(span, maxCols - colIdx)}"/>` : '';
+                    xml += `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/>${spanXml}${shd}</w:tcPr>`
                         + mdParagraph(runs, jc) + '</w:tc>';
+                    colIdx += span;
                 }
                 // 부족한 열 채우기
-                for (let i = cells.length; i < maxCols; i++) {
-                    xml += `<w:tc><w:tcPr><w:tcW w:w="${gridCol}" w:type="dxa"/></w:tcPr>${mdParagraph('', '')}</w:tc>`;
+                for (; colIdx < maxCols; colIdx++) {
+                    xml += `<w:tc><w:tcPr><w:tcW w:w="${widths[colIdx]}" w:type="dxa"/></w:tcPr>${mdParagraph('', '')}</w:tc>`;
                 }
                 xml += '</w:tr>';
             }

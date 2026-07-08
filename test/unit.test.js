@@ -215,6 +215,25 @@ describe('Markdown → DOCX 헬퍼 (탭5)', () => {
         assert.equal(u.mdDocxContentWidth('portrait', { left: 1000, right: 1000 }), 9906);
     });
 
+    test('mdDistributeColumnWidths: 측정 비율 유지 + 합계 정확', () => {
+        // 좁은 라벨 열 + 넓은 텍스트 열 비율이 유지되어야 함
+        const w = u.mdDistributeColumnWidths([50, 400, 400], 9000);
+        assert.equal(w.reduce((a, b) => a + b, 0), 9000); // 합계 정확
+        assert.ok(w[1] > w[0] * 3 && w[2] > w[0] * 3);    // 텍스트 열이 훨씬 넓음
+        assert.ok(w[0] >= 200);                            // 최소폭 보장
+
+        // 균등 입력 → 균등 분배
+        const eq = u.mdDistributeColumnWidths([100, 100, 100, 100], 8000);
+        assert.equal(eq.reduce((a, b) => a + b, 0), 8000);
+        assert.ok(eq.every(x => Math.abs(x - 2000) <= 1));
+
+        // 측정 실패(0) → 균등 폴백
+        const fb = u.mdDistributeColumnWidths([0, 0, 0], 9000);
+        assert.equal(fb.reduce((a, b) => a + b, 0), 9000);
+
+        assert.equal(u.mdDistributeColumnWidths([], 9000).length, 0);
+    });
+
     test('mdDocxImageRunXml: 드로잉 런 + 관계 ID/치수', () => {
         const xml = u.mdDocxImageRunXml({ rid: 'rIdImg1', id: 1, name: 'math1.png', cx: 95250, cy: 47625 });
         assert.ok(xml.includes('<w:drawing>'));

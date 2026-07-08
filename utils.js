@@ -718,6 +718,44 @@ function mdDocxContentWidth(orientation, margins) {
 }
 
 /**
+ * 미리보기에서 측정한 열 폭(px 등 상대값) 비율을 유지하며 총 폭(twips)에 맞춰
+ * 각 열의 DOCX 폭(twips)을 분배한다. 합계는 정확히 totalWidth가 되도록 보정한다.
+ * (셀 내용에 따라 열 폭이 자동 조절되는 브라우저 표 렌더링을 DOCX에 재현하기 위함)
+ * @param {number[]} colSizes - 열별 상대 폭(측정값). 길이 = 열 수
+ * @param {number} totalWidth - 목표 총 폭(twips)
+ * @param {number} [minWidth=200] - 열 최소 폭(twips)
+ * @returns {number[]} 열별 폭(twips), 합계 = totalWidth
+ */
+function mdDistributeColumnWidths(colSizes, totalWidth, minWidth) {
+    const n = Array.isArray(colSizes) ? colSizes.length : 0;
+    if (n === 0) return [];
+    const min = (typeof minWidth === 'number') ? minWidth : 200;
+    const total = colSizes.reduce((a, b) => a + (b > 0 ? b : 0), 0);
+
+    let widths;
+    if (total <= 0) {
+        // 측정 실패(예: 미리보기 비표시) → 균등 분배 폴백
+        const g = Math.floor(totalWidth / n);
+        widths = new Array(n).fill(g);
+    } else {
+        widths = colSizes.map(sz => Math.max(min, Math.round((sz > 0 ? sz : 0) / total * totalWidth)));
+    }
+    // 반올림/최소폭 보정: 합계를 정확히 totalWidth에 맞춤 (가장 넓은 열에서 조정)
+    let sum = widths.reduce((a, b) => a + b, 0);
+    let diff = totalWidth - sum;
+    if (diff !== 0) {
+        let idx = 0;
+        for (let i = 1; i < n; i++) if (widths[i] > widths[idx]) idx = i;
+        widths[idx] = Math.max(min, widths[idx] + diff);
+        // 최소폭 때문에 여전히 어긋나면 마지막으로 한 번 더 보정
+        sum = widths.reduce((a, b) => a + b, 0);
+        diff = totalWidth - sum;
+        if (diff !== 0) widths[idx] = Math.max(1, widths[idx] + diff);
+    }
+    return widths;
+}
+
+/**
  * 인라인 이미지(수식 등)를 담는 <w:r> 드로잉 런 XML 생성 (DOM 비의존)
  * @param {Object} opts - { rid, id, name, cx, cy } (cx/cy 는 EMU)
  * @returns {string}
