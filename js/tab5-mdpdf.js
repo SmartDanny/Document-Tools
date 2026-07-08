@@ -480,8 +480,10 @@
             let grid = '';
             for (let i = 0; i < maxCols; i++) grid += `<w:gridCol w:w="${widths[i]}"/>`;
 
-            // 고정 레이아웃 + 열별 명시 폭 → 미리보기 비율 유지 + 페이지 폭에 맞춤
-            let xml = `<w:tbl><w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/><w:tblLayout w:type="fixed"/>${mdTableBorders()}<w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>`;
+            // 고정 레이아웃 + 열별 명시 폭 → 미리보기 비율 유지 + 페이지 폭에 맞춤.
+            // 셀 여백(tblCellMar)으로 미리보기 padding을 재현. (tblPr 자식 순서는 스키마 준수)
+            const cellMar = mdDocxCellMarginsXml(ctx.bodyPt || 12);
+            let xml = `<w:tbl><w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/>${mdTableBorders()}<w:tblLayout w:type="fixed"/>${cellMar}<w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>`;
             for (const row of rows) {
                 xml += '<w:tr>';
                 const cells = Array.from(row.querySelectorAll('th,td'));
@@ -490,20 +492,27 @@
                     if (colIdx >= maxCols) break;
                     const isHeader = cell.tagName.toLowerCase() === 'th';
                     const runs = mdChildrenToRuns(cell, ctx, isHeader ? { bold: true } : {});
-                    const align = (cell.style && cell.style.textAlign) || '';
-                    const jc = align === 'center' ? '<w:jc w:val="center"/>' : align === 'right' ? '<w:jc w:val="right"/>' : '';
+                    // 미리보기의 실제 정렬(계산된 스타일: th 기본 center, 열 정렬 :---: 등)을 반영.
+                    // 명시(기본 left)해 뷰어 기본 스타일의 양쪽정렬 상속도 방지.
+                    let align = '';
+                    try { align = window.getComputedStyle(cell).textAlign; } catch (e) {}
+                    if (!align) align = (cell.style && cell.style.textAlign) || cell.getAttribute('align') || '';
+                    const jcVal = align === 'center' ? 'center'
+                        : (align === 'right' || align === 'end') ? 'right' : 'left';
+                    const pPr = `<w:jc w:val="${jcVal}"/>`;
                     const shd = isHeader ? '<w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>' : '';
                     const span = Math.max(1, parseInt(cell.getAttribute('colspan') || '1', 10));
                     let cellW = 0;
                     for (let s = 0; s < span && colIdx + s < maxCols; s++) cellW += widths[colIdx + s];
                     const spanXml = span > 1 ? `<w:gridSpan w:val="${Math.min(span, maxCols - colIdx)}"/>` : '';
-                    xml += `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/>${spanXml}${shd}</w:tcPr>`
-                        + mdParagraph(runs, jc) + '</w:tc>';
+                    // tcPr 자식 순서: tcW, gridSpan, shd, vAlign
+                    xml += `<w:tc><w:tcPr><w:tcW w:w="${cellW}" w:type="dxa"/>${spanXml}${shd}<w:vAlign w:val="top"/></w:tcPr>`
+                        + mdParagraph(runs, pPr) + '</w:tc>';
                     colIdx += span;
                 }
                 // 부족한 열 채우기
                 for (; colIdx < maxCols; colIdx++) {
-                    xml += `<w:tc><w:tcPr><w:tcW w:w="${widths[colIdx]}" w:type="dxa"/></w:tcPr>${mdParagraph('', '')}</w:tc>`;
+                    xml += `<w:tc><w:tcPr><w:tcW w:w="${widths[colIdx]}" w:type="dxa"/><w:vAlign w:val="top"/></w:tcPr>${mdParagraph('', '<w:jc w:val="left"/>')}</w:tc>`;
                 }
                 xml += '</w:tr>';
             }
@@ -605,7 +614,8 @@
                 const ctx = {
                     media: [], imgCounter: 0, mathMap,
                     orientation: mdCurrentOrientation,
-                    contentWidth: mdDocxContentWidth(mdCurrentOrientation)
+                    contentWidth: mdDocxContentWidth(mdCurrentOrientation),
+                    bodyPt
                 };
                 let body = '';
                 for (const child of mdPreviewContent.childNodes) {

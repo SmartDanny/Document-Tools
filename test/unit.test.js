@@ -234,6 +234,18 @@ describe('Markdown → DOCX 헬퍼 (탭5)', () => {
         assert.equal(u.mdDistributeColumnWidths([], 9000).length, 0);
     });
 
+    test('mdDocxCellMarginsXml: 글꼴 비례 셀 여백', () => {
+        const m = u.mdDocxCellMarginsXml(12); // em=240 → lr=132, tb=84
+        assert.ok(m.includes('<w:tblCellMar>') && m.includes('</w:tblCellMar>'));
+        assert.ok(m.includes('<w:left w:w="132" w:type="dxa"/>'));
+        assert.ok(m.includes('<w:right w:w="132" w:type="dxa"/>'));
+        assert.ok(m.includes('<w:top w:w="84" w:type="dxa"/>'));
+        assert.ok(m.includes('<w:bottom w:w="84" w:type="dxa"/>'));
+        // 글꼴이 커지면 여백도 커짐
+        const big = u.mdDocxCellMarginsXml(20);
+        assert.ok(big.includes('w:w="220"')); // lr = 20*20*0.55
+    });
+
     test('mdDocxImageRunXml: 드로잉 런 + 관계 ID/치수', () => {
         const xml = u.mdDocxImageRunXml({ rid: 'rIdImg1', id: 1, name: 'math1.png', cx: 95250, cy: 47625 });
         assert.ok(xml.includes('<w:drawing>'));

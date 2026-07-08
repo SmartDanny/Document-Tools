@@ -718,6 +718,24 @@ function mdDocxContentWidth(orientation, margins) {
 }
 
 /**
+ * 표 셀 여백(<w:tblCellMar>) XML 생성 - 미리보기의 셀 padding(≈0.75em)에 대응
+ * 본문 글꼴 크기에 비례해 좌우/상하 여백을 산출한다.
+ * @param {number} bodyPt - 본문 글꼴 크기(pt)
+ * @returns {string} <w:tblCellMar>...</w:tblCellMar>
+ */
+function mdDocxCellMarginsXml(bodyPt) {
+    const em = (Number(bodyPt) || 12) * 20; // 1pt = 20 twip
+    const lr = Math.round(em * 0.55);
+    const tb = Math.round(em * 0.35);
+    return `<w:tblCellMar>`
+        + `<w:top w:w="${tb}" w:type="dxa"/>`
+        + `<w:left w:w="${lr}" w:type="dxa"/>`
+        + `<w:bottom w:w="${tb}" w:type="dxa"/>`
+        + `<w:right w:w="${lr}" w:type="dxa"/>`
+        + `</w:tblCellMar>`;
+}
+
+/**
  * 미리보기에서 측정한 열 폭(px 등 상대값) 비율을 유지하며 총 폭(twips)에 맞춰
  * 각 열의 DOCX 폭(twips)을 분배한다. 합계는 정확히 totalWidth가 되도록 보정한다.
  * (셀 내용에 따라 열 폭이 자동 조절되는 브라우저 표 렌더링을 DOCX에 재현하기 위함)
