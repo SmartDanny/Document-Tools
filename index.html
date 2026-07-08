@@ -38,7 +38,7 @@
             <button class="floating-tab-btn" data-tab="tab2" onclick="switchMainTab('tab2', this)">후처리</button>
             <button class="floating-tab-btn" data-tab="tab3" onclick="switchMainTab('tab3', this)">한영혼합본</button>
             <button class="floating-tab-btn" data-tab="tab4" onclick="switchMainTab('tab4', this)">문서비교</button>
-            <button class="floating-tab-btn" data-tab="tab5" onclick="switchMainTab('tab5', this)">MD→PDF</button>
+            <button class="floating-tab-btn" data-tab="tab5" onclick="switchMainTab('tab5', this)">MD→PDF/DOCX</button>
         </div>
     </div>
 
@@ -48,7 +48,7 @@
             <button class="tab-btn" onclick="switchMainTab('tab2', this)">후처리 단계 (HTML→DOCX)</button>
             <button class="tab-btn" onclick="switchMainTab('tab3', this)">한영혼합본 도구</button>
             <button class="tab-btn" onclick="switchMainTab('tab4', this)">문서 비교</button>
-            <button class="tab-btn" onclick="switchMainTab('tab5', this)">Markdown to PDF</button>
+            <button class="tab-btn" onclick="switchMainTab('tab5', this)">Markdown to PDF/docx</button>
         </div>
         
         <!-- 탭1: DOCX → HTML -->
@@ -666,10 +666,10 @@
             </div>
         </div>
         
-        <!-- 탭5: Markdown to PDF -->
+        <!-- 탭5: Markdown to PDF/docx -->
         <div id="tab5" class="tab-content">
             <div class="section">
-                <div class="section-title">Markdown / HTML → PDF 변환</div>
+                <div class="section-title">Markdown / HTML → PDF/DOCX 변환</div>
                 <div class="md-toolbar" style="margin-bottom:15px;">
                     <div class="font-size-control">
                         <button onclick="changeMdFontSize(-1)" title="작게">−</button>

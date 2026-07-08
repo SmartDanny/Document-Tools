@@ -1,11 +1,11 @@
 /**
  * Document Tools - js/tab5-mdpdf.js
- * 탭5: Markdown to PDF
+ * 탭5: Markdown to PDF/docx
  *
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  */
 
-        // ========== 탭5: Markdown to PDF ==========
+        // ========== 탭5: Markdown to PDF/docx ==========
         const mdInputText = document.getElementById('mdInputText');
         const mdPreviewContent = document.getElementById('mdPreviewContent');
         const mdPreviewPaper = document.getElementById('mdPreviewPaper');
@@ -451,11 +451,15 @@
             rows.forEach(r => { maxCols = Math.max(maxCols, r.querySelectorAll('th,td').length); });
             if (maxCols === 0) return '';
 
-            const gridCol = Math.floor(9350 / maxCols); // A4 세로 여백 내 폭(twips) 근사
+            // 용지 방향/여백 기준 콘텐츠 폭에 맞춰 표를 페이지 폭으로 채움
+            const contentWidth = ctx.contentWidth || mdDocxContentWidth(mdCurrentOrientation);
+            const gridCol = Math.floor(contentWidth / maxCols);
+            const tableWidth = gridCol * maxCols;
             let grid = '';
             for (let i = 0; i < maxCols; i++) grid += `<w:gridCol w:w="${gridCol}"/>`;
 
-            let xml = `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/>${mdTableBorders()}<w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>`;
+            // 고정 레이아웃(w:tblLayout fixed) + 명시적 폭 → 방향 전환 시 표가 페이지에 맞춰짐
+            let xml = `<w:tbl><w:tblPr><w:tblW w:w="${tableWidth}" w:type="dxa"/><w:tblLayout w:type="fixed"/>${mdTableBorders()}<w:tblLook w:val="04A0"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>`;
             for (const row of rows) {
                 xml += '<w:tr>';
                 const cells = Array.from(row.querySelectorAll('th,td'));
@@ -569,7 +573,11 @@
                 const mathMap = await mdPrerenderMath(mdPreviewContent, emPx);
                 const mathFailed = Array.from(mathMap.values()).some(v => v === null);
 
-                const ctx = { media: [], imgCounter: 0, mathMap };
+                const ctx = {
+                    media: [], imgCounter: 0, mathMap,
+                    orientation: mdCurrentOrientation,
+                    contentWidth: mdDocxContentWidth(mdCurrentOrientation)
+                };
                 let body = '';
                 for (const child of mdPreviewContent.childNodes) {
                     body += mdBlockToDocx(child, ctx);

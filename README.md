@@ -27,7 +27,7 @@
 - 추가/삭제/수정 내용 하이라이트 표시
 - 비교 결과 DOCX 다운로드
 
-### 5. Markdown to PDF / DOCX
+### 5. Markdown to PDF/docx
 - 마크다운·HTML·LaTeX 수식 문서를 PDF 또는 DOCX(Word)로 변환
 - 실시간 미리보기 지원 (용지 방향·글꼴 크기 조절)
 - DOCX 저장: 미리보기 DOM을 순회해 제목/문단/목록/표/서식을 네이티브 OOXML로 생성하고, LaTeX 수식은 이미지로 임베드(모든 뷰어에서 동일하게 렌더링)
@@ -67,7 +67,7 @@ document-tools/
 │   ├── tab3-bilingual.js    # 탭3: 한영혼합본 추출/색변환/DOCX 생성
 │   ├── tab3-merge.js        # 탭3: 한영혼합본 병합
 │   ├── tab4-compare.js      # 탭4: 문서 비교 (텍스트/DOCX Track-Changes)
-│   ├── tab5-mdpdf.js        # 탭5: Markdown to PDF / DOCX
+│   ├── tab5-mdpdf.js        # 탭5: Markdown to PDF/docx
 │   └── stat-nav.js          # 첨자/표 통계 카드 내비게이션 (공용)
 ├── generate_template.js     # US 특허 템플릿 생성 스크립트 (Node.js)
 ├── US_patent_template.docx  # 생성된 US 특허 템플릿

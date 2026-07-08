@@ -679,23 +679,42 @@ function mdDocxRunProps(fmt) {
     return p ? `<w:rPr>${p}</w:rPr>` : '';
 }
 
+// A4 크기(twips): 1mm ≈ 56.6929 twip
+const MD_A4_SHORT = 11906; // 210mm
+const MD_A4_LONG = 16838;  // 297mm
+
+// 기본 페이지 여백(twips): 위 3cm, 아래·좌·우 2.54cm(=1inch)
+// (1cm ≈ 566.929 twip, 2.54cm = 1440 twip)
+const MD_DEFAULT_MARGINS = { top: 1701, bottom: 1440, left: 1440, right: 1440 };
+
 /**
  * 용지 방향에 맞는 A4 <w:sectPr> XML 생성
  * @param {string} orientation - 'portrait' | 'landscape'
+ * @param {Object} [margins] - 여백 override(twips). 미지정 시 기본 여백 사용
+ *   ("별도 설정이 특정되어 있는 경우"에만 override, 그 외에는 기본값 유지)
  * @returns {string}
  */
-function mdDocxSectPr(orientation) {
-    // A4: 210mm x 297mm → twips (1mm ≈ 56.6929 twip)
-    const shortSide = 11906; // 210mm
-    const longSide = 16838;  // 297mm
-    const margin = 850;      // 15mm
+function mdDocxSectPr(orientation, margins) {
+    const m = Object.assign({}, MD_DEFAULT_MARGINS, margins || {});
     let pgSz;
     if (orientation === 'landscape') {
-        pgSz = `<w:pgSz w:w="${longSide}" w:h="${shortSide}" w:orient="landscape"/>`;
+        pgSz = `<w:pgSz w:w="${MD_A4_LONG}" w:h="${MD_A4_SHORT}" w:orient="landscape"/>`;
     } else {
-        pgSz = `<w:pgSz w:w="${shortSide}" w:h="${longSide}"/>`;
+        pgSz = `<w:pgSz w:w="${MD_A4_SHORT}" w:h="${MD_A4_LONG}"/>`;
     }
-    return `<w:sectPr>${pgSz}<w:pgMar w:top="${margin}" w:right="${margin}" w:bottom="${margin}" w:left="${margin}" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
+    return `<w:sectPr>${pgSz}<w:pgMar w:top="${m.top}" w:right="${m.right}" w:bottom="${m.bottom}" w:left="${m.left}" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
+}
+
+/**
+ * 용지 방향/여백에 따른 본문 콘텐츠 폭(twips) 계산 - 표를 페이지 폭에 맞출 때 사용
+ * @param {string} orientation - 'portrait' | 'landscape'
+ * @param {Object} [margins] - 여백 override(twips). 미지정 시 기본 여백 사용
+ * @returns {number} 콘텐츠 폭(twips)
+ */
+function mdDocxContentWidth(orientation, margins) {
+    const m = Object.assign({}, MD_DEFAULT_MARGINS, margins || {});
+    const pageW = orientation === 'landscape' ? MD_A4_LONG : MD_A4_SHORT;
+    return pageW - m.left - m.right;
 }
 
 /**

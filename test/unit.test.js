@@ -194,6 +194,27 @@ describe('Markdown → DOCX 헬퍼 (탭5)', () => {
         assert.ok(l.includes('w:orient="landscape"'));
     });
 
+    test('mdDocxSectPr: 기본 여백(위 3cm, 나머지 2.54cm) + override', () => {
+        const p = u.mdDocxSectPr('portrait');
+        // 위 3cm=1701, 아래·좌·우 2.54cm(1inch)=1440
+        assert.ok(p.includes('w:top="1701"'));
+        assert.ok(p.includes('w:bottom="1440"'));
+        assert.ok(p.includes('w:left="1440"'));
+        assert.ok(p.includes('w:right="1440"'));
+        // 별도 설정이 특정된 경우만 override
+        const o = u.mdDocxSectPr('portrait', { top: 500 });
+        assert.ok(o.includes('w:top="500"'));
+        assert.ok(o.includes('w:bottom="1440"'));
+    });
+
+    test('mdDocxContentWidth: 방향/여백 반영한 본문 폭', () => {
+        // portrait: 11906 - 1440 - 1440
+        assert.equal(u.mdDocxContentWidth('portrait'), 9026);
+        // landscape: 16838 - 1440 - 1440
+        assert.equal(u.mdDocxContentWidth('landscape'), 13958);
+        assert.equal(u.mdDocxContentWidth('portrait', { left: 1000, right: 1000 }), 9906);
+    });
+
     test('mdDocxImageRunXml: 드로잉 런 + 관계 ID/치수', () => {
         const xml = u.mdDocxImageRunXml({ rid: 'rIdImg1', id: 1, name: 'math1.png', cx: 95250, cy: 47625 });
         assert.ok(xml.includes('<w:drawing>'));
