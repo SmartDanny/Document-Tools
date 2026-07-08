@@ -152,3 +152,60 @@ describe('DOCX 생성 헬퍼', () => {
         assert.ok(sized.includes('<w:spacing w:after="0"/>'));
     });
 });
+
+describe('Markdown → DOCX 헬퍼 (탭5)', () => {
+    test('cssColorToDocxHex: 다양한 표기 → 대문자 6자리 HEX', () => {
+        assert.equal(u.cssColorToDocxHex('#dc2626'), 'DC2626');
+        assert.equal(u.cssColorToDocxHex('#FFF'), 'FFFFFF');
+        assert.equal(u.cssColorToDocxHex('rgb(220, 38, 38)'), 'DC2626');
+        assert.equal(u.cssColorToDocxHex('rgba(0, 0, 0, 0.5)'), '000000');
+        assert.equal(u.cssColorToDocxHex('transparent'), null);
+        assert.equal(u.cssColorToDocxHex(''), null);
+        assert.equal(u.cssColorToDocxHex(null), null);
+        assert.equal(u.cssColorToDocxHex('red'), null); // 이름 색상 미지원
+    });
+
+    test('pxToEmu: 1px=9525EMU, 최소 1', () => {
+        assert.equal(u.pxToEmu(1), 9525);
+        assert.equal(u.pxToEmu(10), 95250);
+        assert.equal(u.pxToEmu(0), 1);
+        assert.equal(u.pxToEmu(-5), 1);
+    });
+
+    test('mdDocxRunProps: 서식 → rPr XML', () => {
+        assert.equal(u.mdDocxRunProps({}), '');
+        assert.equal(u.mdDocxRunProps(null), '');
+        const bold = u.mdDocxRunProps({ bold: true, italic: true });
+        assert.ok(bold.includes('<w:b/>') && bold.includes('<w:i/>'));
+        const styled = u.mdDocxRunProps({ color: 'DC2626', bg: 'FEF08A', sz: 48 });
+        assert.ok(styled.includes('<w:color w:val="DC2626"/>'));
+        assert.ok(styled.includes('w:fill="FEF08A"'));
+        assert.ok(styled.includes('<w:sz w:val="48"/>'));
+        assert.ok(u.mdDocxRunProps({ code: true }).includes('Consolas'));
+        assert.ok(u.mdDocxRunProps({ vertAlign: 'superscript' }).includes('w:val="superscript"'));
+    });
+
+    test('mdDocxSectPr: 방향에 따른 A4 크기/orient', () => {
+        const p = u.mdDocxSectPr('portrait');
+        assert.ok(p.includes('w:w="11906"') && p.includes('w:h="16838"'));
+        assert.ok(!p.includes('w:orient'));
+        const l = u.mdDocxSectPr('landscape');
+        assert.ok(l.includes('w:w="16838"') && l.includes('w:h="11906"'));
+        assert.ok(l.includes('w:orient="landscape"'));
+    });
+
+    test('mdDocxImageRunXml: 드로잉 런 + 관계 ID/치수', () => {
+        const xml = u.mdDocxImageRunXml({ rid: 'rIdImg1', id: 1, name: 'math1.png', cx: 95250, cy: 47625 });
+        assert.ok(xml.includes('<w:drawing>'));
+        assert.ok(xml.includes('r:embed="rIdImg1"'));
+        assert.ok(xml.includes('<wp:extent cx="95250" cy="47625"/>'));
+        assert.ok(xml.includes('<a:ext cx="95250" cy="47625"/>'));
+    });
+
+    test('mdDocxHeadingSize: h1~h6 단계별 크기', () => {
+        assert.equal(u.mdDocxHeadingSize('h1'), 48);
+        assert.equal(u.mdDocxHeadingSize('H2'), 40);
+        assert.equal(u.mdDocxHeadingSize('h6'), 24);
+        assert.equal(u.mdDocxHeadingSize('p'), 0);
+    });
+});

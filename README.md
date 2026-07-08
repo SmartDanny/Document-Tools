@@ -1,6 +1,6 @@
 # Document Tools (문서 도구 모음)
 
-[![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)](https://github.com/)
+[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/)
 [![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-red.svg)](https://github.com/)
 
 특허 명세서 작성 및 편집을 위한 웹 기반 문서 처리 도구 모음입니다.
@@ -27,9 +27,10 @@
 - 추가/삭제/수정 내용 하이라이트 표시
 - 비교 결과 DOCX 다운로드
 
-### 5. Markdown to PDF
-- 마크다운 문서를 PDF로 변환
-- 실시간 미리보기 지원
+### 5. Markdown to PDF / DOCX
+- 마크다운·HTML·LaTeX 수식 문서를 PDF 또는 DOCX(Word)로 변환
+- 실시간 미리보기 지원 (용지 방향·글꼴 크기 조절)
+- DOCX 저장: 미리보기 DOM을 순회해 제목/문단/목록/표/서식을 네이티브 OOXML로 생성하고, LaTeX 수식은 이미지로 임베드(모든 뷰어에서 동일하게 렌더링)
 
 ## 📦 설치 및 사용법
 
@@ -66,7 +67,7 @@ document-tools/
 │   ├── tab3-bilingual.js    # 탭3: 한영혼합본 추출/색변환/DOCX 생성
 │   ├── tab3-merge.js        # 탭3: 한영혼합본 병합
 │   ├── tab4-compare.js      # 탭4: 문서 비교 (텍스트/DOCX Track-Changes)
-│   ├── tab5-mdpdf.js        # 탭5: Markdown to PDF
+│   ├── tab5-mdpdf.js        # 탭5: Markdown to PDF / DOCX
 │   └── stat-nav.js          # 첨자/표 통계 카드 내비게이션 (공용)
 ├── generate_template.js     # US 특허 템플릿 생성 스크립트 (Node.js)
 ├── US_patent_template.docx  # 생성된 US 특허 템플릿
@@ -81,7 +82,9 @@ document-tools/
   - [FileSaver.js](https://github.com/eligrey/FileSaver.js/) - 파일 다운로드
   - [marked.js](https://marked.js.org/) - Markdown 파싱
   - [KaTeX](https://katex.org/) - 수식 렌더링 (Markdown 미리보기)
+  - [MathJax](https://www.mathjax.org/) - DOCX 저장 시 수식 SVG 생성 (필요 시 지연 로드)
 - **PDF 변환**: 브라우저 인쇄 기능(`window.print`)의 "PDF로 저장" 사용
+- **DOCX 변환**: JSZip으로 OOXML 패키지를 직접 조립, 수식은 MathJax SVG → 고DPI PNG로 임베드
 
 ## 💻 시스템 요구사항
 
@@ -144,5 +147,5 @@ Copyright (c) 2026 Smart Danny. All rights reserved.
 ## 📞 문의
 
 - **Author**: Smart Danny
-- **Version**: 1.3.0
-- **Last Updated**: 2026-07-05
+- **Version**: 1.4.0
+- **Last Updated**: 2026-07-08

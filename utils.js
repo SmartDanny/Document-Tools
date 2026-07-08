@@ -1,8 +1,8 @@
 /**
  * Document Tools - utils.js
  * 공통 유틸리티 함수 모음
- * Version: 1.3.0
- * Last Updated: 2026-07-05
+ * Version: 1.4.0
+ * Last Updated: 2026-07-08
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  * 이 소프트웨어는 저작권법의 보호를 받습니다.
@@ -615,6 +615,120 @@ function makeDocxStylesXml(options = {}) {
 <w:pPr><w:spacing w:after="0"/></w:pPr>${rPr}
 </w:style>
 </w:styles>`;
+}
+
+// ============================================
+// Markdown → DOCX 변환용 순수 헬퍼 (탭5)
+// ============================================
+
+/**
+ * CSS 색상 문자열을 DOCX용 6자리 16진수(RRGGBB)로 변환
+ * @param {string} str - '#rgb', '#rrggbb', 'rgb(r,g,b)' 등
+ * @returns {string|null} 대문자 6자리 HEX 또는 변환 실패 시 null
+ */
+function cssColorToDocxHex(str) {
+    if (!str || typeof str !== 'string') return null;
+    let s = str.trim().toLowerCase();
+    if (s === '' || s === 'transparent' || s === 'inherit' || s === 'initial' || s === 'currentcolor') return null;
+
+    // #rgb / #rrggbb
+    let m = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+    if (m) {
+        let hex = m[1];
+        if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+        return hex.toUpperCase();
+    }
+    // rgb() / rgba()
+    m = s.match(/^rgba?\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})/);
+    if (m) {
+        const toHex = n => Math.max(0, Math.min(255, parseInt(n, 10))).toString(16).padStart(2, '0');
+        return (toHex(m[1]) + toHex(m[2]) + toHex(m[3])).toUpperCase();
+    }
+    return null;
+}
+
+/**
+ * 픽셀 길이를 EMU(English Metric Unit)로 변환 (1px @96dpi = 9525 EMU)
+ * @param {number} px
+ * @returns {number} 정수 EMU (최소 1)
+ */
+function pxToEmu(px) {
+    const v = Math.round((Number(px) || 0) * 9525);
+    return v > 0 ? v : 1;
+}
+
+/**
+ * 런 서식(fmt) 객체를 DOCX <w:rPr> XML 문자열로 변환 (DOM 비의존, 순수 함수)
+ * @param {Object} fmt - { bold, italic, underline, strike, code, color, bg, highlight, sz, vertAlign }
+ *   color/bg 는 6자리 HEX, sz 는 half-point 정수, vertAlign 은 'superscript'|'subscript'
+ * @returns {string} <w:rPr>...</w:rPr> 또는 빈 문자열
+ */
+function mdDocxRunProps(fmt) {
+    if (!fmt) return '';
+    let p = '';
+    if (fmt.code) p += '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>';
+    if (fmt.bold) p += '<w:b/><w:bCs/>';
+    if (fmt.italic) p += '<w:i/><w:iCs/>';
+    if (fmt.strike) p += '<w:strike/>';
+    if (fmt.color) p += `<w:color w:val="${fmt.color}"/>`;
+    if (fmt.sz) p += `<w:sz w:val="${fmt.sz}"/><w:szCs w:val="${fmt.sz}"/>`;
+    if (fmt.underline) p += '<w:u w:val="single"/>';
+    if (fmt.bg) p += `<w:shd w:val="clear" w:color="auto" w:fill="${fmt.bg}"/>`;
+    if (fmt.highlight) p += `<w:highlight w:val="${fmt.highlight}"/>`;
+    if (fmt.vertAlign) p += `<w:vertAlign w:val="${fmt.vertAlign}"/>`;
+    return p ? `<w:rPr>${p}</w:rPr>` : '';
+}
+
+/**
+ * 용지 방향에 맞는 A4 <w:sectPr> XML 생성
+ * @param {string} orientation - 'portrait' | 'landscape'
+ * @returns {string}
+ */
+function mdDocxSectPr(orientation) {
+    // A4: 210mm x 297mm → twips (1mm ≈ 56.6929 twip)
+    const shortSide = 11906; // 210mm
+    const longSide = 16838;  // 297mm
+    const margin = 850;      // 15mm
+    let pgSz;
+    if (orientation === 'landscape') {
+        pgSz = `<w:pgSz w:w="${longSide}" w:h="${shortSide}" w:orient="landscape"/>`;
+    } else {
+        pgSz = `<w:pgSz w:w="${shortSide}" w:h="${longSide}"/>`;
+    }
+    return `<w:sectPr>${pgSz}<w:pgMar w:top="${margin}" w:right="${margin}" w:bottom="${margin}" w:left="${margin}" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
+}
+
+/**
+ * 인라인 이미지(수식 등)를 담는 <w:r> 드로잉 런 XML 생성 (DOM 비의존)
+ * @param {Object} opts - { rid, id, name, cx, cy } (cx/cy 는 EMU)
+ * @returns {string}
+ */
+function mdDocxImageRunXml(opts) {
+    const { rid, id, name, cx, cy } = opts;
+    const safeName = escapeXml(name || ('image' + id));
+    return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">`
+        + `<wp:extent cx="${cx}" cy="${cy}"/>`
+        + `<wp:effectExtent l="0" t="0" r="0" b="0"/>`
+        + `<wp:docPr id="${id}" name="${safeName}"/>`
+        + `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>`
+        + `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">`
+        + `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">`
+        + `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">`
+        + `<pic:nvPicPr><pic:cNvPr id="${id}" name="${safeName}"/><pic:cNvPicPr/></pic:nvPicPr>`
+        + `<pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`
+        + `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`
+        + `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>`
+        + `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+}
+
+/**
+ * 제목 태그(h1~h6)에 대응하는 DOCX 글꼴 크기(half-point) 반환
+ * @param {string} tag - 'h1'~'h6' (대소문자 무관)
+ * @returns {number} half-point 크기 (해당 없으면 0)
+ */
+function mdDocxHeadingSize(tag) {
+    const map = { h1: 48, h2: 40, h3: 32, h4: 28, h5: 26, h6: 24 };
+    return map[String(tag).toLowerCase()] || 0;
 }
 
 // ============================================
