@@ -1,8 +1,8 @@
 /**
  * Document Tools - utils.js
  * 공통 유틸리티 함수 모음
- * Version: 1.3.0
- * Last Updated: 2026-07-05
+ * Version: 1.4.0
+ * Last Updated: 2026-07-08
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  * 이 소프트웨어는 저작권법의 보호를 받습니다.
@@ -615,6 +615,195 @@ function makeDocxStylesXml(options = {}) {
 <w:pPr><w:spacing w:after="0"/></w:pPr>${rPr}
 </w:style>
 </w:styles>`;
+}
+
+// ============================================
+// Markdown → DOCX 변환용 순수 헬퍼 (탭5)
+// ============================================
+
+/**
+ * CSS 색상 문자열을 DOCX용 6자리 16진수(RRGGBB)로 변환
+ * @param {string} str - '#rgb', '#rrggbb', 'rgb(r,g,b)' 등
+ * @returns {string|null} 대문자 6자리 HEX 또는 변환 실패 시 null
+ */
+function cssColorToDocxHex(str) {
+    if (!str || typeof str !== 'string') return null;
+    let s = str.trim().toLowerCase();
+    if (s === '' || s === 'transparent' || s === 'inherit' || s === 'initial' || s === 'currentcolor') return null;
+
+    // #rgb / #rrggbb
+    let m = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+    if (m) {
+        let hex = m[1];
+        if (hex.length === 3) hex = hex.split('').map(c => c + c).join('');
+        return hex.toUpperCase();
+    }
+    // rgb() / rgba()
+    m = s.match(/^rgba?\(\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})\s*,\s*([0-9]{1,3})/);
+    if (m) {
+        const toHex = n => Math.max(0, Math.min(255, parseInt(n, 10))).toString(16).padStart(2, '0');
+        return (toHex(m[1]) + toHex(m[2]) + toHex(m[3])).toUpperCase();
+    }
+    return null;
+}
+
+/**
+ * 픽셀 길이를 EMU(English Metric Unit)로 변환 (1px @96dpi = 9525 EMU)
+ * @param {number} px
+ * @returns {number} 정수 EMU (최소 1)
+ */
+function pxToEmu(px) {
+    const v = Math.round((Number(px) || 0) * 9525);
+    return v > 0 ? v : 1;
+}
+
+/**
+ * 런 서식(fmt) 객체를 DOCX <w:rPr> XML 문자열로 변환 (DOM 비의존, 순수 함수)
+ * @param {Object} fmt - { bold, italic, underline, strike, code, color, bg, highlight, sz, vertAlign }
+ *   color/bg 는 6자리 HEX, sz 는 half-point 정수, vertAlign 은 'superscript'|'subscript'
+ * @returns {string} <w:rPr>...</w:rPr> 또는 빈 문자열
+ */
+function mdDocxRunProps(fmt) {
+    if (!fmt) return '';
+    let p = '';
+    if (fmt.code) p += '<w:rFonts w:ascii="Consolas" w:hAnsi="Consolas" w:cs="Consolas"/>';
+    if (fmt.bold) p += '<w:b/><w:bCs/>';
+    if (fmt.italic) p += '<w:i/><w:iCs/>';
+    if (fmt.strike) p += '<w:strike/>';
+    if (fmt.color) p += `<w:color w:val="${fmt.color}"/>`;
+    if (fmt.sz) p += `<w:sz w:val="${fmt.sz}"/><w:szCs w:val="${fmt.sz}"/>`;
+    if (fmt.underline) p += '<w:u w:val="single"/>';
+    if (fmt.bg) p += `<w:shd w:val="clear" w:color="auto" w:fill="${fmt.bg}"/>`;
+    if (fmt.highlight) p += `<w:highlight w:val="${fmt.highlight}"/>`;
+    if (fmt.vertAlign) p += `<w:vertAlign w:val="${fmt.vertAlign}"/>`;
+    return p ? `<w:rPr>${p}</w:rPr>` : '';
+}
+
+// A4 크기(twips): 1mm ≈ 56.6929 twip
+const MD_A4_SHORT = 11906; // 210mm
+const MD_A4_LONG = 16838;  // 297mm
+
+// 기본 페이지 여백(twips): 위 3cm, 아래·좌·우 2.54cm(=1inch)
+// (1cm ≈ 566.929 twip, 2.54cm = 1440 twip)
+const MD_DEFAULT_MARGINS = { top: 1701, bottom: 1440, left: 1440, right: 1440 };
+
+/**
+ * 용지 방향에 맞는 A4 <w:sectPr> XML 생성
+ * @param {string} orientation - 'portrait' | 'landscape'
+ * @param {Object} [margins] - 여백 override(twips). 미지정 시 기본 여백 사용
+ *   ("별도 설정이 특정되어 있는 경우"에만 override, 그 외에는 기본값 유지)
+ * @returns {string}
+ */
+function mdDocxSectPr(orientation, margins) {
+    const m = Object.assign({}, MD_DEFAULT_MARGINS, margins || {});
+    let pgSz;
+    if (orientation === 'landscape') {
+        pgSz = `<w:pgSz w:w="${MD_A4_LONG}" w:h="${MD_A4_SHORT}" w:orient="landscape"/>`;
+    } else {
+        pgSz = `<w:pgSz w:w="${MD_A4_SHORT}" w:h="${MD_A4_LONG}"/>`;
+    }
+    return `<w:sectPr>${pgSz}<w:pgMar w:top="${m.top}" w:right="${m.right}" w:bottom="${m.bottom}" w:left="${m.left}" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
+}
+
+/**
+ * 용지 방향/여백에 따른 본문 콘텐츠 폭(twips) 계산 - 표를 페이지 폭에 맞출 때 사용
+ * @param {string} orientation - 'portrait' | 'landscape'
+ * @param {Object} [margins] - 여백 override(twips). 미지정 시 기본 여백 사용
+ * @returns {number} 콘텐츠 폭(twips)
+ */
+function mdDocxContentWidth(orientation, margins) {
+    const m = Object.assign({}, MD_DEFAULT_MARGINS, margins || {});
+    const pageW = orientation === 'landscape' ? MD_A4_LONG : MD_A4_SHORT;
+    return pageW - m.left - m.right;
+}
+
+/**
+ * 표 셀 여백(<w:tblCellMar>) XML 생성 - 미리보기의 셀 padding(≈0.75em)에 대응
+ * 본문 글꼴 크기에 비례해 좌우/상하 여백을 산출한다.
+ * @param {number} bodyPt - 본문 글꼴 크기(pt)
+ * @returns {string} <w:tblCellMar>...</w:tblCellMar>
+ */
+function mdDocxCellMarginsXml(bodyPt) {
+    const em = (Number(bodyPt) || 12) * 20; // 1pt = 20 twip
+    const lr = Math.round(em * 0.55);
+    const tb = Math.round(em * 0.35);
+    return `<w:tblCellMar>`
+        + `<w:top w:w="${tb}" w:type="dxa"/>`
+        + `<w:left w:w="${lr}" w:type="dxa"/>`
+        + `<w:bottom w:w="${tb}" w:type="dxa"/>`
+        + `<w:right w:w="${lr}" w:type="dxa"/>`
+        + `</w:tblCellMar>`;
+}
+
+/**
+ * 미리보기에서 측정한 열 폭(px 등 상대값) 비율을 유지하며 총 폭(twips)에 맞춰
+ * 각 열의 DOCX 폭(twips)을 분배한다. 합계는 정확히 totalWidth가 되도록 보정한다.
+ * (셀 내용에 따라 열 폭이 자동 조절되는 브라우저 표 렌더링을 DOCX에 재현하기 위함)
+ * @param {number[]} colSizes - 열별 상대 폭(측정값). 길이 = 열 수
+ * @param {number} totalWidth - 목표 총 폭(twips)
+ * @param {number} [minWidth=200] - 열 최소 폭(twips)
+ * @returns {number[]} 열별 폭(twips), 합계 = totalWidth
+ */
+function mdDistributeColumnWidths(colSizes, totalWidth, minWidth) {
+    const n = Array.isArray(colSizes) ? colSizes.length : 0;
+    if (n === 0) return [];
+    const min = (typeof minWidth === 'number') ? minWidth : 200;
+    const total = colSizes.reduce((a, b) => a + (b > 0 ? b : 0), 0);
+
+    let widths;
+    if (total <= 0) {
+        // 측정 실패(예: 미리보기 비표시) → 균등 분배 폴백
+        const g = Math.floor(totalWidth / n);
+        widths = new Array(n).fill(g);
+    } else {
+        widths = colSizes.map(sz => Math.max(min, Math.round((sz > 0 ? sz : 0) / total * totalWidth)));
+    }
+    // 반올림/최소폭 보정: 합계를 정확히 totalWidth에 맞춤 (가장 넓은 열에서 조정)
+    let sum = widths.reduce((a, b) => a + b, 0);
+    let diff = totalWidth - sum;
+    if (diff !== 0) {
+        let idx = 0;
+        for (let i = 1; i < n; i++) if (widths[i] > widths[idx]) idx = i;
+        widths[idx] = Math.max(min, widths[idx] + diff);
+        // 최소폭 때문에 여전히 어긋나면 마지막으로 한 번 더 보정
+        sum = widths.reduce((a, b) => a + b, 0);
+        diff = totalWidth - sum;
+        if (diff !== 0) widths[idx] = Math.max(1, widths[idx] + diff);
+    }
+    return widths;
+}
+
+/**
+ * 인라인 이미지(수식 등)를 담는 <w:r> 드로잉 런 XML 생성 (DOM 비의존)
+ * @param {Object} opts - { rid, id, name, cx, cy } (cx/cy 는 EMU)
+ * @returns {string}
+ */
+function mdDocxImageRunXml(opts) {
+    const { rid, id, name, cx, cy } = opts;
+    const safeName = escapeXml(name || ('image' + id));
+    return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">`
+        + `<wp:extent cx="${cx}" cy="${cy}"/>`
+        + `<wp:effectExtent l="0" t="0" r="0" b="0"/>`
+        + `<wp:docPr id="${id}" name="${safeName}"/>`
+        + `<wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr>`
+        + `<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">`
+        + `<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">`
+        + `<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">`
+        + `<pic:nvPicPr><pic:cNvPr id="${id}" name="${safeName}"/><pic:cNvPicPr/></pic:nvPicPr>`
+        + `<pic:blipFill><a:blip r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>`
+        + `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>`
+        + `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>`
+        + `</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+}
+
+/**
+ * 제목 태그(h1~h6)에 대응하는 DOCX 글꼴 크기(half-point) 반환
+ * @param {string} tag - 'h1'~'h6' (대소문자 무관)
+ * @returns {number} half-point 크기 (해당 없으면 0)
+ */
+function mdDocxHeadingSize(tag) {
+    const map = { h1: 48, h2: 40, h3: 32, h4: 28, h5: 26, h6: 24 };
+    return map[String(tag).toLowerCase()] || 0;
 }
 
 // ============================================

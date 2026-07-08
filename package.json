@@ -1,7 +1,7 @@
 {
   "name": "document-tools",
-  "version": "1.3.0",
-  "description": "특허 명세서 작성 및 편집을 위한 웹 기반 문서 처리 도구 모음 (DOCX 전처리/후처리, 한영혼합본, 문서비교, Markdown to PDF)",
+  "version": "1.4.0",
+  "description": "특허 명세서 작성 및 편집을 위한 웹 기반 문서 처리 도구 모음 (DOCX 전처리/후처리, 한영혼합본, 문서비교, Markdown to PDF/DOCX)",
   "private": true,
   "scripts": {
     "test": "node --test test/unit.test.js",
