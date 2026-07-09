@@ -433,10 +433,12 @@ const server = http.createServer((req, res) => {
     const finRes = await page.evaluate(async () => {
         const r = {};
         const ta = document.getElementById('textInput1').value;
-        // 변환결과는 ROPKS 기준: 영문 부제 + 제목 국문{영문}
-        r.textHasTitle = ta.includes('TITLE OF THE INVENTION\n테스트 발명{TEST INVENTION}') && ta.includes('WHAT IS CLAIMED IS:');
+        // 1단계 창 = .fin 원본 국문 부제(【】)
+        r.textHasTitle = ta.includes('【발명의 명칭】') && ta.includes('【기술분야】') && !ta.includes('TITLE OF THE INVENTION');
         r.textHasTable = ta.includes('<table');
         r.textHasClaim = ta.includes('【청구항 1】');
+        // 변환결과(output1) = ROPKS (영문 부제)
+        r.resultIsRopks = document.getElementById('output1').innerHTML.includes('TITLE OF THE INVENTION');
         r.sectionVisible = !document.getElementById('finOutputSection').classList.contains('hidden');
         r.irOk = !!(typeof finParsedIR1 === 'object' && finParsedIR1 && finParsedIR1.drawings.length === 1);
         const blobR = await buildFinDocxBlob(finParsedIR1, 'ropks');
@@ -471,7 +473,7 @@ const server = http.createServer((req, res) => {
         return r;
     });
     results['탭1 .fin 파싱→텍스트'] = (finRes.textHasTitle && finRes.textHasTable && finRes.textHasClaim &&
-        finRes.sectionVisible && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+        finRes.resultIsRopks && finRes.sectionVisible && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin→ROPKS DOCX'] = (finRes.ropksSize > 0 && finRes.ropksTable && finRes.ropksImg &&
         finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia &&
         finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline &&

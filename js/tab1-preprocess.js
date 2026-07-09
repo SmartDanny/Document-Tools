@@ -34,12 +34,14 @@
                 const ir = await parseFinFile(file);
                 finParsedIR1 = ir;
 
-                // '변환결과'는 해외출원용 국문(ROPKS) 기준으로 표시 (HTML/미리보기 파이프라인과 합류)
-                const text = finBuildRopksLineText(ir);
-                document.getElementById('textInput1').value = text;
-                const subscriptCount = (text.match(/<sub>/gi) || []).length;
-                const superscriptCount = (text.match(/<sup>/gi) || []).length;
-                displayResult1({ text, subscriptCount, superscriptCount });
+                // 1단계 창: .fin 원본 부제(국문 【】) 그대로 표시
+                const kipoText = finBuildKipoLineText(ir);
+                // 변환결과(6단계): 해외출원용 국문(ROPKS) 기준
+                const ropksText = finBuildRopksLineText(ir);
+                document.getElementById('textInput1').value = kipoText;
+                const subscriptCount = (kipoText.match(/<sub>/gi) || []).length;
+                const superscriptCount = (kipoText.match(/<sup>/gi) || []).length;
+                displayResult1({ text: kipoText, outputText: ropksText, subscriptCount, superscriptCount });
 
                 // .fin 산출물 섹션 표시
                 document.getElementById('finOutputSection').classList.remove('hidden');
@@ -200,14 +202,17 @@
         
         function displayResult1(r) {
             resetStatNavState('tab1');
+            // 출력 박스/미리보기(변환결과)는 outputText가 있으면 그것을, 없으면 r.text를 사용한다.
+            // (fin 업로드 시: 1단계 창/분석 = r.text(국문 원본), 변환결과 = outputText(ROPKS))
+            const outText = (r.outputText != null) ? r.outputText : r.text;
             document.getElementById('subCount1').textContent = r.subscriptCount;
             document.getElementById('supCount1').textContent = r.superscriptCount;
             document.getElementById('paragraphCount1').textContent = countParagraphsInText(r.text);
-            
+
             originalText1 = r.text; // 원본 저장
-            rawOutput1 = r.text;
-            
-            // 파일 분석 결과 계산
+            rawOutput1 = outText;
+
+            // 파일 분석 결과 계산 (업로드 원본 기준)
             fileAnalysisResult.hasCrossRef = /CROSS-REFERENCE/i.test(r.text);
             fileAnalysisResult.hasScript = (r.subscriptCount + r.superscriptCount) > 0;
             fileAnalysisResult.hasParagraphNum = /^\[0\d{3,4}\]\s/m.test(r.text);
@@ -373,6 +378,7 @@
                 { from: '【배경기술】', to: '(b) Description of the Related Art' },
                 { from: '【발명의 내용】', to: 'SUMMARY OF THE INVENTION' },
                 { from: '【해결하고자 하는 과제】', to: '', delete: true },
+                { from: '【해결하려는 과제】', to: '', delete: true },
                 { from: '【기술적 과제】', to: '', delete: true },
                 { from: '【과제의 해결 수단】', to: '', delete: true },
                 { from: '【기술적 해결방법】', to: '', delete: true },
@@ -397,6 +403,7 @@
                 { from: '【배경기술】', to: '2. Description of the Related Art' },
                 { from: '【발명의 내용】', to: 'SUMMARY' },
                 { from: '【해결하고자 하는 과제】', to: '', delete: true },
+                { from: '【해결하려는 과제】', to: '', delete: true },
                 { from: '【기술적 과제】', to: '', delete: true },
                 { from: '【과제의 해결 수단】', to: '', delete: true },
                 { from: '【기술적 해결방법】', to: '', delete: true },
@@ -431,6 +438,7 @@
                 { from: '【발명의 내용】', to: '【Disclosure】' },
                 { from: '【기술적 과제】', to: '【Technical Problem】' },
                 { from: '【해결하고자 하는 과제】', to: '【Technical Problem】' },
+                { from: '【해결하려는 과제】', to: '【Technical Problem】' },
                 { from: '【기술적 해결방법】', to: '【Technical Solution】' },
                 { from: '【과제의 해결 수단】', to: '【Technical Solution】' },
                 { from: '【발명의 효과】', to: '【Advantageous Effects】' },

@@ -326,7 +326,8 @@ describe('.fin 변환 순수 헬퍼', () => {
         const t = u.finBuildKipoLineText(ir);
         assert.ok(t.includes('【발명의 명칭】\n연마 슬러리\nPOLISHING SLURRY')); // 국문/영문 분리
         assert.ok(t.includes('【기술분야】\n[0001] 본 개시는'));
-        assert.ok(t.includes('【해결하고자 하는 과제】'));
+        assert.ok(t.includes('【해결하려는 과제】')); // .fin/KIPO 표준 부제 (KIPO docx와 일치)
+        assert.ok(!t.includes('【해결하고자 하는 과제】'));
         assert.ok(t.includes('【과제의 해결 수단】\n[0004] SiO<sub>2</sub> 해결.'));
         assert.ok(t.includes('【도면의 간단한 설명】\n[0004b] 도 1은 A이다.\n도 2는 B이다.')); // br → 여러 줄, 번호는 첫 줄만
         assert.ok(t.includes('[표 1]'));

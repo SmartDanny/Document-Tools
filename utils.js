@@ -724,7 +724,7 @@ function finBuildKipoLineText(ir) {
     L.push(...finParasToLines(ir.backgroundArt, true));
     L.push('【발명의 내용】');
     if (ir.techProblem && ir.techProblem.length) {
-        L.push('【해결하고자 하는 과제】');
+        L.push('【해결하려는 과제】');
         L.push(...finParasToLines(ir.techProblem, true));
     }
     if (ir.techSolution && ir.techSolution.length) {
