@@ -65,7 +65,7 @@
             try {
                 const blob = await buildFinDocxBlob(finParsedIR1, format);
                 const base = ((finParsedIR1.meta && finParsedIR1.meta.fileName) || 'document').replace(/\.fin$/i, '');
-                saveAs(blob, base + (format === 'ropks' ? '_ROPKS' : '_KIPO') + '.docx');
+                saveAs(blob, base + (format === 'ropks' ? '_ROPKS' : '_출원명세서') + '.docx');
                 showMessage(msg, `✅ ${label} DOCX가 생성되었습니다!`, 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (e) {

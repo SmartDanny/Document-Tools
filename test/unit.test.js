@@ -273,12 +273,12 @@ describe('.fin 변환 순수 헬퍼', () => {
         techProblem: [{ num: '0003', text: '과제.' }],
         techSolution: [{ num: '0004', text: 'SiO<sub>2</sub> 해결.' }],
         advantageousEffects: [],
-        descriptionOfDrawings: ['도 1은 A이다.', '도 2는 B이다.'],
+        descriptionOfDrawings: [{ num: '0004b', text: '도 1은 A이다.\n도 2는 B이다.' }],
         embodiments: [
             { kind: 'p', num: '0005', text: '실시예 설명.' },
             { kind: 'table', num: '1', html: '<table border="1"><tr><td>a</td><td>b</td></tr></table>' }
         ],
-        referenceSigns: ['SUB: 기판', 'TR: 트랜지스터'],
+        referenceSigns: [{ num: '0008', text: 'SUB: 기판\nTR: 트랜지스터' }],
         claims: [{ num: '1', text: 'A;\nB를 포함하는 장치.' }],
         abstract: { summary: [{ num: '0001a', text: '요약 내용.' }], figureNum: '6' },
         drawings: [
@@ -299,25 +299,25 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.equal(u.finImgFormatToMime(''), 'image/jpeg');
     });
 
-    test('finBuildKipoLineText: 국문 【】 부제 + [NNNN] 단락번호', () => {
+    test('finBuildKipoLineText: 국문 【】 부제 + 제목 분리 + [NNNN] 단락번호', () => {
         const t = u.finBuildKipoLineText(ir);
-        assert.ok(t.includes('【발명의 명칭】\n연마 슬러리{POLISHING SLURRY}'));
+        assert.ok(t.includes('【발명의 명칭】\n연마 슬러리\nPOLISHING SLURRY')); // 국문/영문 분리
         assert.ok(t.includes('【기술분야】\n[0001] 본 개시는'));
         assert.ok(t.includes('【해결하고자 하는 과제】'));
         assert.ok(t.includes('【과제의 해결 수단】\n[0004] SiO<sub>2</sub> 해결.'));
+        assert.ok(t.includes('【도면의 간단한 설명】\n[0004b] 도 1은 A이다.\n도 2는 B이다.')); // br → 여러 줄, 번호는 첫 줄만
         assert.ok(t.includes('[표 1]'));
         assert.ok(t.includes('<table border="1">'));
-        assert.ok(t.includes('【부호의 설명】\nSUB: 기판'));
+        assert.ok(t.includes('【부호의 설명】\n[0008] SUB: 기판\nTR: 트랜지스터'));
         assert.ok(t.includes('【청구범위】\n【청구항 1】\nA;\nB를 포함하는 장치.'));
         assert.ok(t.includes('【대표도】\n도 6'));
         assert.ok(t.includes('【도면】\n【도 1】'));
-        // 효과 섹션이 비면 부제도 없어야 함
         assert.ok(!t.includes('【발명의 효과】'));
     });
 
     test('finBuildDocModel(ropks): 사무소표준US 부제 + 도면 섹션', () => {
         const m = u.finBuildDocModel(ir, 'ropks');
-        const subs = m.filter(b => b.t === 'sub').map(b => b.text);
+        const subs = m.filter(b => b.t === 'p' && b.bold).map(b => b.text);
         assertSameJson(subs, [
             'TITLE OF THE INVENTION', 'BACKGROUND OF THE INVENTION',
             '(a) Field of the Invention', '(b) Description of the Related Art',
@@ -326,26 +326,38 @@ describe('.fin 변환 순수 헬퍼', () => {
             'WHAT IS CLAIMED IS:', 'ABSTRACT OF DISCLOSURE', '【도면】'
         ]);
         const texts = m.filter(b => b.t === 'p').map(b => b.text);
-        assert.ok(texts.includes('연마 슬러리{POLISHING SLURRY}'));
-        assert.ok(texts.includes('본 개시는 A에 관한 것이다.'));        // 단락번호 없음(ROPKS)
+        assert.ok(texts.includes('연마 슬러리{POLISHING SLURRY}')); // ROPKS 제목은 국문{영문} 유지
+        assert.ok(texts.includes('본 개시는 A에 관한 것이다.'));       // 단락번호 없음
+        assert.ok(texts.includes('도 1은 A이다.') && texts.includes('도 2는 B이다.')); // 도면설명 분리
         assert.ok(texts.includes('[표 1]'));
         assert.ok(texts.includes('【청구항 1】'));
         assert.ok(texts.includes('대표도: 도 6'));
         assert.ok(texts.includes('【도 1】'));
         assert.ok(m.some(b => b.t === 'table'));
         assert.ok(m.some(b => b.t === 'img' && b.drawing.num === '1'));
-        // ROPKS 본문에 [NNNN] 단락번호가 없어야 함
         assert.ok(!texts.some(t => /^\[0\d{3}\]/.test(t)));
+        assert.ok(!m.some(b => b.t === 'pagebreak')); // ROPKS는 페이지 나누기 없음
     });
 
-    test('finBuildDocModel(kipo): 국문 부제 + [NNNN] 단락번호', () => {
+    test('finBuildDocModel(kipo): 4부 구조 + 페이지 나누기 + [NNNN] 단락번호', () => {
         const m = u.finBuildDocModel(ir, 'kipo');
-        const subs = m.filter(b => b.t === 'sub').map(b => b.text);
-        assert.ok(subs.includes('【발명의 명칭】'));
-        assert.ok(subs.includes('【청구범위】'));
+        const bold = m.filter(b => b.t === 'p' && b.bold).map(b => b.text);
+        // 부(部) 중앙 헤더
+        assert.ok(bold.includes('명세서') && bold.includes('청구범위') && bold.includes('요약서') && bold.includes('도면'));
+        assert.ok(bold.includes('【발명의 명칭】') && bold.includes('【청구항 1】'));
+        assert.ok(!bold.includes('【발명의 설명】')); // KIPO 출원서식은 【발명의 설명】 없음
+        const parthdr = m.find(b => b.text === '명세서');
+        assert.equal(parthdr.align, 'center'); assert.equal(parthdr.size, 30);
+        // 페이지 나누기 3곳(청구범위/요약서/도면)
+        assert.equal(m.filter(b => b.t === 'pagebreak').length, 3);
         const texts = m.filter(b => b.t === 'p').map(b => b.text);
-        assert.ok(texts.includes('[0001] 본 개시는 A에 관한 것이다.'));  // 단락번호 있음(KIPO)
-        assert.ok(texts.includes('【청구항 1】'));
-        assert.ok(m.some(b => b.t === 'img'));
+        assert.ok(texts.includes('연마 슬러리') && texts.includes('POLISHING SLURRY')); // 제목 분리
+        assert.ok(texts.includes('[0001] 본 개시는 A에 관한 것이다.')); // 단락번호 있음
+        assert.ok(texts.includes('[0004b] 도 1은 A이다.\n도 2는 B이다.')); // 도면설명은 하나의 단락(br)
+        assert.ok(texts.includes('A;\nB를 포함하는 장치.')); // 청구항 본문은 하나의 단락(br)
+        assert.ok(texts.includes('[도 1]')); // 도면 캡션은 대괄호
+        // 도면: 이미지 다음에 [도 N] 캡션
+        const imgIdx = m.findIndex(b => b.t === 'img');
+        assert.equal(m[imgIdx + 1].text, '[도 1]');
     });
 });

@@ -433,7 +433,7 @@ const server = http.createServer((req, res) => {
     const finRes = await page.evaluate(async () => {
         const r = {};
         const ta = document.getElementById('textInput1').value;
-        r.textHasTitle = ta.includes('【발명의 명칭】\n테스트 발명{TEST INVENTION}');
+        r.textHasTitle = ta.includes('【발명의 명칭】\n테스트 발명\nTEST INVENTION'); // 국문/영문 분리
         r.textHasTable = ta.includes('<table');
         r.textHasClaim = ta.includes('【청구항 1】');
         r.sectionVisible = !document.getElementById('finOutputSection').classList.contains('hidden');
@@ -450,14 +450,19 @@ const server = http.createServer((req, res) => {
         const blobK = await buildFinDocxBlob(finParsedIR1, 'kipo');
         r.kipoSize = blobK.size;
         const zk = await JSZip.loadAsync(new Uint8Array(await blobK.arrayBuffer()));
-        r.kipoKor = (await zk.file('word/document.xml').async('string')).includes('발명의 명칭');
+        const docK = await zk.file('word/document.xml').async('string');
+        r.kipoParts = ['명세서', '청구범위', '요약서', '도면'].every(h => docK.includes(h));
+        r.kipoPageBreaks = (docK.match(/w:type="page"/g) || []).length; // 청구범위/요약서/도면 = 3
+        r.kipoCaption = docK.includes('[도 1]');
+        r.kipoMalgun = (await zk.file('word/styles.xml').async('string')).includes('Malgun Gothic');
         return r;
     });
     results['탭1 .fin 파싱→텍스트'] = (finRes.textHasTitle && finRes.textHasTable && finRes.textHasClaim &&
         finRes.sectionVisible && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin→ROPKS DOCX'] = (finRes.ropksSize > 0 && finRes.ropksTable && finRes.ropksImg &&
         finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
-    results['탭1 .fin→KIPO DOCX'] = (finRes.kipoSize > 0 && finRes.kipoKor) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+    results['탭1 .fin→KIPO 출원서식 DOCX'] = (finRes.kipoSize > 0 && finRes.kipoParts &&
+        finRes.kipoPageBreaks === 3 && finRes.kipoCaption && finRes.kipoMalgun) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
 
     console.log('=== 테스트 결과 ===');
     for (const [k, v] of Object.entries(results)) console.log(`${v.startsWith('PASS') ? '✅' : '❌'} ${k}: ${v}`);

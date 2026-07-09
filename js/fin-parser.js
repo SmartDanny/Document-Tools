@@ -49,25 +49,6 @@ function finSectionParas(parent) {
 }
 
 /**
- * 부모의 <p>들을 <br/> 기준으로 분해한 라인 배열로 추출 (도면의 간단한 설명, 부호의 설명용)
- * @param {Element} parent
- * @returns {string[]}
- */
-function finBrLines(parent) {
-    const arr = [];
-    if (!parent) return arr;
-    for (const child of parent.childNodes) {
-        if (child.nodeType === 1 && (child.localName || child.nodeName) === 'p') {
-            for (const line of finSerializeInline(child).split('\n')) {
-                const s = line.trim();
-                if (s) arr.push(s);
-            }
-        }
-    }
-    return arr;
-}
-
-/**
  * OASIS CALS 표 요소(<tables>)를 HTML <table>로 변환 (셀 병합·첨자·<br> 유지)
  * @param {Element} tablesEl
  * @returns {string} HTML 문자열
@@ -181,9 +162,10 @@ function finXmlToIr(doc) {
         techProblem: finSectionParas(first('tech-problem', summary)),
         techSolution: finSectionParas(first('tech-solution', summary)),
         advantageousEffects: finSectionParas(first('advantageous-effects')),
-        descriptionOfDrawings: finBrLines(first('description-of-drawings')),
+        // 도면의 간단한 설명·부호의 설명은 하나의 <p>(내부 <br/>는 \n으로 보존) → {num,text}
+        descriptionOfDrawings: finSectionParas(first('description-of-drawings')),
         embodiments: finEmbodiments(first('description-of-embodiments')),
-        referenceSigns: finBrLines(first('reference-signs-list')),
+        referenceSigns: finSectionParas(first('reference-signs-list')),
         claims: [],
         abstract: { summary: [], figureNum: '' },
         drawings: []

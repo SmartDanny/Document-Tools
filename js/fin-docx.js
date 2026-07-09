@@ -2,33 +2,37 @@
  * Document Tools - js/fin-docx.js
  * IR(중간모델) → DOCX (KIPO 출원서식 / 해외출원용 국문 ROPKS)
  *
- * utils.js의 finBuildDocModel로 블록 모델을 만든 뒤 하나의 렌더러로 조립한다.
- * 글꼴 Times New Roman + 바탕(한글), 12pt. 도면 이미지는 media로 임베드.
+ * utils.js의 finBuildDocModel로 스타일드 블록 모델을 만든 뒤 하나의 렌더러로 조립한다.
+ * 포맷별 글꼴/크기/여백:
+ *   - ropks: Times New Roman + 바탕, 12pt(sz24), ROPKS 샘플 여백
+ *   - kipo : Malgun Gothic, 10pt(sz20), KIPO 출원서식 샘플 여백 + 4부(部) 페이지 나누기
  *
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  */
 
-// 본문 12pt(half-point 24) 런 속성
-const FIN_SZ = '<w:sz w:val="24"/><w:szCs w:val="24"/>';
+// 포맷별 기본 글꼴 크기(half-point)
+const FIN_BASE_SIZE = { ropks: 24, kipo: 20 };
 
 /**
  * 텍스트(첨자 <sub>/<sup> 태그·\n 줄바꿈 포함)를 <w:r> 런 XML로 변환
  * @param {string} text
- * @param {Object} [opts] - { bold, align }
+ * @param {Object} opts - { bold, size } size 는 half-point
  * @returns {string}
  */
 function finTextToRuns(text, opts) {
     opts = opts || {};
     const boldXml = opts.bold ? '<w:b/><w:bCs/>' : '';
+    const size = opts.size || 24;
+    const szXml = `<w:sz w:val="${size}"/><w:szCs w:val="${size}"/>`;
     let runs = '';
     const emit = (chunk, vert) => {
         const parts = String(chunk).split('\n');
         for (let i = 0; i < parts.length; i++) {
-            if (i > 0) runs += `<w:r><w:rPr>${boldXml}${FIN_SZ}</w:rPr><w:br/></w:r>`;
+            if (i > 0) runs += `<w:r><w:rPr>${boldXml}${szXml}</w:rPr><w:br/></w:r>`;
             const t = parts[i];
             if (t === '') continue;
             const va = vert ? `<w:vertAlign w:val="${vert}"/>` : '';
-            runs += `<w:r><w:rPr>${boldXml}${va}${FIN_SZ}</w:rPr><w:t xml:space="preserve">${escapeXml(t)}</w:t></w:r>`;
+            runs += `<w:r><w:rPr>${boldXml}${va}${szXml}</w:rPr><w:t xml:space="preserve">${escapeXml(t)}</w:t></w:r>`;
         }
     };
     const re = /<(sub|sup)>([\s\S]*?)<\/\1>/gi;
@@ -43,25 +47,33 @@ function finTextToRuns(text, opts) {
 }
 
 /**
- * 단락 블록 → <w:p> XML
- * @param {string} text
- * @param {Object} [opts] - { bold, align }
+ * 단락 블록 → <w:p> XML (bold/align/size/before/after 반영)
+ * @param {Object} block - {text, bold, align, size, before, after}
+ * @param {number} baseSize - 포맷 기본 글꼴 크기(half-point)
  * @returns {string}
  */
-function finParagraphXml(text, opts) {
-    opts = opts || {};
-    const jc = opts.align ? `<w:jc w:val="${opts.align}"/>` : '';
-    const boldMark = opts.bold ? '<w:b/><w:bCs/>' : '';
-    const pPr = `<w:pPr>${jc}<w:rPr>${boldMark}${FIN_SZ}</w:rPr></w:pPr>`;
-    return `<w:p>${pPr}${finTextToRuns(text, opts)}</w:p>`;
+function finParagraphXml(block, baseSize) {
+    const size = block.size || baseSize;
+    let spacing = '';
+    if (block.before != null || block.after != null) {
+        const b = block.before != null ? ` w:before="${block.before}"` : '';
+        const a = block.after != null ? ` w:after="${block.after}"` : '';
+        spacing = `<w:spacing${b}${a}/>`;
+    }
+    const jc = block.align ? `<w:jc w:val="${block.align}"/>` : '';
+    const boldMark = block.bold ? '<w:b/><w:bCs/>' : '';
+    const pPr = `<w:pPr>${spacing}${jc}<w:rPr>${boldMark}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr></w:pPr>`;
+    return `<w:p>${pPr}${finTextToRuns(block.text, { bold: block.bold, size })}</w:p>`;
 }
 
 /**
- * HTML <table> → OOXML 표 (12pt, 셀 가운데 정렬, 표 뒤 빈 단락 포함)
+ * HTML <table> → OOXML 표 (셀 가운데 정렬, 표 뒤 빈 단락 포함)
  * @param {string} tableHtml
+ * @param {number} baseSize - 셀 글꼴 크기(half-point)
  * @returns {string}
  */
-function finTableToOoxml(tableHtml) {
+function finTableToOoxml(tableHtml, baseSize) {
+    const sz = `<w:sz w:val="${baseSize}"/><w:szCs w:val="${baseSize}"/>`;
     const trs = tableHtml.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
     if (!trs || !trs.length) return '';
     let maxCols = 0;
@@ -90,8 +102,8 @@ function finTableToOoxml(tableHtml) {
             if (cs && parseInt(cs[1], 10) > 1) tcPr += `<w:gridSpan w:val="${cs[1]}"/>`;
             tcPr += '<w:vAlign w:val="center"/></w:tcPr>';
             let inner = td.replace(/<t[dh][^>]*>/i, '').replace(/<\/t[dh]>/i, '').replace(/<br\s*\/?>/gi, '\n');
-            const pPr = `<w:pPr><w:jc w:val="center"/><w:rPr>${FIN_SZ}</w:rPr></w:pPr>`;
-            xml += `<w:tc>${tcPr}<w:p>${pPr}${finTextToRuns(inner, {})}</w:p></w:tc>`;
+            const pPr = `<w:pPr><w:jc w:val="center"/><w:rPr>${sz}</w:rPr></w:pPr>`;
+            xml += `<w:tc>${tcPr}<w:p>${pPr}${finTextToRuns(inner, { size: baseSize })}</w:p></w:tc>`;
         });
         xml += '</w:tr>';
     });
@@ -99,13 +111,26 @@ function finTableToOoxml(tableHtml) {
 }
 
 /**
- * 커스텀 styles.xml (Times New Roman + 바탕, 12pt, 단락 뒤 0pt, TableGrid)
+ * 페이지 나누기 단락
  * @returns {string}
  */
-function finStylesXml() {
+function finPageBreakXml() {
+    return '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+}
+
+/**
+ * 포맷별 커스텀 styles.xml (글꼴/기본 크기 + 단락 뒤 0pt + TableGrid)
+ * @param {string} format - 'ropks' | 'kipo'
+ * @returns {string}
+ */
+function finStylesXml(format) {
+    const font = format === 'kipo'
+        ? '<w:rFonts w:ascii="Malgun Gothic" w:eastAsia="Malgun Gothic" w:hAnsi="Malgun Gothic" w:cs="Malgun Gothic"/>'
+        : '<w:rFonts w:ascii="Times New Roman" w:eastAsia="바탕" w:hAnsi="Times New Roman" w:cs="Times New Roman"/>';
+    const sz = FIN_BASE_SIZE[format] || 24;
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Times New Roman" w:eastAsia="바탕" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="en-US" w:eastAsia="ko-KR" w:bidi="ar-SA"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0"/></w:pPr></w:pPrDefault></w:docDefaults>
+<w:docDefaults><w:rPrDefault><w:rPr>${font}<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/><w:lang w:val="en-US" w:eastAsia="ko-KR" w:bidi="ar-SA"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0"/></w:pPr></w:pPrDefault></w:docDefaults>
 <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
 <w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:left w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:right w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="000000"/></w:tblBorders></w:tblPr></w:style>
 </w:styles>`;
@@ -117,12 +142,12 @@ function finStylesXml() {
  * @returns {string}
  */
 function finSectPr(format) {
-    if (format === 'ropks') {
-        // ROPKS 샘플 역설계값
-        return '<w:sectPr><w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/></w:sectPr>';
+    if (format === 'kipo') {
+        // KIPO 출원서식 샘플 역설계값
+        return '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1134" w:bottom="850" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>';
     }
-    // KIPO 출원서식: A4 + 균등 여백
-    return '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr>';
+    // ROPKS 샘플 역설계값
+    return '<w:sectPr><w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/></w:sectPr>';
 }
 
 /**
@@ -132,6 +157,7 @@ function finSectPr(format) {
  * @returns {Promise<Blob>}
  */
 async function buildFinDocxBlob(ir, format) {
+    const baseSize = FIN_BASE_SIZE[format] || 24;
     const model = finBuildDocModel(ir, format);
     const media = [];
     const usedExt = {};
@@ -139,12 +165,10 @@ async function buildFinDocxBlob(ir, format) {
     let body = '';
 
     for (const block of model) {
-        if (block.t === 'sub') {
-            body += finParagraphXml(block.text, { bold: true });
-        } else if (block.t === 'p') {
-            body += finParagraphXml(block.text || '', {});
+        if (block.t === 'pagebreak') {
+            body += finPageBreakXml();
         } else if (block.t === 'table') {
-            body += finTableToOoxml(block.html);
+            body += finTableToOoxml(block.html, baseSize);
         } else if (block.t === 'img') {
             const d = block.drawing;
             if (!d || !d.base64) { body += '<w:p/>'; continue; }
@@ -158,7 +182,17 @@ async function buildFinDocxBlob(ir, format) {
                 rid, id: imgCount, name: 'fig' + d.num + '.' + ext,
                 cx: finMmToEmu(d.wi), cy: finMmToEmu(d.he)
             });
-            body += `<w:p><w:pPr><w:jc w:val="center"/></w:pPr>${run}</w:p>`;
+            let spacing = '';
+            if (block.before != null || block.after != null) {
+                const b = block.before != null ? ` w:before="${block.before}"` : '';
+                const a = block.after != null ? ` w:after="${block.after}"` : '';
+                spacing = `<w:spacing${b}${a}/>`;
+            }
+            const align = block.align || 'center';
+            body += `<w:p><w:pPr>${spacing}<w:jc w:val="${align}"/></w:pPr>${run}</w:p>`;
+        } else {
+            // 'p' (부제·본문·부 헤더·캡션 모두 포함)
+            body += finParagraphXml(block, baseSize);
         }
     }
 
@@ -192,7 +226,7 @@ async function buildFinDocxBlob(ir, format) {
     docRels += '\n</Relationships>';
     zip.file('word/_rels/document.xml.rels', docRels);
 
-    zip.file('word/styles.xml', finStylesXml());
+    zip.file('word/styles.xml', finStylesXml(format));
 
     zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
