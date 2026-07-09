@@ -292,6 +292,14 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.equal(u.finMmToEmu(-5), 1);
     });
 
+    test('finRopksBaseName: 해외관리번호 → 파일명', () => {
+        assert.equal(u.finRopksBaseName('OPP20123456US', '260709'), 'OPP20123456ROPKS_260709');
+        assert.equal(u.finRopksBaseName('OPP20123456us', '260709'), 'OPP20123456ROPKS_260709'); // 소문자 us
+        assert.equal(u.finRopksBaseName('  OPP20999999US  ', '260709'), 'OPP20999999ROPKS_260709'); // 공백 트림
+        assert.equal(u.finRopksBaseName('', '260709'), 'ROPKS_260709'); // 미입력
+        assert.equal(u.finRopksBaseName(null, '260709'), 'ROPKS_260709');
+    });
+
     test('finImgFormatToMime', () => {
         assert.equal(u.finImgFormatToMime('jpg'), 'image/jpeg');
         assert.equal(u.finImgFormatToMime('JPEG'), 'image/jpeg');
@@ -323,8 +331,8 @@ describe('.fin 변환 순수 헬퍼', () => {
             '(a) Field of the Invention', '(b) Description of the Related Art',
             'SUMMARY OF THE INVENTION', 'BRIEF DESCRIPTION OF THE DRAWINGS',
             'DETAILED DESCRIPTION OF THE EMBODIMENTS', '<Description of symbols>',
-            'WHAT IS CLAIMED IS:', 'ABSTRACT OF DISCLOSURE', '【도면】'
-        ]);
+            'WHAT IS CLAIMED IS:', 'ABSTRACT OF DISCLOSURE'
+        ]); // 부제는 볼드+밑줄, 【도면】/【도 N】/청구항 헤더는 볼드 아님
         const texts = m.filter(b => b.t === 'p').map(b => b.text);
         assert.ok(texts.includes('연마 슬러리{POLISHING SLURRY}')); // ROPKS 제목은 국문{영문} 유지
         assert.ok(texts.includes('본 개시는 A에 관한 것이다.'));       // 단락번호 없음
@@ -333,6 +341,12 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.ok(texts.includes('【청구항 1】'));
         assert.ok(texts.includes('대표도: 도 6'));
         assert.ok(texts.includes('【도 1】'));
+        // 본문 단락은 첫줄 들여쓰기, 부제는 들여쓰기 없음
+        assert.ok(m.find(b => b.text === '본 개시는 A에 관한 것이다.').indent === true);
+        assert.ok(!m.find(b => b.text === 'TITLE OF THE INVENTION').indent);
+        // 【도면】은 볼드 아님·중앙정렬
+        const domyeon = m.find(b => b.text === '【도면】');
+        assert.ok(domyeon && !domyeon.bold && domyeon.align === 'center');
         assert.ok(m.some(b => b.t === 'table'));
         assert.ok(m.some(b => b.t === 'img' && b.drawing.num === '1'));
         assert.ok(!texts.some(t => /^\[0\d{3}\]/.test(t)));

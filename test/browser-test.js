@@ -447,6 +447,14 @@ const server = http.createServer((req, res) => {
         r.ropksSubtitle = docR.includes('TITLE OF THE INVENTION');
         r.ropksSub2 = /vertAlign w:val="subscript"/.test(docR);
         r.ropksMedia = Object.keys(zr.files).some(f => f.startsWith('word/media/'));
+        // ROPKS 서식(샘플 역설계): 바탕체 + 행간518 + 부제 밑줄
+        r.ropksBatang = docR.includes('바탕체');
+        r.ropksLine = docR.includes('w:line="518"');
+        r.ropksUnderline = docR.includes('w:u w:val="single"');
+        // 해외관리번호 파일명 규칙
+        r.fnameEmpty = finRopksBaseName('', '260709');
+        r.fnameMgmt = finRopksBaseName('OPP20123456US', '260709');
+        r.mgmtField = !!document.getElementById('finMgmtNo1');
         const blobK = await buildFinDocxBlob(finParsedIR1, 'kipo');
         r.kipoSize = blobK.size;
         const zk = await JSZip.loadAsync(new Uint8Array(await blobK.arrayBuffer()));
@@ -460,7 +468,10 @@ const server = http.createServer((req, res) => {
     results['탭1 .fin 파싱→텍스트'] = (finRes.textHasTitle && finRes.textHasTable && finRes.textHasClaim &&
         finRes.sectionVisible && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin→ROPKS DOCX'] = (finRes.ropksSize > 0 && finRes.ropksTable && finRes.ropksImg &&
-        finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+        finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia &&
+        finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+    results['탭1 ROPKS 파일명 규칙'] = (finRes.fnameEmpty === 'ROPKS_260709' &&
+        finRes.fnameMgmt === 'OPP20123456ROPKS_260709' && finRes.mgmtField) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin→KIPO 출원서식 DOCX'] = (finRes.kipoSize > 0 && finRes.kipoParts &&
         finRes.kipoPageBreaks === 3 && finRes.kipoCaption && finRes.kipoMalgun) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
 

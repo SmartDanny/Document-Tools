@@ -633,6 +633,20 @@ function finMmToEmu(mm) {
 }
 
 /**
+ * 해외출원용 국문(ROPKS) 파일명(확장자 제외) 생성
+ *  - 해외관리번호 입력 시: 국가코드 US 제거 후 "<관리번호>ROPKS_<오늘6자리>"
+ *  - 미입력 시: "ROPKS_<오늘6자리>"
+ * @param {string} mgmtNo - 해외관리번호(예: OPP20123456US)
+ * @param {string} today6 - 오늘 날짜 6자리(YYMMDD)
+ * @returns {string}
+ */
+function finRopksBaseName(mgmtNo, today6) {
+    const raw = (mgmtNo || '').trim();
+    if (!raw) return `ROPKS_${today6}`;
+    return `${raw.replace(/US$/i, '')}ROPKS_${today6}`;
+}
+
+/**
  * img-format 문자열을 MIME 타입으로 변환
  * @param {string} fmt - 'jpg' | 'jpeg' | 'png' | 'gif' 등
  * @returns {string} MIME 타입
@@ -757,50 +771,54 @@ function finBuildDocModel(ir, format) {
     return format === 'ropks' ? finBuildRopksModel(ir) : finBuildKipoModel(ir);
 }
 
-// 해외출원용 국문(ROPKS): 사무소표준US 부제 + 도면 섹션 (부제만 볼드, 여백은 스타일 기본값)
+// 해외출원용 국문(ROPKS): ROPKS 샘플 역설계.
+//   sub  = 볼드+밑줄 부제(들여쓰기 없음)  | body = 첫줄 들여쓰기 본문
+//   plain = 들여쓰기·볼드 없음(청구항 헤더·【도면】·【도 N】)
+//   렌더러(fin-docx.js)가 바탕체·행간518·탭스톱을 공통 적용한다.
 function finBuildRopksModel(ir) {
     const B = [];
     const sub = (text) => { if (text) B.push({ t: 'p', text, bold: true }); };
-    const p = (text) => B.push({ t: 'p', text: text == null ? '' : text });
-    const paras = (arr, withNum) => { for (const line of finParasToLines(arr, withNum)) p(line); };
+    const body = (text) => B.push({ t: 'p', text: text == null ? '' : text, indent: true });
+    const plain = (text, opt) => B.push(Object.assign({ t: 'p', text: text == null ? '' : text }, opt || {}));
+    const bodyParas = (arr, withNum) => { for (const line of finParasToLines(arr, withNum)) body(line); };
 
     sub(FIN_ROPKS_SUBTITLES.title);
-    p(ir.titleRaw);
+    body(ir.titleRaw);
     sub(FIN_ROPKS_SUBTITLES.background);
     sub(FIN_ROPKS_SUBTITLES.field);
-    paras(ir.technicalField, false);
+    bodyParas(ir.technicalField, false);
     sub(FIN_ROPKS_SUBTITLES.related);
-    paras(ir.backgroundArt, false);
+    bodyParas(ir.backgroundArt, false);
     sub(FIN_ROPKS_SUBTITLES.summary);
-    paras(ir.techProblem, false);
-    paras(ir.techSolution, false);
-    paras(ir.advantageousEffects, false);
+    bodyParas(ir.techProblem, false);
+    bodyParas(ir.techSolution, false);
+    bodyParas(ir.advantageousEffects, false);
     sub(FIN_ROPKS_SUBTITLES.drawingsBrief);
-    paras(ir.descriptionOfDrawings, false);
+    bodyParas(ir.descriptionOfDrawings, false);
     sub(FIN_ROPKS_SUBTITLES.detailed);
     for (const item of (ir.embodiments || [])) {
         if (item.kind === 'table') {
-            if (item.num) p(`[표 ${item.num}]`);
+            if (item.num) body(`[표 ${item.num}]`);
             B.push({ t: 'table', html: item.html });
         } else {
-            p(item.text || '');
+            body(item.text || '');
         }
     }
     if (ir.referenceSigns && ir.referenceSigns.length) {
         sub(FIN_ROPKS_SUBTITLES.symbols);
-        paras(ir.referenceSigns, false);
+        bodyParas(ir.referenceSigns, false);
     }
     sub(FIN_ROPKS_SUBTITLES.claims);
     for (const c of (ir.claims || [])) {
-        p(`【청구항 ${c.num}】`);
-        for (const line of String(c.text || '').split('\n')) p(line);
+        plain(`【청구항 ${c.num}】`);
+        for (const line of String(c.text || '').split('\n')) body(line);
     }
     sub(FIN_ROPKS_SUBTITLES.abstract);
-    paras((ir.abstract && ir.abstract.summary) || [], false);
-    if (ir.abstract && ir.abstract.figureNum) p(`대표도: 도 ${ir.abstract.figureNum}`);
+    bodyParas((ir.abstract && ir.abstract.summary) || [], false);
+    if (ir.abstract && ir.abstract.figureNum) body(`대표도: 도 ${ir.abstract.figureNum}`);
     if (ir.drawings && ir.drawings.length) {
-        sub('【도면】');
-        for (const d of ir.drawings) { p(`【도 ${d.num}】`); B.push({ t: 'img', drawing: d }); }
+        plain('【도면】', { align: 'center' });
+        for (const d of ir.drawings) { plain(`【도 ${d.num}】`); B.push({ t: 'img', drawing: d, align: 'center' }); }
     }
     return B;
 }

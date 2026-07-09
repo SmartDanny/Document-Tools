@@ -58,16 +58,32 @@
         // .fin → 해외출원용 국문(ROPKS) DOCX
         async function downloadFinRopksDocx() { await downloadFinDocx('ropks'); }
 
+        // 오늘 날짜 6자리(YYMMDD)
+        function finTodayYYMMDD() {
+            const d = new Date();
+            const yy = String(d.getFullYear()).slice(-2);
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return yy + mm + dd;
+        }
+
         async function downloadFinDocx(format) {
             const msg = document.getElementById('finOutputMessage');
             if (!finParsedIR1) { showMessage(msg, '❌ 먼저 .fin 파일을 업로드해주세요.', 'error'); return; }
             const label = format === 'ropks' ? '해외출원용 국문(ROPKS)' : 'KIPO 출원서식';
             try {
                 const blob = await buildFinDocxBlob(finParsedIR1, format);
-                const base = ((finParsedIR1.meta && finParsedIR1.meta.fileName) || 'document').replace(/\.fin$/i, '');
-                saveAs(blob, base + (format === 'ropks' ? '_ROPKS' : '_출원명세서') + '.docx');
-                showMessage(msg, `✅ ${label} DOCX가 생성되었습니다!`, 'success');
-                setTimeout(() => msg.classList.add('hidden'), 3000);
+                let fileName;
+                if (format === 'ropks') {
+                    const mgmtNo = (document.getElementById('finMgmtNo1') || {}).value || '';
+                    fileName = finRopksBaseName(mgmtNo, finTodayYYMMDD());
+                } else {
+                    const base = ((finParsedIR1.meta && finParsedIR1.meta.fileName) || 'document').replace(/\.fin$/i, '');
+                    fileName = base + '_출원명세서';
+                }
+                saveAs(blob, fileName + '.docx');
+                showMessage(msg, `✅ ${label} DOCX가 생성되었습니다! (${fileName}.docx)`, 'success');
+                setTimeout(() => msg.classList.add('hidden'), 4000);
             } catch (e) {
                 showMessage(msg, `❌ ${label} DOCX 생성 실패: ` + e.message, 'error');
             }
@@ -855,6 +871,7 @@
             finParsedIR1 = null;
             document.getElementById('finOutputSection').classList.add('hidden');
             document.getElementById('finOutputMessage').classList.add('hidden');
+            document.getElementById('finMgmtNo1').value = '';
             priorityList1 = [];
             renderPriorityList1();
             document.getElementById('output1').innerHTML = '';

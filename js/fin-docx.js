@@ -13,26 +13,28 @@
 // 포맷별 기본 글꼴 크기(half-point)
 const FIN_BASE_SIZE = { ropks: 24, kipo: 20 };
 
+// ROPKS 샘플의 공통 탭 스톱(12개, 약 799 간격)
+const FIN_ROPKS_TABS = '<w:tabs>'
+    + [799, 1599, 2398, 3197, 3997, 4796, 5596, 6395, 7194, 7994, 8793, 9592]
+        .map(pos => `<w:tab w:val="left" w:pos="${pos}"/>`).join('')
+    + '</w:tabs>';
+
 /**
- * 텍스트(첨자 <sub>/<sup> 태그·\n 줄바꿈 포함)를 <w:r> 런 XML로 변환
+ * 첨자/줄바꿈을 포함한 텍스트를 <w:r> 런들로 변환 (rPrInner 는 vertAlign 이전까지의 런 속성)
  * @param {string} text
- * @param {Object} opts - { bold, size } size 는 half-point
+ * @param {string} rPrInner - 런 공통 속성(rFonts/b/kern/sz 등)
  * @returns {string}
  */
-function finTextToRuns(text, opts) {
-    opts = opts || {};
-    const boldXml = opts.bold ? '<w:b/><w:bCs/>' : '';
-    const size = opts.size || 24;
-    const szXml = `<w:sz w:val="${size}"/><w:szCs w:val="${size}"/>`;
+function finRunsFromText(text, rPrInner) {
     let runs = '';
     const emit = (chunk, vert) => {
         const parts = String(chunk).split('\n');
         for (let i = 0; i < parts.length; i++) {
-            if (i > 0) runs += `<w:r><w:rPr>${boldXml}${szXml}</w:rPr><w:br/></w:r>`;
+            if (i > 0) runs += `<w:r><w:rPr>${rPrInner}</w:rPr><w:br/></w:r>`;
             const t = parts[i];
             if (t === '') continue;
             const va = vert ? `<w:vertAlign w:val="${vert}"/>` : '';
-            runs += `<w:r><w:rPr>${boldXml}${va}${szXml}</w:rPr><w:t xml:space="preserve">${escapeXml(t)}</w:t></w:r>`;
+            runs += `<w:r><w:rPr>${rPrInner}${va}</w:rPr><w:t xml:space="preserve">${escapeXml(t)}</w:t></w:r>`;
         }
     };
     const re = /<(sub|sup)>([\s\S]*?)<\/\1>/gi;
@@ -47,7 +49,43 @@ function finTextToRuns(text, opts) {
 }
 
 /**
- * 단락 블록 → <w:p> XML (bold/align/size/before/after 반영)
+ * 텍스트 → 런 XML (KIPO/표 공용: bold/size 만 지정)
+ * @param {string} text
+ * @param {Object} opts - { bold, size }
+ * @returns {string}
+ */
+function finTextToRuns(text, opts) {
+    opts = opts || {};
+    const boldXml = opts.bold ? '<w:b/><w:bCs/>' : '';
+    const size = opts.size || 24;
+    return finRunsFromText(text, `${boldXml}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/>`);
+}
+
+// ROPKS 런 공통 속성(바탕체 + kern0 + 12pt, 볼드 시 볼드+밑줄)
+function finRopksRunProps(bold) {
+    return '<w:rFonts w:ascii="바탕체" w:eastAsia="바탕체" w:hAnsi="바탕체"/>'
+        + (bold ? '<w:b/>' : '')
+        + '<w:kern w:val="0"/><w:sz w:val="24"/><w:szCs w:val="24"/>'
+        + (bold ? '<w:u w:val="single"/>' : '');
+}
+
+/**
+ * ROPKS 단락 블록 → <w:p> XML (바탕체·행간518·탭·첫줄들여쓰기·볼드+밑줄, 샘플 역설계)
+ * @param {Object} block - {text, bold, indent, align}
+ * @returns {string}
+ */
+function finRopksParagraphXml(block) {
+    const bold = !!block.bold;
+    const rPrInner = finRopksRunProps(bold);
+    const ind = block.indent ? '<w:ind w:firstLine="799"/>' : '';
+    const jc = block.align ? `<w:jc w:val="${block.align}"/>` : '';
+    const outline = bold ? '<w:outlineLvl w:val="0"/>' : '';
+    const pPr = `<w:pPr>${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/>${ind}${jc}<w:contextualSpacing/>${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
+    return `<w:p>${pPr}${finRunsFromText(block.text, rPrInner)}</w:p>`;
+}
+
+/**
+ * KIPO 단락 블록 → <w:p> XML (bold/align/size/before/after 반영)
  * @param {Object} block - {text, bold, align, size, before, after}
  * @param {number} baseSize - 포맷 기본 글꼴 크기(half-point)
  * @returns {string}
@@ -69,11 +107,15 @@ function finParagraphXml(block, baseSize) {
 /**
  * HTML <table> → OOXML 표 (셀 가운데 정렬, 표 뒤 빈 단락 포함)
  * @param {string} tableHtml
- * @param {number} baseSize - 셀 글꼴 크기(half-point)
+ * @param {string} format - 'ropks' | 'kipo' (셀 글꼴/크기 결정)
  * @returns {string}
  */
-function finTableToOoxml(tableHtml, baseSize) {
-    const sz = `<w:sz w:val="${baseSize}"/><w:szCs w:val="${baseSize}"/>`;
+function finTableToOoxml(tableHtml, format) {
+    const baseSize = FIN_BASE_SIZE[format] || 24;
+    // ROPKS 셀은 바탕체, KIPO 셀은 기본(Malgun) — 런 공통 속성
+    const cellRPr = format === 'ropks'
+        ? finRopksRunProps(false)
+        : `<w:sz w:val="${baseSize}"/><w:szCs w:val="${baseSize}"/>`;
     const trs = tableHtml.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
     if (!trs || !trs.length) return '';
     let maxCols = 0;
@@ -102,8 +144,8 @@ function finTableToOoxml(tableHtml, baseSize) {
             if (cs && parseInt(cs[1], 10) > 1) tcPr += `<w:gridSpan w:val="${cs[1]}"/>`;
             tcPr += '<w:vAlign w:val="center"/></w:tcPr>';
             let inner = td.replace(/<t[dh][^>]*>/i, '').replace(/<\/t[dh]>/i, '').replace(/<br\s*\/?>/gi, '\n');
-            const pPr = `<w:pPr><w:jc w:val="center"/><w:rPr>${sz}</w:rPr></w:pPr>`;
-            xml += `<w:tc>${tcPr}<w:p>${pPr}${finTextToRuns(inner, { size: baseSize })}</w:p></w:tc>`;
+            const pPr = `<w:pPr><w:jc w:val="center"/><w:rPr>${cellRPr}</w:rPr></w:pPr>`;
+            xml += `<w:tc>${tcPr}<w:p>${pPr}${finRunsFromText(inner, cellRPr)}</w:p></w:tc>`;
         });
         xml += '</w:tr>';
     });
@@ -164,11 +206,12 @@ async function buildFinDocxBlob(ir, format) {
     let imgCount = 0;
     let body = '';
 
+    const isRopks = format === 'ropks';
     for (const block of model) {
         if (block.t === 'pagebreak') {
             body += finPageBreakXml();
         } else if (block.t === 'table') {
-            body += finTableToOoxml(block.html, baseSize);
+            body += finTableToOoxml(block.html, format);
         } else if (block.t === 'img') {
             const d = block.drawing;
             if (!d || !d.base64) { body += '<w:p/>'; continue; }
@@ -182,17 +225,22 @@ async function buildFinDocxBlob(ir, format) {
                 rid, id: imgCount, name: 'fig' + d.num + '.' + ext,
                 cx: finMmToEmu(d.wi), cy: finMmToEmu(d.he)
             });
-            let spacing = '';
-            if (block.before != null || block.after != null) {
-                const b = block.before != null ? ` w:before="${block.before}"` : '';
-                const a = block.after != null ? ` w:after="${block.after}"` : '';
-                spacing = `<w:spacing${b}${a}/>`;
-            }
             const align = block.align || 'center';
-            body += `<w:p><w:pPr>${spacing}<w:jc w:val="${align}"/></w:pPr>${run}</w:p>`;
+            if (isRopks) {
+                // ROPKS 공통 단락 서식(탭·행간518) + 중앙 정렬
+                body += `<w:p><w:pPr>${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/><w:jc w:val="${align}"/><w:contextualSpacing/></w:pPr>${run}</w:p>`;
+            } else {
+                let spacing = '';
+                if (block.before != null || block.after != null) {
+                    const b = block.before != null ? ` w:before="${block.before}"` : '';
+                    const a = block.after != null ? ` w:after="${block.after}"` : '';
+                    spacing = `<w:spacing${b}${a}/>`;
+                }
+                body += `<w:p><w:pPr>${spacing}<w:jc w:val="${align}"/></w:pPr>${run}</w:p>`;
+            }
         } else {
-            // 'p' (부제·본문·부 헤더·캡션 모두 포함)
-            body += finParagraphXml(block, baseSize);
+            // 'p' 블록 — 포맷별 단락 렌더링
+            body += isRopks ? finRopksParagraphXml(block) : finParagraphXml(block, baseSize);
         }
     }
 
