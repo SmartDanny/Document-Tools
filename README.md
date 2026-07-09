@@ -1,17 +1,21 @@
 # Document Tools (문서 도구 모음)
 
-[![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)](https://github.com/)
+[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/)
 [![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-red.svg)](https://github.com/)
 
 특허 명세서 작성 및 편집을 위한 웹 기반 문서 처리 도구 모음입니다.
 
 ## 🚀 주요 기능
 
-### 1. 전처리 단계 (DOCX → HTML)
+### 1. 전처리 단계 (DOCX / FIN → HTML · DOCX)
 - DOCX 파일에서 첨자(아래첨자/위첨자), 표 자동 추출
 - HTML 태그(`<sub>`, `<sup>`, `<table>`)로 변환
 - Cross-reference 자동 삽입
 - 단락번호 자동 부여
+- **`.fin`(KIPO 전자출원 파일) 지원**: `.fin`(zip → `.hlz` → KIPO KEAPS XML + 도면)을 분석해
+  - **KIPO 출원서식 레이아웃 DOCX**로 변환 (국문 【】 부제 + 단락번호 + 도면 임베드)
+  - **해외출원용 국문(ROPKS) DOCX**로 변환 (사무소표준US 부제 + 지정 페이지/글꼴 서식 + 도면 섹션)
+  - 명세서 본문은 기존 HTML 변환 텍스트로도 함께 표시되어 부제표준화·단락번호 도구를 그대로 사용 가능
 
 ### 2. 후처리 단계 (HTML → DOCX)
 - HTML 태그가 포함된 텍스트를 DOCX 파일로 변환
@@ -62,7 +66,9 @@ document-tools/
 ├── utils.js                 # 공통 유틸리티 (이스케이프, diff, DOCX 파싱/판별)
 ├── js/
 │   ├── app-core.js          # 공통 UI (탭 전환, 플로팅 탭 바, 우선권 모달)
-│   ├── tab1-preprocess.js   # 탭1: 전처리 (DOCX → HTML)
+│   ├── tab1-preprocess.js   # 탭1: 전처리 (DOCX/FIN → HTML·DOCX)
+│   ├── fin-parser.js        # .fin(KIPO 전자출원) 파싱 → IR(중간모델)
+│   ├── fin-docx.js          # IR → KIPO 출원서식 / 해외출원용 국문(ROPKS) DOCX
 │   ├── tab2-postprocess.js  # 탭2: 후처리 (HTML → DOCX)
 │   ├── tab3-bilingual.js    # 탭3: 한영혼합본 추출/색변환/DOCX 생성
 │   ├── tab3-merge.js        # 탭3: 한영혼합본 병합
@@ -97,6 +103,7 @@ document-tools/
 | 입력 | 출력 |
 |-----|------|
 | .docx | .docx |
+| .fin | .docx (KIPO 출원서식 / ROPKS), HTML |
 | .txt | .pdf |
 | .md | |
 
@@ -147,5 +154,5 @@ Copyright (c) 2026 Smart Danny. All rights reserved.
 ## 📞 문의
 
 - **Author**: Smart Danny
-- **Version**: 1.4.0
-- **Last Updated**: 2026-07-08
+- **Version**: 1.5.0
+- **Last Updated**: 2026-07-09

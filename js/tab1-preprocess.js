@@ -5,13 +5,72 @@
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  */
 
-        // 탭1 - 파일 처리 공통 함수
+        // 탭1 - .fin 파싱 결과(IR) 보관용 (docx 산출물 버튼에서 사용)
+        let finParsedIR1 = null;
+
+        // 탭1 - 파일 처리 공통 함수 (.docx / .fin 확장자 분기)
         async function handleFile1(file) {
+            if (!file) return;
+            if ((file.name || '').toLowerCase().endsWith('.fin')) {
+                await handleFinFile(file);
+                return;
+            }
+            // 기존 .docx 경로 (동작 변경 없음)
+            finParsedIR1 = null;
+            document.getElementById('finOutputSection').classList.add('hidden');
             await handleDocxUpload(file, 'fileName1', async (file) => {
                 const result = await processDocx1(file);
                 document.getElementById('textInput1').value = result.text;
                 displayResult1(result);
             });
+        }
+
+        // 탭1 - .fin 파일 처리: 파싱 → KIPO 라인텍스트(HTML 변환) + 산출물 버튼 활성화
+        async function handleFinFile(file) {
+            document.getElementById('fileName1').textContent = file.name;
+            const msg = document.getElementById('finOutputMessage');
+            if (msg) msg.classList.add('hidden');
+            try {
+                const ir = await parseFinFile(file);
+                finParsedIR1 = ir;
+
+                // KIPO 라인텍스트를 생성해 기존 텍스트 파이프라인(HTML/미리보기/도구)과 합류
+                const text = finBuildKipoLineText(ir);
+                document.getElementById('textInput1').value = text;
+                const subscriptCount = (text.match(/<sub>/gi) || []).length;
+                const superscriptCount = (text.match(/<sup>/gi) || []).length;
+                displayResult1({ text, subscriptCount, superscriptCount });
+
+                // .fin 산출물 섹션 표시
+                document.getElementById('finOutputSection').classList.remove('hidden');
+                const drawn = ir.drawings.filter(d => d.base64).length;
+                document.getElementById('finDrawingsInfo').textContent =
+                    `분석 완료 — 도면 ${ir.drawings.length}개(이미지 ${drawn}개 임베드) · 청구항 ${ir.claims.length}개 · 표 ${ir.embodiments.filter(e => e.kind === 'table').length}개`;
+            } catch (e) {
+                finParsedIR1 = null;
+                document.getElementById('finOutputSection').classList.add('hidden');
+                alert('오류: ' + e.message);
+            }
+        }
+
+        // .fin → KIPO 출원서식 DOCX
+        async function downloadFinKipoDocx() { await downloadFinDocx('kipo'); }
+        // .fin → 해외출원용 국문(ROPKS) DOCX
+        async function downloadFinRopksDocx() { await downloadFinDocx('ropks'); }
+
+        async function downloadFinDocx(format) {
+            const msg = document.getElementById('finOutputMessage');
+            if (!finParsedIR1) { showMessage(msg, '❌ 먼저 .fin 파일을 업로드해주세요.', 'error'); return; }
+            const label = format === 'ropks' ? '해외출원용 국문(ROPKS)' : 'KIPO 출원서식';
+            try {
+                const blob = await buildFinDocxBlob(finParsedIR1, format);
+                const base = ((finParsedIR1.meta && finParsedIR1.meta.fileName) || 'document').replace(/\.fin$/i, '');
+                saveAs(blob, base + (format === 'ropks' ? '_ROPKS' : '_KIPO') + '.docx');
+                showMessage(msg, `✅ ${label} DOCX가 생성되었습니다!`, 'success');
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+            } catch (e) {
+                showMessage(msg, `❌ ${label} DOCX 생성 실패: ` + e.message, 'error');
+            }
         }
         
         // 파일 선택 버튼
@@ -791,8 +850,11 @@
         function clearAll1() {
             if (!confirm('모든 내용을 지우시겠습니까?')) return;
             document.getElementById('textInput1').value = '';
-            document.getElementById('fileName1').textContent = '또는 아래에 .docx 파일을 드래그하세요';
+            document.getElementById('fileName1').textContent = '또는 아래에 .docx / .fin 파일을 드래그하세요';
             document.getElementById('fileInput1').value = '';
+            finParsedIR1 = null;
+            document.getElementById('finOutputSection').classList.add('hidden');
+            document.getElementById('finOutputMessage').classList.add('hidden');
             priorityList1 = [];
             renderPriorityList1();
             document.getElementById('output1').innerHTML = '';

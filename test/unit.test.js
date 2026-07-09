@@ -261,3 +261,91 @@ describe('Markdown → DOCX 헬퍼 (탭5)', () => {
         assert.equal(u.mdDocxHeadingSize('p'), 0);
     });
 });
+
+describe('.fin 변환 순수 헬퍼', () => {
+    // 최소 IR (fin-parser의 parseFinFile 결과 형태)
+    const ir = {
+        meta: { fileName: 'sample.fin' },
+        titleRaw: '연마 슬러리{POLISHING SLURRY}',
+        titleKo: '연마 슬러리', titleEn: 'POLISHING SLURRY',
+        technicalField: [{ num: '0001', text: '본 개시는 A에 관한 것이다.' }],
+        backgroundArt: [{ num: '0002', text: '배경 기술 설명.' }],
+        techProblem: [{ num: '0003', text: '과제.' }],
+        techSolution: [{ num: '0004', text: 'SiO<sub>2</sub> 해결.' }],
+        advantageousEffects: [],
+        descriptionOfDrawings: ['도 1은 A이다.', '도 2는 B이다.'],
+        embodiments: [
+            { kind: 'p', num: '0005', text: '실시예 설명.' },
+            { kind: 'table', num: '1', html: '<table border="1"><tr><td>a</td><td>b</td></tr></table>' }
+        ],
+        referenceSigns: ['SUB: 기판', 'TR: 트랜지스터'],
+        claims: [{ num: '1', text: 'A;\nB를 포함하는 장치.' }],
+        abstract: { summary: [{ num: '0001a', text: '요약 내용.' }], figureNum: '6' },
+        drawings: [
+            { num: '1', file: 'pat00001.jpg', fmt: 'jpg', mime: 'image/jpeg', wi: 100, he: 50, base64: 'AAAA' }
+        ]
+    };
+
+    test('finMmToEmu: 1mm = 36000 EMU, 최소 1', () => {
+        assert.equal(u.finMmToEmu(109), 3924000);
+        assert.equal(u.finMmToEmu(0), 1);
+        assert.equal(u.finMmToEmu(-5), 1);
+    });
+
+    test('finImgFormatToMime', () => {
+        assert.equal(u.finImgFormatToMime('jpg'), 'image/jpeg');
+        assert.equal(u.finImgFormatToMime('JPEG'), 'image/jpeg');
+        assert.equal(u.finImgFormatToMime('png'), 'image/png');
+        assert.equal(u.finImgFormatToMime(''), 'image/jpeg');
+    });
+
+    test('finBuildKipoLineText: 국문 【】 부제 + [NNNN] 단락번호', () => {
+        const t = u.finBuildKipoLineText(ir);
+        assert.ok(t.includes('【발명의 명칭】\n연마 슬러리{POLISHING SLURRY}'));
+        assert.ok(t.includes('【기술분야】\n[0001] 본 개시는'));
+        assert.ok(t.includes('【해결하고자 하는 과제】'));
+        assert.ok(t.includes('【과제의 해결 수단】\n[0004] SiO<sub>2</sub> 해결.'));
+        assert.ok(t.includes('[표 1]'));
+        assert.ok(t.includes('<table border="1">'));
+        assert.ok(t.includes('【부호의 설명】\nSUB: 기판'));
+        assert.ok(t.includes('【청구범위】\n【청구항 1】\nA;\nB를 포함하는 장치.'));
+        assert.ok(t.includes('【대표도】\n도 6'));
+        assert.ok(t.includes('【도면】\n【도 1】'));
+        // 효과 섹션이 비면 부제도 없어야 함
+        assert.ok(!t.includes('【발명의 효과】'));
+    });
+
+    test('finBuildDocModel(ropks): 사무소표준US 부제 + 도면 섹션', () => {
+        const m = u.finBuildDocModel(ir, 'ropks');
+        const subs = m.filter(b => b.t === 'sub').map(b => b.text);
+        assertSameJson(subs, [
+            'TITLE OF THE INVENTION', 'BACKGROUND OF THE INVENTION',
+            '(a) Field of the Invention', '(b) Description of the Related Art',
+            'SUMMARY OF THE INVENTION', 'BRIEF DESCRIPTION OF THE DRAWINGS',
+            'DETAILED DESCRIPTION OF THE EMBODIMENTS', '<Description of symbols>',
+            'WHAT IS CLAIMED IS:', 'ABSTRACT OF DISCLOSURE', '【도면】'
+        ]);
+        const texts = m.filter(b => b.t === 'p').map(b => b.text);
+        assert.ok(texts.includes('연마 슬러리{POLISHING SLURRY}'));
+        assert.ok(texts.includes('본 개시는 A에 관한 것이다.'));        // 단락번호 없음(ROPKS)
+        assert.ok(texts.includes('[표 1]'));
+        assert.ok(texts.includes('【청구항 1】'));
+        assert.ok(texts.includes('대표도: 도 6'));
+        assert.ok(texts.includes('【도 1】'));
+        assert.ok(m.some(b => b.t === 'table'));
+        assert.ok(m.some(b => b.t === 'img' && b.drawing.num === '1'));
+        // ROPKS 본문에 [NNNN] 단락번호가 없어야 함
+        assert.ok(!texts.some(t => /^\[0\d{3}\]/.test(t)));
+    });
+
+    test('finBuildDocModel(kipo): 국문 부제 + [NNNN] 단락번호', () => {
+        const m = u.finBuildDocModel(ir, 'kipo');
+        const subs = m.filter(b => b.t === 'sub').map(b => b.text);
+        assert.ok(subs.includes('【발명의 명칭】'));
+        assert.ok(subs.includes('【청구범위】'));
+        const texts = m.filter(b => b.t === 'p').map(b => b.text);
+        assert.ok(texts.includes('[0001] 본 개시는 A에 관한 것이다.'));  // 단락번호 있음(KIPO)
+        assert.ok(texts.includes('【청구항 1】'));
+        assert.ok(m.some(b => b.t === 'img'));
+    });
+});

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
  * Document Tools - 특허 명세서 전처리 도구
- * Version: 1.4.0
- * Last Updated: 2026-07-08
+ * Version: 1.5.0
+ * Last Updated: 2026-07-09
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  * 이 소프트웨어는 저작권법의 보호를 받습니다.
@@ -14,7 +14,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>문서 도구 모음</title>
     <meta name="author" content="Smart Danny">
-    <meta name="version" content="1.4.0">
+    <meta name="version" content="1.5.0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <!-- Markdown to PDF용 라이브러리 -->
@@ -54,20 +54,33 @@
         <!-- 탭1: DOCX → HTML -->
         <div id="tab1" class="tab-content active">
             <div class="section">
-                <div class="section-title">1단계: DOCX 파일 업로드</div>
+                <div class="section-title">1단계: DOCX / FIN 파일 업로드</div>
                 <div class="unified-input-area">
                     <div class="file-select-row">
-                        <input type="file" id="fileInput1" accept=".docx" style="display:none;">
+                        <input type="file" id="fileInput1" accept=".docx,.fin" style="display:none;">
                         <button class="file-select-btn" onclick="document.getElementById('fileInput1').click()">📁 파일 선택</button>
-                        <span class="file-name-display" id="fileName1">또는 아래에 .docx 파일을 드래그하세요</span>
+                        <span class="file-name-display" id="fileName1">또는 아래에 .docx / .fin 파일을 드래그하세요</span>
                         <button class="btn btn-danger btn-sm" onclick="clearAll1()" style="margin-left:auto;">🗑️ 전체 지우기</button>
                     </div>
-                    <textarea id="textInput1" placeholder=".docx 파일을 선택하거나 여기에 드래그하여 놓으세요..." readonly style="cursor:pointer;background:#f9f9f9;"></textarea>
-                    <span class="drop-hint">📎 .docx 파일 드롭 가능</span>
+                    <textarea id="textInput1" placeholder=".docx 또는 .fin 파일을 선택하거나 여기에 드래그하여 놓으세요..." readonly style="cursor:pointer;background:#f9f9f9;"></textarea>
+                    <span class="drop-hint">📎 .docx / .fin 파일 드롭 가능</span>
                 </div>
                 <div class="note" style="margin-top:10px;">
                     <span class="note-icon">⚠️</span>
-                    <span>.doc 파일은 Microsoft Word에서 .docx 형식으로 변환 후 업로드해 주세요.</span>
+                    <span>.doc 파일은 Microsoft Word에서 .docx 형식으로 변환 후 업로드해 주세요. <strong>.fin</strong>(KIPO 전자출원 파일)은 자동 분석되어 KIPO 출원서식/해외출원용 국문(ROPKS) DOCX로 변환됩니다.</span>
+                </div>
+                <div class="section hidden" id="finOutputSection" style="margin-top:15px;padding:15px;background:#f0f7ff;border-radius:8px;">
+                    <div class="section-title" style="margin-bottom:10px;">📄 .fin 변환 결과물 생성</div>
+                    <div class="fin-drawings-info" id="finDrawingsInfo" style="margin-bottom:12px;color:#555;font-size:14px;"></div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="downloadFinKipoDocx()">📥 KIPO 출원서식 DOCX</button>
+                        <button class="btn btn-success" onclick="downloadFinRopksDocx()">📥 해외출원용 국문(ROPKS) DOCX</button>
+                    </div>
+                    <div class="note" style="margin-top:12px;">
+                        <span class="note-icon">💡</span>
+                        <span>아래 6단계 <strong>변환 결과</strong> 텍스트는 HTML 변환 결과이며, 부제표준화·단락번호 도구를 그대로 사용할 수 있습니다.</span>
+                    </div>
+                    <div id="finOutputMessage" class="message hidden"></div>
                 </div>
                 <div id="fileAnalysis1" class="file-analysis hidden">
                     <div class="analysis-title">📋 파일 분석 결과</div>
@@ -780,6 +793,8 @@ def fibonacci(n):
     </div>
 
     <script src="js/app-core.js"></script>
+    <script src="js/fin-parser.js"></script>
+    <script src="js/fin-docx.js"></script>
     <script src="js/tab1-preprocess.js"></script>
     <script src="js/tab2-postprocess.js"></script>
     <script src="js/tab3-bilingual.js"></script>
