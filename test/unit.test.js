@@ -261,3 +261,151 @@ describe('Markdown → DOCX 헬퍼 (탭5)', () => {
         assert.equal(u.mdDocxHeadingSize('p'), 0);
     });
 });
+
+describe('.fin 변환 순수 헬퍼', () => {
+    // 최소 IR (fin-parser의 parseFinFile 결과 형태)
+    const ir = {
+        meta: { fileName: 'sample.fin' },
+        titleRaw: '연마 슬러리{POLISHING SLURRY}',
+        titleKo: '연마 슬러리', titleEn: 'POLISHING SLURRY',
+        technicalField: [{ num: '0001', text: '본 개시는 A에 관한 것이다.' }],
+        backgroundArt: [{ num: '0002', text: '배경 기술 설명.' }],
+        techProblem: [{ num: '0003', text: '과제.' }],
+        techSolution: [{ num: '0004', text: 'SiO<sub>2</sub> 해결.' }],
+        advantageousEffects: [],
+        descriptionOfDrawings: [{ num: '0004b', text: '도 1은 A이다.\n도 2는 B이다.' }],
+        embodiments: [
+            { kind: 'p', num: '0005', text: '실시예 설명.' },
+            { kind: 'table', num: '1', html: '<table border="1"><tr><td>a</td><td>b</td></tr></table>' }
+        ],
+        referenceSigns: [{ num: '0008', text: 'SUB: 기판\nTR: 트랜지스터' }],
+        claims: [{ num: '1', text: 'A;\nB를 포함하는 장치.' }],
+        abstract: { summary: [{ num: '0001a', text: '요약 내용.' }], figureNum: '6' },
+        drawings: [
+            { num: '1', file: 'pat00001.jpg', fmt: 'jpg', mime: 'image/jpeg', wi: 100, he: 50, base64: 'AAAA' }
+        ]
+    };
+
+    test('finMmToEmu: 1mm = 36000 EMU, 최소 1', () => {
+        assert.equal(u.finMmToEmu(109), 3924000);
+        assert.equal(u.finMmToEmu(0), 1);
+        assert.equal(u.finMmToEmu(-5), 1);
+    });
+
+    test('finRopksBaseName: 해외관리번호 → 파일명', () => {
+        assert.equal(u.finRopksBaseName('OPP20123456US', '260709'), 'OPP20123456ROPKS_260709');
+        assert.equal(u.finRopksBaseName('OPP20123456us', '260709'), 'OPP20123456ROPKS_260709'); // 소문자 us
+        assert.equal(u.finRopksBaseName('  OPP20999999US  ', '260709'), 'OPP20999999ROPKS_260709'); // 공백 트림
+        assert.equal(u.finRopksBaseName('', '260709'), 'ROPKS_260709'); // 미입력
+        assert.equal(u.finRopksBaseName(null, '260709'), 'ROPKS_260709');
+    });
+
+    test('finNormalizeScripts: 유니코드 첨자 → <sub>/<sup>', () => {
+        assert.equal(u.finNormalizeScripts('H₂SO₄'), 'H<sub>2</sub>SO<sub>4</sub>');
+        assert.equal(u.finNormalizeScripts('S₂O₈²⁻'), 'S<sub>2</sub>O<sub>8</sub><sup>2-</sup>');
+        assert.equal(u.finNormalizeScripts('CO²'), 'CO<sup>2</sup>');
+        assert.equal(u.finNormalizeScripts('일반 텍스트'), '일반 텍스트');
+        assert.equal(u.finNormalizeScripts('SiO<sub>2</sub>'), 'SiO<sub>2</sub>'); // 기존 태그 보존
+    });
+
+    test('finCleanMultiline: 빈 줄 제거 + trim', () => {
+        assert.equal(u.finCleanMultiline('도 1은 A.\n\n도 2는 B.\n'), '도 1은 A.\n도 2는 B.');
+        assert.equal(u.finCleanMultiline('  x  '), 'x');
+        assert.equal(u.finCleanMultiline('a\n \n \nb'), 'a\nb');
+        assert.equal(u.finCleanMultiline(''), '');
+    });
+
+    test('finImgFormatToMime', () => {
+        assert.equal(u.finImgFormatToMime('jpg'), 'image/jpeg');
+        assert.equal(u.finImgFormatToMime('JPEG'), 'image/jpeg');
+        assert.equal(u.finImgFormatToMime('png'), 'image/png');
+        assert.equal(u.finImgFormatToMime(''), 'image/jpeg');
+    });
+
+    test('finBuildKipoLineText: 국문 【】 부제 + 제목 분리 + [NNNN] 단락번호', () => {
+        const t = u.finBuildKipoLineText(ir);
+        assert.ok(t.includes('【발명의 명칭】\n연마 슬러리\nPOLISHING SLURRY')); // 국문/영문 분리
+        assert.ok(t.includes('【기술분야】\n[0001] 본 개시는'));
+        assert.ok(t.includes('【해결하려는 과제】')); // .fin/KIPO 표준 부제 (KIPO docx와 일치)
+        assert.ok(!t.includes('【해결하고자 하는 과제】'));
+        assert.ok(t.includes('【과제의 해결 수단】\n[0004] SiO<sub>2</sub> 해결.'));
+        assert.ok(t.includes('【도면의 간단한 설명】\n[0004b] 도 1은 A이다.\n도 2는 B이다.')); // br → 여러 줄, 번호는 첫 줄만
+        assert.ok(t.includes('[표 1]'));
+        assert.ok(t.includes('<table border="1">'));
+        assert.ok(t.includes('【부호의 설명】\n[0008] SUB: 기판\nTR: 트랜지스터'));
+        assert.ok(t.includes('【청구범위】\n【청구항 1】\nA;\nB를 포함하는 장치.'));
+        assert.ok(t.includes('【대표도】\n도 6'));
+        assert.ok(t.includes('【도면】\n【도 1】'));
+        assert.ok(!t.includes('【발명의 효과】'));
+    });
+
+    test('finBuildRopksLineText: 변환결과(ROPKS 기준) 라인 텍스트', () => {
+        const t = u.finBuildRopksLineText(ir);
+        assert.ok(t.includes('TITLE OF THE INVENTION\n연마 슬러리{POLISHING SLURRY}')); // 부제 영문 + 제목 국문{영문}
+        assert.ok(t.includes('WHAT IS CLAIMED IS:\n【청구항 1】\nA;\nB를 포함하는 장치.'));
+        assert.ok(t.includes('<Description of symbols>\nSUB: 기판\nTR: 트랜지스터'));
+        assert.ok(t.includes('[표 1]'));
+        assert.ok(t.includes('<table border="1">'));
+        assert.ok(t.includes('대표도: 도 6'));
+        assert.ok(t.includes('【도면】\n【도 1】'));
+        assert.ok(!/^\[0\d{3}\]/m.test(t)); // ROPKS는 단락번호 없음
+        assert.ok(!t.includes('【발명의 명칭】')); // 국문 부제 아님
+    });
+
+    test('finBuildDocModel(ropks): 사무소표준US 부제 + 도면 섹션', () => {
+        const m = u.finBuildDocModel(ir, 'ropks');
+        const subs = m.filter(b => b.t === 'p' && b.bold).map(b => b.text);
+        assertSameJson(subs, [
+            'TITLE OF THE INVENTION', 'BACKGROUND OF THE INVENTION',
+            '(a) Field of the Invention', '(b) Description of the Related Art',
+            'SUMMARY OF THE INVENTION', 'BRIEF DESCRIPTION OF THE DRAWINGS',
+            'DETAILED DESCRIPTION OF THE EMBODIMENTS', '<Description of symbols>',
+            'WHAT IS CLAIMED IS:', 'ABSTRACT OF DISCLOSURE'
+        ]); // 부제는 볼드+밑줄, 【도면】/【도 N】/청구항 헤더는 볼드 아님
+        const texts = m.filter(b => b.t === 'p').map(b => b.text);
+        assert.ok(texts.includes('연마 슬러리{POLISHING SLURRY}')); // ROPKS 제목은 국문{영문} 유지
+        assert.ok(texts.includes('본 개시는 A에 관한 것이다.'));       // 단락번호 없음
+        assert.ok(texts.includes('도 1은 A이다.') && texts.includes('도 2는 B이다.')); // 도면설명 분리
+        assert.ok(texts.includes('[표 1]'));
+        assert.ok(texts.includes('【청구항 1】'));
+        assert.ok(texts.includes('대표도: 도 6'));
+        assert.ok(texts.includes('【도 1】'));
+        // 본문 단락은 첫줄 들여쓰기, 부제는 들여쓰기 없음
+        assert.ok(m.find(b => b.text === '본 개시는 A에 관한 것이다.').indent === true);
+        assert.ok(!m.find(b => b.text === 'TITLE OF THE INVENTION').indent);
+        // 【도면】은 볼드 아님·중앙정렬
+        const domyeon = m.find(b => b.text === '【도면】');
+        assert.ok(domyeon && !domyeon.bold && domyeon.align === 'center');
+        assert.ok(m.some(b => b.t === 'table'));
+        assert.ok(m.some(b => b.t === 'img' && b.drawing.num === '1'));
+        assert.ok(!texts.some(t => /^\[0\d{3}\]/.test(t)));
+        // 섹션별 페이지 나누기(pageBreakBefore): 청구범위/요약서/도면
+        assert.ok(m.find(b => b.text === 'WHAT IS CLAIMED IS:').pageBreakBefore === true);
+        assert.ok(m.find(b => b.text === 'ABSTRACT OF DISCLOSURE').pageBreakBefore === true);
+        assert.ok(m.find(b => b.text === '【도면】').pageBreakBefore === true);
+        // 빈 텍스트 단락이 없어야 함(빈줄 방지)
+        assert.ok(!m.some(b => b.t === 'p' && b.text === ''));
+    });
+
+    test('finBuildDocModel(kipo): 4부 구조 + 페이지 나누기 + [NNNN] 단락번호', () => {
+        const m = u.finBuildDocModel(ir, 'kipo');
+        const bold = m.filter(b => b.t === 'p' && b.bold).map(b => b.text);
+        // 부(部) 중앙 헤더
+        assert.ok(bold.includes('명세서') && bold.includes('청구범위') && bold.includes('요약서') && bold.includes('도면'));
+        assert.ok(bold.includes('【발명의 명칭】') && bold.includes('【청구항 1】'));
+        assert.ok(!bold.includes('【발명의 설명】')); // KIPO 출원서식은 【발명의 설명】 없음
+        const parthdr = m.find(b => b.text === '명세서');
+        assert.equal(parthdr.align, 'center'); assert.equal(parthdr.size, 30);
+        // 페이지 나누기 3곳(청구범위/요약서/도면)
+        assert.equal(m.filter(b => b.t === 'pagebreak').length, 3);
+        const texts = m.filter(b => b.t === 'p').map(b => b.text);
+        assert.ok(texts.includes('연마 슬러리') && texts.includes('POLISHING SLURRY')); // 제목 분리
+        assert.ok(texts.includes('[0001] 본 개시는 A에 관한 것이다.')); // 단락번호 있음
+        assert.ok(texts.includes('[0004b] 도 1은 A이다.\n도 2는 B이다.')); // 도면설명은 하나의 단락(br)
+        assert.ok(texts.includes('A;\nB를 포함하는 장치.')); // 청구항 본문은 하나의 단락(br)
+        assert.ok(texts.includes('[도 1]')); // 도면 캡션은 대괄호
+        // 도면: 이미지 다음에 [도 N] 캡션
+        const imgIdx = m.findIndex(b => b.t === 'img');
+        assert.equal(m[imgIdx + 1].text, '[도 1]');
+    });
+});

@@ -1,8 +1,8 @@
 /**
  * Document Tools - utils.js
  * 공통 유틸리티 함수 모음
- * Version: 1.4.0
- * Last Updated: 2026-07-08
+ * Version: 1.5.0
+ * Last Updated: 2026-07-09
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  * 이 소프트웨어는 저작권법의 보호를 받습니다.
@@ -615,6 +615,341 @@ function makeDocxStylesXml(options = {}) {
 <w:pPr><w:spacing w:after="0"/></w:pPr>${rPr}
 </w:style>
 </w:styles>`;
+}
+
+// ============================================
+// .fin(KIPO 전자출원) 변환용 순수 헬퍼
+// (DOM 비의존 - fin-parser.js가 만든 IR 객체를 입력으로 받음)
+// ============================================
+
+/**
+ * KIPO .fin 도면 치수(wi/he, 단위 mm)를 EMU로 변환 (1mm = 36000 EMU)
+ * @param {number} mm - 밀리미터 치수
+ * @returns {number} EMU (최소 1)
+ */
+function finMmToEmu(mm) {
+    const v = Math.round((Number(mm) || 0) * 36000);
+    return v > 0 ? v : 1;
+}
+
+// 유니코드 아래첨자/위첨자 → 기본 문자 매핑
+const FIN_SUB_MAP = { '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9', '₊': '+', '₋': '-', '₌': '=', '₍': '(', '₎': ')' };
+const FIN_SUP_MAP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')', 'ⁿ': 'n', 'ⁱ': 'i' };
+
+/**
+ * 유니코드 아래첨자/위첨자 문자를 <sub>/<sup> 태그로 정규화 (글꼴 독립 렌더링)
+ * 예: "H₂SO₄" → "H<sub>2</sub>SO<sub>4</sub>", "S₂O₈²⁻" → "S<sub>2</sub>O<sub>8</sub><sup>2-</sup>"
+ * @param {string} text
+ * @returns {string}
+ */
+function finNormalizeScripts(text) {
+    if (!text) return text;
+    return String(text)
+        .replace(/[₀-₎]+/g, m => '<sub>' + Array.from(m).map(c => FIN_SUB_MAP[c] || c).join('') + '</sub>')
+        .replace(/[²³¹⁰ⁱ⁴-ⁿ]+/g, m => '<sup>' + Array.from(m).map(c => FIN_SUP_MAP[c] || c).join('') + '</sup>');
+}
+
+/**
+ * 여러 줄 텍스트 정리: 각 줄 trim + 빈 줄 제거 (XML 서식 개행과 <br/>가 겹쳐 생기는 빈 줄 방지)
+ * @param {string} text
+ * @returns {string}
+ */
+function finCleanMultiline(text) {
+    return String(text || '').split('\n').map(s => s.trim()).filter(s => s.length > 0).join('\n');
+}
+
+/**
+ * 해외출원용 국문(ROPKS) 파일명(확장자 제외) 생성
+ *  - 해외관리번호 입력 시: 국가코드 US 제거 후 "<관리번호>ROPKS_<오늘6자리>"
+ *  - 미입력 시: "ROPKS_<오늘6자리>"
+ * @param {string} mgmtNo - 해외관리번호(예: OPP20123456US)
+ * @param {string} today6 - 오늘 날짜 6자리(YYMMDD)
+ * @returns {string}
+ */
+function finRopksBaseName(mgmtNo, today6) {
+    const raw = (mgmtNo || '').trim();
+    if (!raw) return `ROPKS_${today6}`;
+    return `${raw.replace(/US$/i, '')}ROPKS_${today6}`;
+}
+
+/**
+ * img-format 문자열을 MIME 타입으로 변환
+ * @param {string} fmt - 'jpg' | 'jpeg' | 'png' | 'gif' 등
+ * @returns {string} MIME 타입
+ */
+function finImgFormatToMime(fmt) {
+    const f = String(fmt || '').toLowerCase();
+    if (f === 'png') return 'image/png';
+    if (f === 'gif') return 'image/gif';
+    if (f === 'bmp') return 'image/bmp';
+    if (f === 'tif' || f === 'tiff') return 'image/tiff';
+    return 'image/jpeg'; // jpg/jpeg 및 기본값
+}
+
+/**
+ * IR의 단락 배열을 라인 텍스트로 직렬화 (내부 <br/>는 별도 라인으로 분해, 번호는 첫 줄에만)
+ * @param {Array} paras - {num, text} 또는 문자열의 배열
+ * @param {boolean} withNum - [NNNN] 단락번호 접두 여부
+ * @returns {string[]} 라인 배열
+ */
+function finParasToLines(paras, withNum) {
+    const out = [];
+    for (const p of (paras || [])) {
+        if (typeof p === 'string') { for (const l of p.split('\n')) out.push(l); continue; }
+        const lines = String(p.text || '').split('\n');
+        lines.forEach((ln, i) => {
+            out.push((withNum && p.num && i === 0) ? `[${p.num}] ${ln}` : ln);
+        });
+    }
+    return out;
+}
+
+/**
+ * IR → KIPO 출원서식 라인 텍스트(【】 부제 + [NNNN] 단락번호 + <table>/<sub> 태그).
+ * 기존 탭1 텍스트 파이프라인(부제표준화·단락번호·HTML 미리보기)과 그대로 합류한다.
+ * @param {Object} ir - fin-parser의 parseFinFile 결과
+ * @returns {string} 줄바꿈으로 연결된 라인 텍스트
+ */
+function finBuildKipoLineText(ir) {
+    if (!ir) return '';
+    const L = [];
+    L.push('【발명의 설명】');
+    L.push('【발명의 명칭】');
+    if (ir.titleKo) L.push(ir.titleKo);
+    else if (ir.titleRaw) L.push(ir.titleRaw);
+    if (ir.titleEn) L.push(ir.titleEn);
+    L.push('【기술분야】');
+    L.push(...finParasToLines(ir.technicalField, true));
+    L.push('【배경기술】');
+    L.push(...finParasToLines(ir.backgroundArt, true));
+    L.push('【발명의 내용】');
+    if (ir.techProblem && ir.techProblem.length) {
+        L.push('【해결하려는 과제】');
+        L.push(...finParasToLines(ir.techProblem, true));
+    }
+    if (ir.techSolution && ir.techSolution.length) {
+        L.push('【과제의 해결 수단】');
+        L.push(...finParasToLines(ir.techSolution, true));
+    }
+    if (ir.advantageousEffects && ir.advantageousEffects.length) {
+        L.push('【발명의 효과】');
+        L.push(...finParasToLines(ir.advantageousEffects, true));
+    }
+    L.push('【도면의 간단한 설명】');
+    L.push(...finParasToLines(ir.descriptionOfDrawings, true));
+    L.push('【발명을 실시하기 위한 구체적인 내용】');
+    for (const item of (ir.embodiments || [])) {
+        if (item.kind === 'table') {
+            if (item.num) L.push(`[표 ${item.num}]`);
+            L.push(item.html);
+        } else {
+            L.push((item.num ? `[${item.num}] ` : '') + (item.text || ''));
+        }
+    }
+    if (ir.referenceSigns && ir.referenceSigns.length) {
+        L.push('【부호의 설명】');
+        L.push(...finParasToLines(ir.referenceSigns, true));
+    }
+    L.push('【청구범위】');
+    for (const c of (ir.claims || [])) {
+        L.push(`【청구항 ${c.num}】`);
+        for (const line of String(c.text || '').split('\n')) L.push(line);
+    }
+    L.push('【요약서】');
+    L.push('【요약】');
+    L.push(...finParasToLines((ir.abstract && ir.abstract.summary) || [], false));
+    if (ir.abstract && ir.abstract.figureNum) {
+        L.push('【대표도】');
+        L.push(`도 ${ir.abstract.figureNum}`);
+    }
+    if (ir.drawings && ir.drawings.length) {
+        L.push('【도면】');
+        for (const d of ir.drawings) L.push(`【도 ${d.num}】`);
+    }
+    return L.join('\n');
+}
+
+/**
+ * 블록 모델을 라인 텍스트로 직렬화 (표는 HTML 그대로, 이미지/페이지나누기는 제외)
+ * @param {Array<Object>} model - finBuildDocModel 결과
+ * @returns {string}
+ */
+function finModelToLineText(model) {
+    const L = [];
+    for (const b of (model || [])) {
+        if (b.t === 'table') L.push(b.html);
+        else if (b.t === 'p') L.push(b.text == null ? '' : b.text);
+        // img / pagebreak → 텍스트 표시 제외
+    }
+    return L.join('\n');
+}
+
+/**
+ * IR → 해외출원용 국문(ROPKS) 라인 텍스트 ('변환결과' 표시용)
+ * @param {Object} ir - parseFinFile 결과
+ * @returns {string}
+ */
+function finBuildRopksLineText(ir) {
+    return finModelToLineText(finBuildRopksModel(ir));
+}
+
+// ROPKS(해외출원용 국문) 부제 = 사무소표준US. 도면/청구항/부호 라벨은 아래 모델 빌더에서 처리.
+const FIN_ROPKS_SUBTITLES = {
+    title: 'TITLE OF THE INVENTION',
+    background: 'BACKGROUND OF THE INVENTION',
+    field: '(a) Field of the Invention',
+    related: '(b) Description of the Related Art',
+    summary: 'SUMMARY OF THE INVENTION',
+    drawingsBrief: 'BRIEF DESCRIPTION OF THE DRAWINGS',
+    detailed: 'DETAILED DESCRIPTION OF THE EMBODIMENTS',
+    symbols: '<Description of symbols>',
+    claims: 'WHAT IS CLAIMED IS:',
+    abstract: 'ABSTRACT OF DISCLOSURE'
+};
+
+/**
+ * IR → 렌더링용 블록 모델. 공유 렌더러(fin-docx.js)가 소비한다.
+ * 블록: {t:'p',text,bold,align,size,before,after} 단락(내부 \n → <w:br/>)
+ *      | {t:'table',html} | {t:'img',drawing,align,before,after} | {t:'pagebreak'}
+ * size 는 half-point, before/after 는 twips (생략 시 렌더러의 포맷 기본값).
+ * @param {Object} ir - parseFinFile 결과
+ * @param {string} format - 'kipo'(KIPO 출원서식) | 'ropks'(해외출원용 국문)
+ * @returns {Array<Object>} 블록 배열
+ */
+function finBuildDocModel(ir, format) {
+    if (!ir) return [];
+    return format === 'ropks' ? finBuildRopksModel(ir) : finBuildKipoModel(ir);
+}
+
+// 해외출원용 국문(ROPKS): ROPKS 샘플 역설계.
+//   sub  = 볼드+밑줄 부제(들여쓰기 없음)  | body = 첫줄 들여쓰기 본문
+//   plain = 들여쓰기·볼드 없음(청구항 헤더·【도면】·【도 N】)
+//   렌더러(fin-docx.js)가 바탕체·행간518·탭스톱을 공통 적용한다.
+function finBuildRopksModel(ir) {
+    const B = [];
+    const sub = (text) => { if (text) B.push({ t: 'p', text, bold: true }); };
+    const body = (text) => B.push({ t: 'p', text: text == null ? '' : text, indent: true });
+    const plain = (text, opt) => B.push(Object.assign({ t: 'p', text: text == null ? '' : text }, opt || {}));
+    const bodyParas = (arr, withNum) => { for (const line of finParasToLines(arr, withNum)) body(line); };
+
+    sub(FIN_ROPKS_SUBTITLES.title);
+    body(ir.titleRaw);
+    sub(FIN_ROPKS_SUBTITLES.background);
+    sub(FIN_ROPKS_SUBTITLES.field);
+    bodyParas(ir.technicalField, false);
+    sub(FIN_ROPKS_SUBTITLES.related);
+    bodyParas(ir.backgroundArt, false);
+    sub(FIN_ROPKS_SUBTITLES.summary);
+    bodyParas(ir.techProblem, false);
+    bodyParas(ir.techSolution, false);
+    bodyParas(ir.advantageousEffects, false);
+    sub(FIN_ROPKS_SUBTITLES.drawingsBrief);
+    bodyParas(ir.descriptionOfDrawings, false);
+    sub(FIN_ROPKS_SUBTITLES.detailed);
+    for (const item of (ir.embodiments || [])) {
+        if (item.kind === 'table') {
+            if (item.num) body(`[표 ${item.num}]`);
+            B.push({ t: 'table', html: item.html });
+        } else {
+            body(item.text || '');
+        }
+    }
+    if (ir.referenceSigns && ir.referenceSigns.length) {
+        sub(FIN_ROPKS_SUBTITLES.symbols);
+        bodyParas(ir.referenceSigns, false);
+    }
+    // WHAT IS CLAIMED IS: 는 새 페이지에서 시작
+    B.push({ t: 'p', text: FIN_ROPKS_SUBTITLES.claims, bold: true, pageBreakBefore: true });
+    for (const c of (ir.claims || [])) {
+        plain(`【청구항 ${c.num}】`);
+        for (const line of String(c.text || '').split('\n')) { if (line.trim()) body(line); }
+    }
+    // ABSTRACT OF DISCLOSURE 는 새 페이지에서 시작
+    B.push({ t: 'p', text: FIN_ROPKS_SUBTITLES.abstract, bold: true, pageBreakBefore: true });
+    bodyParas((ir.abstract && ir.abstract.summary) || [], false);
+    if (ir.abstract && ir.abstract.figureNum) body(`대표도: 도 ${ir.abstract.figureNum}`);
+    // 【도면】 은 새 페이지에서 시작, 도면은 하나씩 개별 페이지
+    if (ir.drawings && ir.drawings.length) {
+        B.push({ t: 'p', text: '【도면】', align: 'center', pageBreakBefore: true });
+        ir.drawings.forEach((d, j) => {
+            plain(`【도 ${d.num}】`, j > 0 ? { pageBreakBefore: true } : undefined);
+            B.push({ t: 'img', drawing: d, align: 'center' });
+        });
+    }
+    return B;
+}
+
+// KIPO 출원서식 레이아웃(샘플 역설계): 명세서/청구범위/요약서/도면 4부(部) 구조.
+// 부 헤더는 중앙 볼드, 【】부제 볼드 11pt(sz22), 본문 10pt(sz20), 부 사이 페이지 나누기.
+function finBuildKipoModel(ir) {
+    const B = [];
+    // 부 헤더(중앙 볼드): 명세서=15pt/after400, 그 외=13pt/after300
+    const parthdr = (text, first) => B.push({ t: 'p', text, bold: true, align: 'center', size: first ? 30 : 26, after: first ? 400 : 300 });
+    // 【】 부제: 볼드 11pt, before280/after140
+    const sub = (text, opt) => { if (text) B.push(Object.assign({ t: 'p', text, bold: true, size: 22, before: 280, after: 140 }, opt || {})); };
+    // 본문 단락: 10pt, after120
+    const p = (text, opt) => B.push(Object.assign({ t: 'p', text: text == null ? '' : text, after: 120 }, opt || {}));
+    const paras = (arr, withNum) => { for (const line of finParasToLines(arr, withNum)) p(line); };
+    // 하나의 단락(내부 \n=<br/>)으로 유지: 도면의 간단한 설명·부호의 설명
+    const paraBr = (arr, withNum) => {
+        for (const item of (arr || [])) {
+            const num = withNum && item.num ? `[${item.num}] ` : '';
+            p(num + (item.text || ''));
+        }
+    };
+
+    // ── 명세서 ──
+    parthdr('명세서', true);
+    sub('【발명의 명칭】');
+    if (ir.titleKo) p(ir.titleKo, { after: 60 });
+    else if (ir.titleRaw) p(ir.titleRaw, { after: 60 });
+    if (ir.titleEn) p(ir.titleEn, { after: 200 });
+    sub('【기술분야】');
+    paras(ir.technicalField, true);
+    sub('【배경기술】');
+    paras(ir.backgroundArt, true);
+    sub('【발명의 내용】');
+    if (ir.techProblem && ir.techProblem.length) { sub('【해결하려는 과제】'); paras(ir.techProblem, true); }
+    if (ir.techSolution && ir.techSolution.length) { sub('【과제의 해결 수단】'); paras(ir.techSolution, true); }
+    if (ir.advantageousEffects && ir.advantageousEffects.length) { sub('【발명의 효과】'); paras(ir.advantageousEffects, true); }
+    sub('【도면의 간단한 설명】');
+    paraBr(ir.descriptionOfDrawings, true);
+    sub('【발명을 실시하기 위한 구체적인 내용】');
+    for (const item of (ir.embodiments || [])) {
+        if (item.kind === 'table') {
+            if (item.num) p(`[표 ${item.num}]`);
+            B.push({ t: 'table', html: item.html });
+        } else {
+            p((item.num ? `[${item.num}] ` : '') + (item.text || ''));
+        }
+    }
+    if (ir.referenceSigns && ir.referenceSigns.length) { sub('【부호의 설명】'); paraBr(ir.referenceSigns, true); }
+
+    // ── 청구범위 (새 페이지) ──
+    B.push({ t: 'pagebreak' });
+    parthdr('청구범위');
+    for (const c of (ir.claims || [])) {
+        sub(`【청구항 ${c.num}】`, { before: 160, after: 40 });
+        p((c.text || '').replace(/\n/g, '\n'), { after: 160 }); // 청구항 본문: 하나의 단락(내부 \n=<br/>)
+    }
+
+    // ── 요약서 (새 페이지) ──
+    B.push({ t: 'pagebreak' });
+    parthdr('요약서');
+    sub('【요약】');
+    paras((ir.abstract && ir.abstract.summary) || [], false);
+    if (ir.abstract && ir.abstract.figureNum) { sub('【대표도】'); p(`도 ${ir.abstract.figureNum}`, { after: 200 }); }
+
+    // ── 도면 (새 페이지): 이미지 → 그 아래 [도 N] 캡션 ──
+    if (ir.drawings && ir.drawings.length) {
+        B.push({ t: 'pagebreak' });
+        parthdr('도면');
+        for (const d of ir.drawings) {
+            B.push({ t: 'img', drawing: d, align: 'center', before: 120, after: 60 });
+            p(`[도 ${d.num}]`, { bold: true, align: 'center', after: 240 });
+        }
+    }
+    return B;
 }
 
 // ============================================

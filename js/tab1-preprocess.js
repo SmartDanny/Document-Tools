@@ -5,13 +5,90 @@
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  */
 
-        // 탭1 - 파일 처리 공통 함수
+        // 탭1 - .fin 파싱 결과(IR) 보관용 (docx 산출물 버튼에서 사용)
+        let finParsedIR1 = null;
+
+        // 탭1 - 파일 처리 공통 함수 (.docx / .fin 확장자 분기)
         async function handleFile1(file) {
+            if (!file) return;
+            if ((file.name || '').toLowerCase().endsWith('.fin')) {
+                await handleFinFile(file);
+                return;
+            }
+            // 기존 .docx 경로 (동작 변경 없음)
+            finParsedIR1 = null;
+            document.getElementById('finOutputSection').classList.add('hidden');
             await handleDocxUpload(file, 'fileName1', async (file) => {
                 const result = await processDocx1(file);
                 document.getElementById('textInput1').value = result.text;
                 displayResult1(result);
             });
+        }
+
+        // 탭1 - .fin 파일 처리: 파싱 → KIPO 라인텍스트(HTML 변환) + 산출물 버튼 활성화
+        async function handleFinFile(file) {
+            document.getElementById('fileName1').textContent = file.name;
+            const msg = document.getElementById('finOutputMessage');
+            if (msg) msg.classList.add('hidden');
+            try {
+                const ir = await parseFinFile(file);
+                finParsedIR1 = ir;
+
+                // 1단계 창: .fin 원본 부제(국문 【】) 그대로 표시
+                const kipoText = finBuildKipoLineText(ir);
+                // 변환결과(6단계): 해외출원용 국문(ROPKS) 기준
+                const ropksText = finBuildRopksLineText(ir);
+                document.getElementById('textInput1').value = kipoText;
+                const subscriptCount = (kipoText.match(/<sub>/gi) || []).length;
+                const superscriptCount = (kipoText.match(/<sup>/gi) || []).length;
+                displayResult1({ text: kipoText, outputText: ropksText, subscriptCount, superscriptCount });
+
+                // .fin 산출물 섹션 표시
+                document.getElementById('finOutputSection').classList.remove('hidden');
+                const drawn = ir.drawings.filter(d => d.base64).length;
+                document.getElementById('finDrawingsInfo').textContent =
+                    `분석 완료 — 도면 ${ir.drawings.length}개(이미지 ${drawn}개 임베드) · 청구항 ${ir.claims.length}개 · 표 ${ir.embodiments.filter(e => e.kind === 'table').length}개`;
+            } catch (e) {
+                finParsedIR1 = null;
+                document.getElementById('finOutputSection').classList.add('hidden');
+                alert('오류: ' + e.message);
+            }
+        }
+
+        // .fin → KIPO 출원서식 DOCX
+        async function downloadFinKipoDocx() { await downloadFinDocx('kipo'); }
+        // .fin → 해외출원용 국문(ROPKS) DOCX
+        async function downloadFinRopksDocx() { await downloadFinDocx('ropks'); }
+
+        // 오늘 날짜 6자리(YYMMDD)
+        function finTodayYYMMDD() {
+            const d = new Date();
+            const yy = String(d.getFullYear()).slice(-2);
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return yy + mm + dd;
+        }
+
+        async function downloadFinDocx(format) {
+            const msg = document.getElementById('finOutputMessage');
+            if (!finParsedIR1) { showMessage(msg, '❌ 먼저 .fin 파일을 업로드해주세요.', 'error'); return; }
+            const label = format === 'ropks' ? '해외출원용 국문(ROPKS)' : 'KIPO 출원서식';
+            try {
+                const blob = await buildFinDocxBlob(finParsedIR1, format);
+                let fileName;
+                if (format === 'ropks') {
+                    const mgmtNo = (document.getElementById('finMgmtNo1') || {}).value || '';
+                    fileName = finRopksBaseName(mgmtNo, finTodayYYMMDD());
+                } else {
+                    const base = ((finParsedIR1.meta && finParsedIR1.meta.fileName) || 'document').replace(/\.fin$/i, '');
+                    fileName = base + '_출원명세서';
+                }
+                saveAs(blob, fileName + '.docx');
+                showMessage(msg, `✅ ${label} DOCX가 생성되었습니다! (${fileName}.docx)`, 'success');
+                setTimeout(() => msg.classList.add('hidden'), 4000);
+            } catch (e) {
+                showMessage(msg, `❌ ${label} DOCX 생성 실패: ` + e.message, 'error');
+            }
         }
         
         // 파일 선택 버튼
@@ -125,14 +202,17 @@
         
         function displayResult1(r) {
             resetStatNavState('tab1');
+            // 출력 박스/미리보기(변환결과)는 outputText가 있으면 그것을, 없으면 r.text를 사용한다.
+            // (fin 업로드 시: 1단계 창/분석 = r.text(국문 원본), 변환결과 = outputText(ROPKS))
+            const outText = (r.outputText != null) ? r.outputText : r.text;
             document.getElementById('subCount1').textContent = r.subscriptCount;
             document.getElementById('supCount1').textContent = r.superscriptCount;
             document.getElementById('paragraphCount1').textContent = countParagraphsInText(r.text);
-            
+
             originalText1 = r.text; // 원본 저장
-            rawOutput1 = r.text;
-            
-            // 파일 분석 결과 계산
+            rawOutput1 = outText;
+
+            // 파일 분석 결과 계산 (업로드 원본 기준)
             fileAnalysisResult.hasCrossRef = /CROSS-REFERENCE/i.test(r.text);
             fileAnalysisResult.hasScript = (r.subscriptCount + r.superscriptCount) > 0;
             fileAnalysisResult.hasParagraphNum = /^\[0\d{3,4}\]\s/m.test(r.text);
@@ -298,6 +378,7 @@
                 { from: '【배경기술】', to: '(b) Description of the Related Art' },
                 { from: '【발명의 내용】', to: 'SUMMARY OF THE INVENTION' },
                 { from: '【해결하고자 하는 과제】', to: '', delete: true },
+                { from: '【해결하려는 과제】', to: '', delete: true },
                 { from: '【기술적 과제】', to: '', delete: true },
                 { from: '【과제의 해결 수단】', to: '', delete: true },
                 { from: '【기술적 해결방법】', to: '', delete: true },
@@ -322,6 +403,7 @@
                 { from: '【배경기술】', to: '2. Description of the Related Art' },
                 { from: '【발명의 내용】', to: 'SUMMARY' },
                 { from: '【해결하고자 하는 과제】', to: '', delete: true },
+                { from: '【해결하려는 과제】', to: '', delete: true },
                 { from: '【기술적 과제】', to: '', delete: true },
                 { from: '【과제의 해결 수단】', to: '', delete: true },
                 { from: '【기술적 해결방법】', to: '', delete: true },
@@ -356,6 +438,7 @@
                 { from: '【발명의 내용】', to: '【Disclosure】' },
                 { from: '【기술적 과제】', to: '【Technical Problem】' },
                 { from: '【해결하고자 하는 과제】', to: '【Technical Problem】' },
+                { from: '【해결하려는 과제】', to: '【Technical Problem】' },
                 { from: '【기술적 해결방법】', to: '【Technical Solution】' },
                 { from: '【과제의 해결 수단】', to: '【Technical Solution】' },
                 { from: '【발명의 효과】', to: '【Advantageous Effects】' },
@@ -791,8 +874,12 @@
         function clearAll1() {
             if (!confirm('모든 내용을 지우시겠습니까?')) return;
             document.getElementById('textInput1').value = '';
-            document.getElementById('fileName1').textContent = '또는 아래에 .docx 파일을 드래그하세요';
+            document.getElementById('fileName1').textContent = '또는 아래에 .docx / .fin 파일을 드래그하세요';
             document.getElementById('fileInput1').value = '';
+            finParsedIR1 = null;
+            document.getElementById('finOutputSection').classList.add('hidden');
+            document.getElementById('finOutputMessage').classList.add('hidden');
+            document.getElementById('finMgmtNo1').value = '';
             priorityList1 = [];
             renderPriorityList1();
             document.getElementById('output1').innerHTML = '';
