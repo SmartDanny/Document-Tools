@@ -7,7 +7,7 @@
  *   node scripts/sync-version.js    → 현재 package.json 버전으로 동기화만 수행
  *
  * 갱신 대상:
- *   - index.html : 헤더 주석 Version/Last Updated, <meta name="version">
+ *   - index.html : 헤더 주석 Version/Last Updated, <meta name="version">, 푸터 버전
  *   - utils.js   : 헤더 주석 Version/Last Updated
  *   - styles.css : 헤더 주석 Version/Last Updated
  *   - README.md  : 버전 배지, 문의 섹션 Version/Last Updated
@@ -33,6 +33,7 @@ const targets = {
         [/^( \* Version: )\d+\.\d+\.\d+$/m, `$1${version}`],
         [/^( \* Last Updated: )\d{4}-\d{2}-\d{2}$/m, `$1${today}`],
         [/(<meta name="version" content=")\d+\.\d+\.\d+(">)/, `$1${version}$2`],
+        [/(Document Tools v)\d+\.\d+\.\d+/, `$1${version}`],
     ],
     'utils.js': [
         [/^( \* Version: )\d+\.\d+\.\d+$/m, `$1${version}`],
