@@ -300,6 +300,21 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.equal(u.finRopksBaseName(null, '260709'), 'ROPKS_260709');
     });
 
+    test('finNormalizeScripts: 유니코드 첨자 → <sub>/<sup>', () => {
+        assert.equal(u.finNormalizeScripts('H₂SO₄'), 'H<sub>2</sub>SO<sub>4</sub>');
+        assert.equal(u.finNormalizeScripts('S₂O₈²⁻'), 'S<sub>2</sub>O<sub>8</sub><sup>2-</sup>');
+        assert.equal(u.finNormalizeScripts('CO²'), 'CO<sup>2</sup>');
+        assert.equal(u.finNormalizeScripts('일반 텍스트'), '일반 텍스트');
+        assert.equal(u.finNormalizeScripts('SiO<sub>2</sub>'), 'SiO<sub>2</sub>'); // 기존 태그 보존
+    });
+
+    test('finCleanMultiline: 빈 줄 제거 + trim', () => {
+        assert.equal(u.finCleanMultiline('도 1은 A.\n\n도 2는 B.\n'), '도 1은 A.\n도 2는 B.');
+        assert.equal(u.finCleanMultiline('  x  '), 'x');
+        assert.equal(u.finCleanMultiline('a\n \n \nb'), 'a\nb');
+        assert.equal(u.finCleanMultiline(''), '');
+    });
+
     test('finImgFormatToMime', () => {
         assert.equal(u.finImgFormatToMime('jpg'), 'image/jpeg');
         assert.equal(u.finImgFormatToMime('JPEG'), 'image/jpeg');
@@ -363,7 +378,12 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.ok(m.some(b => b.t === 'table'));
         assert.ok(m.some(b => b.t === 'img' && b.drawing.num === '1'));
         assert.ok(!texts.some(t => /^\[0\d{3}\]/.test(t)));
-        assert.ok(!m.some(b => b.t === 'pagebreak')); // ROPKS는 페이지 나누기 없음
+        // 섹션별 페이지 나누기(pageBreakBefore): 청구범위/요약서/도면
+        assert.ok(m.find(b => b.text === 'WHAT IS CLAIMED IS:').pageBreakBefore === true);
+        assert.ok(m.find(b => b.text === 'ABSTRACT OF DISCLOSURE').pageBreakBefore === true);
+        assert.ok(m.find(b => b.text === '【도면】').pageBreakBefore === true);
+        // 빈 텍스트 단락이 없어야 함(빈줄 방지)
+        assert.ok(!m.some(b => b.t === 'p' && b.text === ''));
     });
 
     test('finBuildDocModel(kipo): 4부 구조 + 페이지 나누기 + [NNNN] 단락번호', () => {

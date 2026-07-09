@@ -42,10 +42,15 @@ function finSectionParas(parent) {
     if (!parent) return arr;
     for (const child of parent.childNodes) {
         if (child.nodeType === 1 && (child.localName || child.nodeName) === 'p') {
-            arr.push({ num: child.getAttribute('num') || '', text: finSerializeInline(child).trim() });
+            arr.push({ num: child.getAttribute('num') || '', text: finCleanText(finSerializeInline(child)) });
         }
     }
     return arr;
+}
+
+// 직렬화 텍스트 정규화: 빈 줄 제거 + 유니코드 첨자 → <sub>/<sup> (utils.js)
+function finCleanText(s) {
+    return finNormalizeScripts(finCleanMultiline(s));
 }
 
 /**
@@ -73,7 +78,7 @@ function finCalsToHtml(tablesEl) {
                 else content += finSerializeInline(child);
             }
         }
-        return content.trim();
+        return finNormalizeScripts(content.trim());
     };
     let html = '<table border="1">';
     for (const row of tablesEl.getElementsByTagName('row')) {
@@ -116,7 +121,7 @@ function finEmbodiments(parent) {
         const num = child.getAttribute('num') || '';
         // <p> 내부에 <tables>가 없으면 단순 단락
         if (child.getElementsByTagName('tables').length === 0) {
-            out.push({ kind: 'p', num, text: finSerializeInline(child).trim() });
+            out.push({ kind: 'p', num, text: finCleanText(finSerializeInline(child)) });
             continue;
         }
         // <p>가 표를 포함하면 텍스트/표를 문서 순서대로 분리
@@ -137,6 +142,10 @@ function finEmbodiments(parent) {
         }
         flush();
     }
+    // 표 앞뒤 텍스트 단락 정규화
+    for (const it of out) {
+        if (it.kind === 'p') it.text = finCleanText(it.text);
+    }
     return out;
 }
 
@@ -149,7 +158,7 @@ function finXmlToIr(doc) {
     const first = (tag, parent) => (parent || doc).getElementsByTagName(tag)[0] || null;
 
     const inventionTitle = first('invention-title');
-    const titleRaw = inventionTitle ? finSerializeInline(inventionTitle).trim() : '';
+    const titleRaw = inventionTitle ? finNormalizeScripts(finSerializeInline(inventionTitle).trim()) : '';
     let titleKo = titleRaw, titleEn = '';
     const bm = titleRaw.match(/^([\s\S]*?)\{([\s\S]*)\}\s*$/);
     if (bm) { titleKo = bm[1].trim(); titleEn = bm[2].trim(); }
@@ -176,9 +185,7 @@ function finXmlToIr(doc) {
     if (claimsEl) {
         for (const claim of claimsEl.getElementsByTagName('claim')) {
             const ct = claim.getElementsByTagName('claim-text')[0];
-            const text = ct
-                ? finSerializeInline(ct).split('\n').map(s => s.trim()).filter(s => s).join('\n')
-                : '';
+            const text = ct ? finCleanText(finSerializeInline(ct)) : '';
             ir.claims.push({ num: claim.getAttribute('num') || '', text });
         }
     }

@@ -22,7 +22,7 @@ const ROOT = path.join(__dirname, '..');
 // 합성 .fin 픽스처(zip → hlz(zip) → KIPO XML + 도면 이미지) 생성
 async function buildSampleFin() {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<KIPO keapsVersion="5.6" editorKind="K" pageCount="3" xmlns="http://www.kipo.go.kr"><PatentCAFDOC docflag="1.0" documentID="123"><description><invention-title>테스트 발명{TEST INVENTION}</invention-title><technical-field><p num="0001">기술분야 단락.</p></technical-field><background-art><p num="0002">배경기술.</p></background-art><summary-of-invention><tech-solution><p num="0003">SiO<sub>2</sub> 포함.</p></tech-solution></summary-of-invention><description-of-drawings><p num="0004">도 1은 예시이다.</p></description-of-drawings><description-of-embodiments><p num="0005">실시예 설명.</p><p num="0006"><tables num="1"><table><tgroup xmlns='http://www.oasis-open.org/tables/exchange/1.0' cols="2"><colspec colnum="1" colname="col1"/><colspec colnum="2" colname="col2"/><tbody><row><entry colname="col1">A</entry><entry colname="col2">B</entry></row></tbody></tgroup></table></tables></p><p num="0007">이후 단락.</p></description-of-embodiments><reference-signs-list><p num="0008">SUB: 기판<br/>TR: 트랜지스터</p></reference-signs-list></description><claims><claim num="1"><claim-text>A; <br/>B를 포함하는 장치.</claim-text></claim></claims><abstract><summary><p num="0001a">요약 내용.</p></summary><abstract-figure><p num="0002a"><figref num="1"/></p></abstract-figure></abstract><drawings><figure num="1"><img id="i0001" he="50" wi="50" file="pat00001.png" img-format="png"/></figure></drawings></PatentCAFDOC></KIPO>`;
+<KIPO keapsVersion="5.6" editorKind="K" pageCount="3" xmlns="http://www.kipo.go.kr"><PatentCAFDOC docflag="1.0" documentID="123"><description><invention-title>테스트 발명{TEST INVENTION}</invention-title><technical-field><p num="0001">기술분야 단락.</p></technical-field><background-art><p num="0002">배경기술 H₂O₂ 포함.</p></background-art><summary-of-invention><tech-solution><p num="0003">SiO<sub>2</sub> 포함.</p></tech-solution></summary-of-invention><description-of-drawings><p num="0004">도 1은 예시이다.</p></description-of-drawings><description-of-embodiments><p num="0005">실시예 설명.</p><p num="0006"><tables num="1"><table><tgroup xmlns='http://www.oasis-open.org/tables/exchange/1.0' cols="2"><colspec colnum="1" colname="col1"/><colspec colnum="2" colname="col2"/><tbody><row><entry colname="col1">A</entry><entry colname="col2">B</entry></row></tbody></tgroup></table></tables></p><p num="0007">이후 단락.</p></description-of-embodiments><reference-signs-list><p num="0008">SUB: 기판<br/>TR: 트랜지스터</p></reference-signs-list></description><claims><claim num="1"><claim-text>A; <br/>B를 포함하는 장치.</claim-text></claim></claims><abstract><summary><p num="0001a">요약 내용.</p></summary><abstract-figure><p num="0002a"><figref num="1"/></p></abstract-figure></abstract><drawings><figure num="1"><img id="i0001" he="50" wi="50" file="pat00001.png" img-format="png"/></figure></drawings></PatentCAFDOC></KIPO>`;
     const png1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
     const hlz = new JSZipNode();
     hlz.file('DOC_251222.xml', xml);
@@ -448,10 +448,14 @@ const server = http.createServer((req, res) => {
         r.ropksSubtitle = docR.includes('TITLE OF THE INVENTION');
         r.ropksSub2 = /vertAlign w:val="subscript"/.test(docR);
         r.ropksMedia = Object.keys(zr.files).some(f => f.startsWith('word/media/'));
-        // ROPKS 서식(샘플 역설계): 바탕체 + 행간518 + 부제 밑줄
+        // ROPKS 서식(샘플 역설계): 바탕체 + 행간518 + 부제 밑줄 + 줄번호 + 양쪽맞춤 + 페이지나누기
         r.ropksBatang = docR.includes('바탕체');
         r.ropksLine = docR.includes('w:line="518"');
         r.ropksUnderline = docR.includes('w:u w:val="single"');
+        r.ropksLineNo = docR.includes('lnNumType');
+        r.ropksJustify = docR.includes('w:jc w:val="both"');
+        r.ropksPageBreak = /<w:pageBreakBefore\/>/.test(docR);
+        r.ropksNoUnicodeScript = !/[₀-₎²³¹⁰ⁱ⁴-ⁿ]/.test(docR); // 유니코드 첨자 전부 변환
         // 해외관리번호 파일명 규칙
         r.fnameEmpty = finRopksBaseName('', '260709');
         r.fnameMgmt = finRopksBaseName('OPP20123456US', '260709');
@@ -470,7 +474,9 @@ const server = http.createServer((req, res) => {
         finRes.sectionVisible && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin→ROPKS DOCX'] = (finRes.ropksSize > 0 && finRes.ropksTable && finRes.ropksImg &&
         finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia &&
-        finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+        finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline &&
+        finRes.ropksLineNo && finRes.ropksJustify && finRes.ropksPageBreak &&
+        finRes.ropksNoUnicodeScript) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 ROPKS 파일명 규칙'] = (finRes.fnameEmpty === 'ROPKS_260709' &&
         finRes.fnameMgmt === 'OPP20123456ROPKS_260709' && finRes.mgmtField) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin→KIPO 출원서식 DOCX'] = (finRes.kipoSize > 0 && finRes.kipoParts &&

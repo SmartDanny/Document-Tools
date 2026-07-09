@@ -77,10 +77,12 @@ function finRopksRunProps(bold) {
 function finRopksParagraphXml(block) {
     const bold = !!block.bold;
     const rPrInner = finRopksRunProps(bold);
+    const brk = block.pageBreakBefore ? '<w:pageBreakBefore/>' : '';
     const ind = block.indent ? '<w:ind w:firstLine="799"/>' : '';
-    const jc = block.align ? `<w:jc w:val="${block.align}"/>` : '';
+    // 정렬 미지정 시 양쪽맞춤(both) — 샘플의 Normal 스타일 기본값
+    const jc = `<w:jc w:val="${block.align || 'both'}"/>`;
     const outline = bold ? '<w:outlineLvl w:val="0"/>' : '';
-    const pPr = `<w:pPr>${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/>${ind}${jc}<w:contextualSpacing/>${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
+    const pPr = `<w:pPr>${brk}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/>${ind}${jc}<w:contextualSpacing/>${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
     return `<w:p>${pPr}${finRunsFromText(block.text, rPrInner)}</w:p>`;
 }
 
@@ -188,8 +190,8 @@ function finSectPr(format) {
         // KIPO 출원서식 샘플 역설계값
         return '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1134" w:bottom="850" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>';
     }
-    // ROPKS 샘플 역설계값
-    return '<w:sectPr><w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/></w:sectPr>';
+    // ROPKS 샘플 역설계값 + 줄번호(페이지마다 1부터)
+    return '<w:sectPr><w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1"/><w:cols w:space="720"/></w:sectPr>';
 }
 
 /**

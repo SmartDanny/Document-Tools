@@ -632,6 +632,32 @@ function finMmToEmu(mm) {
     return v > 0 ? v : 1;
 }
 
+// 유니코드 아래첨자/위첨자 → 기본 문자 매핑
+const FIN_SUB_MAP = { '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9', '₊': '+', '₋': '-', '₌': '=', '₍': '(', '₎': ')' };
+const FIN_SUP_MAP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '⁵': '5', '⁶': '6', '⁷': '7', '⁸': '8', '⁹': '9', '⁺': '+', '⁻': '-', '⁼': '=', '⁽': '(', '⁾': ')', 'ⁿ': 'n', 'ⁱ': 'i' };
+
+/**
+ * 유니코드 아래첨자/위첨자 문자를 <sub>/<sup> 태그로 정규화 (글꼴 독립 렌더링)
+ * 예: "H₂SO₄" → "H<sub>2</sub>SO<sub>4</sub>", "S₂O₈²⁻" → "S<sub>2</sub>O<sub>8</sub><sup>2-</sup>"
+ * @param {string} text
+ * @returns {string}
+ */
+function finNormalizeScripts(text) {
+    if (!text) return text;
+    return String(text)
+        .replace(/[₀-₎]+/g, m => '<sub>' + Array.from(m).map(c => FIN_SUB_MAP[c] || c).join('') + '</sub>')
+        .replace(/[²³¹⁰ⁱ⁴-ⁿ]+/g, m => '<sup>' + Array.from(m).map(c => FIN_SUP_MAP[c] || c).join('') + '</sup>');
+}
+
+/**
+ * 여러 줄 텍스트 정리: 각 줄 trim + 빈 줄 제거 (XML 서식 개행과 <br/>가 겹쳐 생기는 빈 줄 방지)
+ * @param {string} text
+ * @returns {string}
+ */
+function finCleanMultiline(text) {
+    return String(text || '').split('\n').map(s => s.trim()).filter(s => s.length > 0).join('\n');
+}
+
 /**
  * 해외출원용 국문(ROPKS) 파일명(확장자 제외) 생성
  *  - 해외관리번호 입력 시: 국가코드 US 제거 후 "<관리번호>ROPKS_<오늘6자리>"
@@ -832,17 +858,23 @@ function finBuildRopksModel(ir) {
         sub(FIN_ROPKS_SUBTITLES.symbols);
         bodyParas(ir.referenceSigns, false);
     }
-    sub(FIN_ROPKS_SUBTITLES.claims);
+    // WHAT IS CLAIMED IS: 는 새 페이지에서 시작
+    B.push({ t: 'p', text: FIN_ROPKS_SUBTITLES.claims, bold: true, pageBreakBefore: true });
     for (const c of (ir.claims || [])) {
         plain(`【청구항 ${c.num}】`);
-        for (const line of String(c.text || '').split('\n')) body(line);
+        for (const line of String(c.text || '').split('\n')) { if (line.trim()) body(line); }
     }
-    sub(FIN_ROPKS_SUBTITLES.abstract);
+    // ABSTRACT OF DISCLOSURE 는 새 페이지에서 시작
+    B.push({ t: 'p', text: FIN_ROPKS_SUBTITLES.abstract, bold: true, pageBreakBefore: true });
     bodyParas((ir.abstract && ir.abstract.summary) || [], false);
     if (ir.abstract && ir.abstract.figureNum) body(`대표도: 도 ${ir.abstract.figureNum}`);
+    // 【도면】 은 새 페이지에서 시작, 도면은 하나씩 개별 페이지
     if (ir.drawings && ir.drawings.length) {
-        plain('【도면】', { align: 'center' });
-        for (const d of ir.drawings) { plain(`【도 ${d.num}】`); B.push({ t: 'img', drawing: d, align: 'center' }); }
+        B.push({ t: 'p', text: '【도면】', align: 'center', pageBreakBefore: true });
+        ir.drawings.forEach((d, j) => {
+            plain(`【도 ${d.num}】`, j > 0 ? { pageBreakBefore: true } : undefined);
+            B.push({ t: 'img', drawing: d, align: 'center' });
+        });
     }
     return B;
 }
