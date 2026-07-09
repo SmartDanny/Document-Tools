@@ -433,7 +433,8 @@ const server = http.createServer((req, res) => {
     const finRes = await page.evaluate(async () => {
         const r = {};
         const ta = document.getElementById('textInput1').value;
-        r.textHasTitle = ta.includes('【발명의 명칭】\n테스트 발명\nTEST INVENTION'); // 국문/영문 분리
+        // 변환결과는 ROPKS 기준: 영문 부제 + 제목 국문{영문}
+        r.textHasTitle = ta.includes('TITLE OF THE INVENTION\n테스트 발명{TEST INVENTION}') && ta.includes('WHAT IS CLAIMED IS:');
         r.textHasTable = ta.includes('<table');
         r.textHasClaim = ta.includes('【청구항 1】');
         r.sectionVisible = !document.getElementById('finOutputSection').classList.contains('hidden');

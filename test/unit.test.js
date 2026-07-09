@@ -323,6 +323,19 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.ok(!t.includes('【발명의 효과】'));
     });
 
+    test('finBuildRopksLineText: 변환결과(ROPKS 기준) 라인 텍스트', () => {
+        const t = u.finBuildRopksLineText(ir);
+        assert.ok(t.includes('TITLE OF THE INVENTION\n연마 슬러리{POLISHING SLURRY}')); // 부제 영문 + 제목 국문{영문}
+        assert.ok(t.includes('WHAT IS CLAIMED IS:\n【청구항 1】\nA;\nB를 포함하는 장치.'));
+        assert.ok(t.includes('<Description of symbols>\nSUB: 기판\nTR: 트랜지스터'));
+        assert.ok(t.includes('[표 1]'));
+        assert.ok(t.includes('<table border="1">'));
+        assert.ok(t.includes('대표도: 도 6'));
+        assert.ok(t.includes('【도면】\n【도 1】'));
+        assert.ok(!/^\[0\d{3}\]/m.test(t)); // ROPKS는 단락번호 없음
+        assert.ok(!t.includes('【발명의 명칭】')); // 국문 부제 아님
+    });
+
     test('finBuildDocModel(ropks): 사무소표준US 부제 + 도면 섹션', () => {
         const m = u.finBuildDocModel(ir, 'ropks');
         const subs = m.filter(b => b.t === 'p' && b.bold).map(b => b.text);

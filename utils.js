@@ -743,6 +743,30 @@ function finBuildKipoLineText(ir) {
     return L.join('\n');
 }
 
+/**
+ * 블록 모델을 라인 텍스트로 직렬화 (표는 HTML 그대로, 이미지/페이지나누기는 제외)
+ * @param {Array<Object>} model - finBuildDocModel 결과
+ * @returns {string}
+ */
+function finModelToLineText(model) {
+    const L = [];
+    for (const b of (model || [])) {
+        if (b.t === 'table') L.push(b.html);
+        else if (b.t === 'p') L.push(b.text == null ? '' : b.text);
+        // img / pagebreak → 텍스트 표시 제외
+    }
+    return L.join('\n');
+}
+
+/**
+ * IR → 해외출원용 국문(ROPKS) 라인 텍스트 ('변환결과' 표시용)
+ * @param {Object} ir - parseFinFile 결과
+ * @returns {string}
+ */
+function finBuildRopksLineText(ir) {
+    return finModelToLineText(finBuildRopksModel(ir));
+}
+
 // ROPKS(해외출원용 국문) 부제 = 사무소표준US. 도면/청구항/부호 라벨은 아래 모델 빌더에서 처리.
 const FIN_ROPKS_SUBTITLES = {
     title: 'TITLE OF THE INVENTION',

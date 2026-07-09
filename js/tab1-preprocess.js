@@ -34,8 +34,8 @@
                 const ir = await parseFinFile(file);
                 finParsedIR1 = ir;
 
-                // KIPO 라인텍스트를 생성해 기존 텍스트 파이프라인(HTML/미리보기/도구)과 합류
-                const text = finBuildKipoLineText(ir);
+                // '변환결과'는 해외출원용 국문(ROPKS) 기준으로 표시 (HTML/미리보기 파이프라인과 합류)
+                const text = finBuildRopksLineText(ir);
                 document.getElementById('textInput1').value = text;
                 const subscriptCount = (text.match(/<sub>/gi) || []).length;
                 const superscriptCount = (text.match(/<sup>/gi) || []).length;
