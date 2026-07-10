@@ -374,11 +374,15 @@ describe('.fin 변환 순수 헬퍼', () => {
         // 본문 단락은 첫줄 들여쓰기, 부제는 들여쓰기 없음
         assert.ok(m.find(b => b.text === '본 개시는 A에 관한 것이다.').indent === true);
         assert.ok(!m.find(b => b.text === 'TITLE OF THE INVENTION').indent);
-        // 【도면】은 볼드 아님·중앙정렬
+        // 【도면】은 볼드 아님·중앙정렬·줄번호 생략
         const domyeon = m.find(b => b.text === '【도면】');
-        assert.ok(domyeon && !domyeon.bold && domyeon.align === 'center');
+        assert.ok(domyeon && !domyeon.bold && domyeon.align === 'center' && domyeon.suppressLineNum === true);
+        // 도면 섹션(【도 N】·이미지)은 모두 줄번호 생략
+        assert.ok(m.find(b => b.text === '【도 1】').suppressLineNum === true);
         assert.ok(m.some(b => b.t === 'table'));
-        assert.ok(m.some(b => b.t === 'img' && b.drawing.num === '1'));
+        assert.ok(m.some(b => b.t === 'img' && b.drawing.num === '1' && b.suppressLineNum === true));
+        // 본문(TITLE)은 줄번호 생략하지 않음
+        assert.ok(!m.find(b => b.text === 'TITLE OF THE INVENTION').suppressLineNum);
         assert.ok(!texts.some(t => /^\[0\d{3}\]/.test(t)));
         // 섹션별 페이지 나누기(pageBreakBefore): 청구범위/요약서/도면
         assert.ok(m.find(b => b.text === 'WHAT IS CLAIMED IS:').pageBreakBefore === true);

@@ -868,12 +868,12 @@ function finBuildRopksModel(ir) {
     B.push({ t: 'p', text: FIN_ROPKS_SUBTITLES.abstract, bold: true, pageBreakBefore: true });
     bodyParas((ir.abstract && ir.abstract.summary) || [], false);
     if (ir.abstract && ir.abstract.figureNum) body(`대표도: 도 ${ir.abstract.figureNum}`);
-    // 【도면】 은 새 페이지에서 시작, 도면은 하나씩 개별 페이지
+    // 【도면】 은 새 페이지에서 시작, 도면은 하나씩 개별 페이지 (도면 섹션은 줄번호 생략)
     if (ir.drawings && ir.drawings.length) {
-        B.push({ t: 'p', text: '【도면】', align: 'center', pageBreakBefore: true });
+        B.push({ t: 'p', text: '【도면】', align: 'center', pageBreakBefore: true, suppressLineNum: true });
         ir.drawings.forEach((d, j) => {
-            plain(`【도 ${d.num}】`, j > 0 ? { pageBreakBefore: true } : undefined);
-            B.push({ t: 'img', drawing: d, align: 'center' });
+            plain(`【도 ${d.num}】`, Object.assign({ suppressLineNum: true }, j > 0 ? { pageBreakBefore: true } : {}));
+            B.push({ t: 'img', drawing: d, align: 'center', suppressLineNum: true });
         });
     }
     return B;

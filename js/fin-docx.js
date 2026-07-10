@@ -78,11 +78,12 @@ function finRopksParagraphXml(block) {
     const bold = !!block.bold;
     const rPrInner = finRopksRunProps(bold);
     const brk = block.pageBreakBefore ? '<w:pageBreakBefore/>' : '';
+    const suppress = block.suppressLineNum ? '<w:suppressLineNumbers/>' : '';
     const ind = block.indent ? '<w:ind w:firstLine="799"/>' : '';
     // 정렬 미지정 시 양쪽맞춤(both) — 샘플의 Normal 스타일 기본값
     const jc = `<w:jc w:val="${block.align || 'both'}"/>`;
     const outline = bold ? '<w:outlineLvl w:val="0"/>' : '';
-    const pPr = `<w:pPr>${brk}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/>${ind}${jc}<w:contextualSpacing/>${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
+    const pPr = `<w:pPr>${brk}${suppress}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/>${ind}${jc}<w:contextualSpacing/>${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
     return `<w:p>${pPr}${finRunsFromText(block.text, rPrInner)}</w:p>`;
 }
 
@@ -183,11 +184,12 @@ function finStylesXml(format) {
 </w:styles>`;
 }
 
-// 페이지 하단 가운데 페이지 번호 footer (PAGE 필드)
+// 페이지 하단 가운데 페이지 번호 footer (PAGE 필드, 아라비아 숫자)
+// 줄번호가 footer 영역까지 매겨지지 않도록 suppressLineNumbers 적용
 const FIN_FOOTER_RID = 'rIdFooter1';
 function finFooterXml() {
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p></w:ftr>`;
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:p><w:pPr><w:suppressLineNumbers/><w:jc w:val="center"/></w:pPr><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>`;
 }
 
 /**
@@ -202,7 +204,8 @@ function finSectPr(format) {
         return `<w:sectPr>${footerRef}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1134" w:bottom="850" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
     }
     // ROPKS 샘플 역설계값 + 줄번호(페이지마다 1부터) + 페이지번호 footer
-    return `<w:sectPr>${footerRef}<w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1"/><w:cols w:space="720"/></w:sectPr>`;
+    // docGrid type="lines": 텍스트영역 ≈ 13488twip. 20행 구간 (642, 674]의 중앙값 658 → 페이지당 20행
+    return `<w:sectPr>${footerRef}<w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1" w:restart="newPage"/><w:cols w:space="720"/><w:docGrid w:type="lines" w:linePitch="658"/></w:sectPr>`;
 }
 
 /**
@@ -240,8 +243,9 @@ async function buildFinDocxBlob(ir, format) {
             });
             const align = block.align || 'center';
             if (isRopks) {
-                // ROPKS 공통 단락 서식(탭·행간518) + 중앙 정렬
-                body += `<w:p><w:pPr>${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/><w:jc w:val="${align}"/><w:contextualSpacing/></w:pPr>${run}</w:p>`;
+                // ROPKS 공통 단락 서식(탭·행간518) + 중앙 정렬 + (도면) 줄번호 생략
+                const suppress = block.suppressLineNum ? '<w:suppressLineNumbers/>' : '';
+                body += `<w:p><w:pPr>${suppress}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/><w:jc w:val="${align}"/><w:contextualSpacing/></w:pPr>${run}</w:p>`;
             } else {
                 let spacing = '';
                 if (block.before != null || block.after != null) {

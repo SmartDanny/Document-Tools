@@ -458,9 +458,14 @@ const server = http.createServer((req, res) => {
         r.ropksJustify = docR.includes('w:jc w:val="both"');
         r.ropksPageBreak = /<w:pageBreakBefore\/>/.test(docR);
         r.ropksNoUnicodeScript = !/[₀-₎²³¹⁰ⁱ⁴-ⁿ]/.test(docR); // 유니코드 첨자 전부 변환
-        // ROPKS 페이지번호 footer
+        // ROPKS 페이지번호 footer (fldChar PAGE, 중앙)
+        const ftrR = zr.file('word/footer1.xml') ? await zr.file('word/footer1.xml').async('string') : '';
         r.ropksFooter = !!zr.file('word/footer1.xml') && docR.includes('footerReference') &&
-            (await (zr.file('word/footer1.xml').async('string'))).includes(' PAGE ');
+            ftrR.includes(' PAGE ') && ftrR.includes('fldChar') && ftrR.includes('w:jc w:val="center"');
+        // 20행/페이지: docGrid type=lines
+        r.ropksLineGrid = /w:type="lines" w:linePitch="\d+"/.test(docR);
+        // 도면 섹션 줄번호 생략(suppressLineNumbers)
+        r.ropksSuppressDrawing = docR.includes('<w:suppressLineNumbers/>');
         // 해외관리번호 파일명 규칙
         r.fnameEmpty = finRopksBaseName('', '260709');
         r.fnameMgmt = finRopksBaseName('OPP20123456US', '260709');
@@ -486,7 +491,8 @@ const server = http.createServer((req, res) => {
         finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia &&
         finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline &&
         finRes.ropksLineNo && finRes.ropksJustify && finRes.ropksPageBreak &&
-        finRes.ropksNoUnicodeScript && finRes.ropksFooter) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+        finRes.ropksNoUnicodeScript && finRes.ropksFooter &&
+        finRes.ropksLineGrid && finRes.ropksSuppressDrawing) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 ROPKS 파일명 규칙'] = (finRes.fnameEmpty === 'ROPKS_260709' &&
         finRes.fnameMgmt === 'OPP20123456ROPKS_260709' && finRes.mgmtField) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin→KIPO 출원서식 DOCX'] = (finRes.kipoSize > 0 && finRes.kipoParts &&
