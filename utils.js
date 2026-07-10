@@ -644,9 +644,13 @@ const FIN_SUP_MAP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '
  */
 function finNormalizeScripts(text) {
     if (!text) return text;
+    // 기존 <sub>/<sup> 태그 구간은 건드리지 않음 (이중 중첩 방지)
     return String(text)
-        .replace(/[₀-₎]+/g, m => '<sub>' + Array.from(m).map(c => FIN_SUB_MAP[c] || c).join('') + '</sub>')
-        .replace(/[²³¹⁰ⁱ⁴-ⁿ]+/g, m => '<sup>' + Array.from(m).map(c => FIN_SUP_MAP[c] || c).join('') + '</sup>');
+        .split(/(<su[bp]>[\s\S]*?<\/su[bp]>)/)
+        .map(seg => /^<su[bp]>/.test(seg) ? seg : seg
+            .replace(/[₀-₎]+/g, m => '<sub>' + Array.from(m).map(c => FIN_SUB_MAP[c] || c).join('') + '</sub>')
+            .replace(/[²³¹⁰ⁱ⁴-ⁿ]+/g, m => '<sup>' + Array.from(m).map(c => FIN_SUP_MAP[c] || c).join('') + '</sup>'))
+        .join('');
 }
 
 /**

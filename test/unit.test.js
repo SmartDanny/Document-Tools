@@ -306,6 +306,8 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.equal(u.finNormalizeScripts('CO²'), 'CO<sup>2</sup>');
         assert.equal(u.finNormalizeScripts('일반 텍스트'), '일반 텍스트');
         assert.equal(u.finNormalizeScripts('SiO<sub>2</sub>'), 'SiO<sub>2</sub>'); // 기존 태그 보존
+        assert.equal(u.finNormalizeScripts('<sub>₂</sub>'), '<sub>₂</sub>'); // 태그 내부는 미변환(중첩 방지)
+        assert.equal(u.finNormalizeScripts('H₂O<sub>2</sub>파'), 'H<sub>2</sub>O<sub>2</sub>파'); // 혼재 처리
     });
 
     test('finCleanMultiline: 빈 줄 제거 + trim', () => {

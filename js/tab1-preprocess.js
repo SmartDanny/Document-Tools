@@ -780,7 +780,8 @@
         }
         
         function copyResult1() {
-            const text = document.getElementById('textInput1').value;
+            // 변환결과(출력 박스)에 표시된 텍스트를 복사 (.fin은 ROPKS, .docx는 원본과 동일)
+            const text = rawOutput1 || document.getElementById('textInput1').value;
             navigator.clipboard.writeText(text).then(() => {
                 const b = document.querySelector('#output1Section .copy-btn');
                 b.textContent = '복사됨!'; setTimeout(() => b.textContent = '📋 복사', 2000);
