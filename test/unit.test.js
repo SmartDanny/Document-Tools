@@ -292,6 +292,37 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.equal(u.finMmToEmu(-5), 1);
     });
 
+    test('finParseHtmlTable + finLayoutTableGrid: 가로/세로 병합 그리드 배치', () => {
+        // 첨부 이미지형 표 축약: 헤더(가로 병합) + Example(세로 병합) + 값(세로 병합)
+        const html = '<table>'
+            + '<tr><td rowspan="2"></td><td rowspan="2"></td><td colspan="2">Energy</td><td colspan="2">Device</td></tr>'
+            + '<tr><td>A Host</td><td>B Host</td><td>Cd/A</td><td>T97</td></tr>'
+            + '<tr><td rowspan="2">Ex 1</td><td>HOMO</td><td>-5.58</td><td>-5.42</td><td rowspan="2">11.83</td><td rowspan="2">105%</td></tr>'
+            + '<tr><td>LUMO</td><td>-1.88</td><td>-1.99</td></tr>'
+            + '</table>';
+        const grid = u.finLayoutTableGrid(u.finParseHtmlTable(html));
+        assert.equal(grid.maxCols, 6);
+        assert.equal(grid.rows.length, 4);
+        // 각 행 슬롯이 그리드 전체(6열)를 채움
+        for (const slots of grid.rows) {
+            assert.equal(slots.reduce((a, s) => a + s.colspan, 0), 6);
+        }
+        // 행0: 세로 병합 시작 2 + 가로 병합 2
+        assertSameJson(grid.rows[0].map(s => [s.colspan, s.vMerge]),
+            [[1, 'restart'], [1, 'restart'], [2, null], [2, null]]);
+        // 행1: 세로 병합 이어짐 2 + 헤더 4
+        assertSameJson(grid.rows[1].map(s => [s.colspan, s.vMerge]),
+            [[1, 'continue'], [1, 'continue'], [1, null], [1, null], [1, null], [1, null]]);
+        // 행3: Ex1 이어짐 + LUMO/값2 + 우측 값 이어짐 2
+        assertSameJson(grid.rows[3].map(s => [s.colspan, s.vMerge, s.content]),
+            [[1, 'continue', ''], [1, null, 'LUMO'], [1, null, '-1.88'], [1, null, '-1.99'],
+             [1, 'continue', ''], [1, 'continue', '']]);
+        // 행2: 시작 셀 내용 확인
+        assert.equal(grid.rows[2][0].content, 'Ex 1');
+        assert.equal(grid.rows[2][0].vMerge, 'restart');
+        assert.equal(grid.rows[2][4].content, '11.83');
+    });
+
     test('finRopksBaseName: 해외관리번호 → 파일명', () => {
         assert.equal(u.finRopksBaseName('OPP20123456US', '260709'), 'OPP20123456ROPKS_260709');
         assert.equal(u.finRopksBaseName('OPP20123456us', '260709'), 'OPP20123456ROPKS_260709'); // 소문자 us
@@ -306,6 +337,8 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.equal(u.finNormalizeScripts('CO²'), 'CO<sup>2</sup>');
         assert.equal(u.finNormalizeScripts('일반 텍스트'), '일반 텍스트');
         assert.equal(u.finNormalizeScripts('SiO<sub>2</sub>'), 'SiO<sub>2</sub>'); // 기존 태그 보존
+        assert.equal(u.finNormalizeScripts('<sub>₂</sub>'), '<sub>₂</sub>'); // 태그 내부는 미변환(중첩 방지)
+        assert.equal(u.finNormalizeScripts('H₂O<sub>2</sub>파'), 'H<sub>2</sub>O<sub>2</sub>파'); // 혼재 처리
     });
 
     test('finCleanMultiline: 빈 줄 제거 + trim', () => {

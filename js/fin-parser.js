@@ -256,11 +256,11 @@ async function parseFinFile(file) {
 
     const ir = finXmlToIr(doc);
 
-    // 도면 이미지 base64 로드
-    for (const d of ir.drawings) {
+    // 도면 이미지 base64 로드 (병렬)
+    await Promise.all(ir.drawings.map(async d => {
         const entry = imageEntries[d.file] || imageEntries[(d.file || '').split('/').pop()];
         d.base64 = entry ? await entry.async('base64') : null;
-    }
+    }));
 
     // 메타
     const kipo = doc.getElementsByTagName('KIPO')[0];

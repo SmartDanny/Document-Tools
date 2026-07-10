@@ -644,9 +644,13 @@ const FIN_SUP_MAP = { '⁰': '0', '¹': '1', '²': '2', '³': '3', '⁴': '4', '
  */
 function finNormalizeScripts(text) {
     if (!text) return text;
+    // 기존 <sub>/<sup> 태그 구간은 건드리지 않음 (이중 중첩 방지)
     return String(text)
-        .replace(/[₀-₎]+/g, m => '<sub>' + Array.from(m).map(c => FIN_SUB_MAP[c] || c).join('') + '</sub>')
-        .replace(/[²³¹⁰ⁱ⁴-ⁿ]+/g, m => '<sup>' + Array.from(m).map(c => FIN_SUP_MAP[c] || c).join('') + '</sup>');
+        .split(/(<su[bp]>[\s\S]*?<\/su[bp]>)/)
+        .map(seg => /^<su[bp]>/.test(seg) ? seg : seg
+            .replace(/[₀-₎]+/g, m => '<sub>' + Array.from(m).map(c => FIN_SUB_MAP[c] || c).join('') + '</sub>')
+            .replace(/[²³¹⁰ⁱ⁴-ⁿ]+/g, m => '<sup>' + Array.from(m).map(c => FIN_SUP_MAP[c] || c).join('') + '</sup>'))
+        .join('');
 }
 
 /**
@@ -791,6 +795,76 @@ function finModelToLineText(model) {
  */
 function finBuildRopksLineText(ir) {
     return finModelToLineText(finBuildRopksModel(ir));
+}
+
+/**
+ * HTML <table> 문자열을 셀 모델로 파싱 (colspan/rowspan 포함)
+ * @param {string} tableHtml
+ * @returns {Array<Array<{content:string, colspan:number, rowspan:number}>>} 행별 셀 배열
+ */
+function finParseHtmlTable(tableHtml) {
+    const rows = [];
+    const trs = String(tableHtml).match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || [];
+    for (const tr of trs) {
+        const cells = [];
+        const tds = tr.match(/<t[dh][^>]*>[\s\S]*?<\/t[dh]>/gi) || [];
+        for (const td of tds) {
+            const cs = td.match(/colspan\s*=\s*["']?(\d+)/i);
+            const rs = td.match(/rowspan\s*=\s*["']?(\d+)/i);
+            const content = td.replace(/^<t[dh][^>]*>/i, '').replace(/<\/t[dh]>$/i, '');
+            cells.push({
+                content,
+                colspan: Math.max(1, cs ? parseInt(cs[1], 10) || 1 : 1),
+                rowspan: Math.max(1, rs ? parseInt(rs[1], 10) || 1 : 1)
+            });
+        }
+        rows.push(cells);
+    }
+    return rows;
+}
+
+/**
+ * 셀 모델을 그리드에 배치. Word 표는 세로 병합이 이어지는 행에도 자리 셀이 필요하므로
+ * rowspan 연속 위치에 vMerge='continue' 슬롯을 채워 넣는다.
+ * @param {Array<Array<{content,colspan,rowspan}>>} rows - finParseHtmlTable 결과
+ * @returns {{rows: Array<Array<{content,colspan,vMerge:null|'restart'|'continue'}>>, maxCols: number}}
+ */
+function finLayoutTableGrid(rows) {
+    const out = [];
+    const pending = {}; // 그리드 열 → {rowsLeft, colspan} (진행 중인 세로 병합)
+    let maxCols = 0;
+    for (const cells of rows) {
+        const slots = [];
+        let col = 0, idx = 0;
+        while (true) {
+            if (pending[col]) {
+                const pm = pending[col];
+                slots.push({ content: '', colspan: pm.colspan, vMerge: 'continue' });
+                pm.rowsLeft--;
+                if (pm.rowsLeft <= 0) delete pending[col];
+                col += pm.colspan;
+                continue;
+            }
+            if (idx < cells.length) {
+                const c = cells[idx++];
+                slots.push({ content: c.content, colspan: c.colspan, vMerge: c.rowspan > 1 ? 'restart' : null });
+                if (c.rowspan > 1) pending[col] = { rowsLeft: c.rowspan - 1, colspan: c.colspan };
+                col += c.colspan;
+                continue;
+            }
+            // 셀 소진 후 오른쪽에 진행 중 병합이 남아 있으면 빈 셀로 간극을 메우고 이어감
+            const rest = Object.keys(pending).map(Number).filter(k => k >= col);
+            if (rest.length) {
+                const next = Math.min.apply(null, rest);
+                if (next > col) { slots.push({ content: '', colspan: next - col, vMerge: null }); col = next; }
+                continue;
+            }
+            break;
+        }
+        out.push(slots);
+        maxCols = Math.max(maxCols, col);
+    }
+    return { rows: out, maxCols };
 }
 
 // ROPKS(해외출원용 국문) 부제 = 사무소표준US. 도면/청구항/부호 라벨은 아래 모델 빌더에서 처리.
