@@ -326,8 +326,9 @@ describe('.fin 변환 순수 헬퍼', () => {
         const t = u.finBuildKipoLineText(ir);
         assert.ok(t.includes('【발명의 명칭】\n연마 슬러리\nPOLISHING SLURRY')); // 국문/영문 분리
         assert.ok(t.includes('【기술분야】\n[0001] 본 개시는'));
-        assert.ok(t.includes('【해결하려는 과제】')); // .fin/KIPO 표준 부제 (KIPO docx와 일치)
-        assert.ok(!t.includes('【해결하고자 하는 과제】'));
+        assert.ok(t.includes('【발명의 배경이 되는 기술】')); // KIPO 공식 서식 부제 (background-art)
+        assert.ok(t.includes('【해결하고자 하는 과제】')); // KIPO 공식 서식 부제 (tech-problem)
+        assert.ok(!t.includes('【해결하려는 과제】'));
         assert.ok(t.includes('【과제의 해결 수단】\n[0004] SiO<sub>2</sub> 해결.'));
         assert.ok(t.includes('【도면의 간단한 설명】\n[0004b] 도 1은 A이다.\n도 2는 B이다.')); // br → 여러 줄, 번호는 첫 줄만
         assert.ok(t.includes('[표 1]'));
@@ -373,11 +374,15 @@ describe('.fin 변환 순수 헬퍼', () => {
         // 본문 단락은 첫줄 들여쓰기, 부제는 들여쓰기 없음
         assert.ok(m.find(b => b.text === '본 개시는 A에 관한 것이다.').indent === true);
         assert.ok(!m.find(b => b.text === 'TITLE OF THE INVENTION').indent);
-        // 【도면】은 볼드 아님·중앙정렬
+        // 【도면】은 볼드 아님·중앙정렬·줄번호 생략
         const domyeon = m.find(b => b.text === '【도면】');
-        assert.ok(domyeon && !domyeon.bold && domyeon.align === 'center');
+        assert.ok(domyeon && !domyeon.bold && domyeon.align === 'center' && domyeon.suppressLineNum === true);
+        // 도면 섹션(【도 N】·이미지)은 모두 줄번호 생략
+        assert.ok(m.find(b => b.text === '【도 1】').suppressLineNum === true);
         assert.ok(m.some(b => b.t === 'table'));
-        assert.ok(m.some(b => b.t === 'img' && b.drawing.num === '1'));
+        assert.ok(m.some(b => b.t === 'img' && b.drawing.num === '1' && b.suppressLineNum === true));
+        // 본문(TITLE)은 줄번호 생략하지 않음
+        assert.ok(!m.find(b => b.text === 'TITLE OF THE INVENTION').suppressLineNum);
         assert.ok(!texts.some(t => /^\[0\d{3}\]/.test(t)));
         // 섹션별 페이지 나누기(pageBreakBefore): 청구범위/요약서/도면
         assert.ok(m.find(b => b.text === 'WHAT IS CLAIMED IS:').pageBreakBefore === true);
@@ -401,8 +406,13 @@ describe('.fin 변환 순수 헬퍼', () => {
         const texts = m.filter(b => b.t === 'p').map(b => b.text);
         assert.ok(texts.includes('연마 슬러리') && texts.includes('POLISHING SLURRY')); // 제목 분리
         assert.ok(texts.includes('[0001] 본 개시는 A에 관한 것이다.')); // 단락번호 있음
-        assert.ok(texts.includes('[0004b] 도 1은 A이다.\n도 2는 B이다.')); // 도면설명은 하나의 단락(br)
-        assert.ok(texts.includes('A;\nB를 포함하는 장치.')); // 청구항 본문은 하나의 단락(br)
+        // 도면설명은 각 행이 개별 단락(양쪽맞춤 시 늘어남 방지), 번호는 첫 줄만
+        assert.ok(texts.includes('[0004b] 도 1은 A이다.') && texts.includes('도 2는 B이다.'));
+        assert.ok(!texts.some(t => t.includes('\n'))); // 개별 단락이므로 내부 \n(br) 없음
+        // 청구항 본문: 각 행이 개별 단락 + 행마다 들여쓰기(indent)
+        assert.ok(texts.includes('A;') && texts.includes('B를 포함하는 장치.'));
+        assert.ok(m.find(b => b.text === 'A;').indent === true);
+        assert.ok(m.find(b => b.text === 'B를 포함하는 장치.').indent === true);
         assert.ok(texts.includes('[도 1]')); // 도면 캡션은 대괄호
         // 도면: 이미지 다음에 [도 N] 캡션
         const imgIdx = m.findIndex(b => b.t === 'img');

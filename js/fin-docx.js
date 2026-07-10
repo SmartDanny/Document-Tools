@@ -13,6 +13,11 @@
 // 포맷별 기본 글꼴 크기(half-point)
 const FIN_BASE_SIZE = { ropks: 24, kipo: 20 };
 
+// ROPKS 고정 행 높이(twips). 상단 여백 축소 후 텍스트영역 ≈13913(=16833-1814-1106).
+// 정확히 20행 구간 (13913/21≈662, 13913/20≈696]. 양쪽 여유 있는 680 사용
+// (20×680=13600 → 313 여유, 21×680=14280 > 13913 → 21행 불가). widowControl=0과 함께 20행 보장.
+const FIN_ROPKS_LINE = 680;
+
 // ROPKS 샘플의 공통 탭 스톱(12개, 약 799 간격)
 const FIN_ROPKS_TABS = '<w:tabs>'
     + [799, 1599, 2398, 3197, 3997, 4796, 5596, 6395, 7194, 7994, 8793, 9592]
@@ -78,17 +83,21 @@ function finRopksParagraphXml(block) {
     const bold = !!block.bold;
     const rPrInner = finRopksRunProps(bold);
     const brk = block.pageBreakBefore ? '<w:pageBreakBefore/>' : '';
+    const suppress = block.suppressLineNum ? '<w:suppressLineNumbers/>' : '';
     const ind = block.indent ? '<w:ind w:firstLine="799"/>' : '';
     // 정렬 미지정 시 양쪽맞춤(both) — 샘플의 Normal 스타일 기본값
     const jc = `<w:jc w:val="${block.align || 'both'}"/>`;
     const outline = bold ? '<w:outlineLvl w:val="0"/>' : '';
-    const pPr = `<w:pPr>${brk}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/>${ind}${jc}<w:contextualSpacing/>${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
+    // widowControl=0: 위도우/고아 제어를 꺼 단락 끝줄이 다음 페이지로 밀리지 않게 → 페이지당 20행 유지
+    // 고정 행 높이(exact)로 각 행 = FIN_ROPKS_LINE. wordWrap/autoSpace off는 참조 샘플과 동일(양쪽맞춤 채움)
+    const pPr = `<w:pPr>${brk}<w:widowControl w:val="0"/>${suppress}${FIN_ROPKS_TABS}<w:wordWrap w:val="0"/><w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/><w:adjustRightInd w:val="0"/><w:spacing w:line="${FIN_ROPKS_LINE}" w:lineRule="exact"/>${ind}<w:contextualSpacing/>${jc}${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
     return `<w:p>${pPr}${finRunsFromText(block.text, rPrInner)}</w:p>`;
 }
 
 /**
- * KIPO 단락 블록 → <w:p> XML (bold/align/size/before/after 반영)
- * @param {Object} block - {text, bold, align, size, before, after}
+ * KIPO 단락 블록 → <w:p> XML (bold/align/size/before/after/indent 반영)
+ * 정렬 미지정 시 양쪽맞춤(both). indent 지정 시 첫줄 들여쓰기.
+ * @param {Object} block - {text, bold, align, size, before, after, indent}
  * @param {number} baseSize - 포맷 기본 글꼴 크기(half-point)
  * @returns {string}
  */
@@ -100,9 +109,11 @@ function finParagraphXml(block, baseSize) {
         const a = block.after != null ? ` w:after="${block.after}"` : '';
         spacing = `<w:spacing${b}${a}/>`;
     }
-    const jc = block.align ? `<w:jc w:val="${block.align}"/>` : '';
+    const ind = block.indent ? '<w:ind w:firstLine="400"/>' : '';
+    // 정렬 미지정 단락은 양쪽맞춤(both)
+    const jc = `<w:jc w:val="${block.align || 'both'}"/>`;
     const boldMark = block.bold ? '<w:b/><w:bCs/>' : '';
-    const pPr = `<w:pPr>${spacing}${jc}<w:rPr>${boldMark}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr></w:pPr>`;
+    const pPr = `<w:pPr>${spacing}${ind}${jc}<w:rPr>${boldMark}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr></w:pPr>`;
     return `<w:p>${pPr}${finTextToRuns(block.text, { bold: block.bold, size })}</w:p>`;
 }
 
@@ -180,18 +191,29 @@ function finStylesXml(format) {
 </w:styles>`;
 }
 
+// 페이지 하단 가운데 페이지 번호 footer (PAGE 필드, 아라비아 숫자)
+// 줄번호가 footer 영역까지 매겨지지 않도록 suppressLineNumbers 적용
+const FIN_FOOTER_RID = 'rIdFooter1';
+function finFooterXml() {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:p><w:pPr><w:suppressLineNumbers/><w:jc w:val="center"/></w:pPr><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>`;
+}
+
 /**
- * 포맷별 <w:sectPr> (용지·여백)
+ * 포맷별 <w:sectPr> (용지·여백 + 페이지번호 footer 참조)
  * @param {string} format - 'ropks' | 'kipo'
  * @returns {string}
  */
 function finSectPr(format) {
+    const footerRef = `<w:footerReference w:type="default" r:id="${FIN_FOOTER_RID}"/>`;
     if (format === 'kipo') {
-        // KIPO 출원서식 샘플 역설계값
-        return '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1134" w:bottom="850" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>';
+        // KIPO 출원서식 샘플 역설계값 + 페이지번호 footer
+        return `<w:sectPr>${footerRef}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1134" w:bottom="850" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
     }
-    // ROPKS 샘플 역설계값 + 줄번호(페이지마다 1부터)
-    return '<w:sectPr><w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1"/><w:cols w:space="720"/></w:sectPr>';
+    // ROPKS 샘플 역설계값 + 줄번호(페이지마다 1부터) + 페이지번호 footer
+    // 페이지당 20행은 단락의 고정 행 높이(FIN_ROPKS_LINE, lineRule="exact") + widowControl=0으로 제어.
+    // 상단 여백을 2239→1814로 약간 줄여(사용자 허용) 20행이 확실히 들어가도록 여유 확보(텍스트영역 ≈13913).
+    return `<w:sectPr>${footerRef}<w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="1814" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1" w:restart="newPage"/><w:cols w:space="720"/></w:sectPr>`;
 }
 
 /**
@@ -229,8 +251,9 @@ async function buildFinDocxBlob(ir, format) {
             });
             const align = block.align || 'center';
             if (isRopks) {
-                // ROPKS 공통 단락 서식(탭·행간518) + 중앙 정렬
-                body += `<w:p><w:pPr>${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/><w:jc w:val="${align}"/><w:contextualSpacing/></w:pPr>${run}</w:p>`;
+                // ROPKS 공통 단락 서식(탭) + 중앙 정렬 + (도면) 줄번호 생략. 이미지는 자동 행간(전체 크기)
+                const suppress = block.suppressLineNum ? '<w:suppressLineNumbers/>' : '';
+                body += `<w:p><w:pPr><w:widowControl w:val="0"/>${suppress}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/><w:contextualSpacing/><w:jc w:val="${align}"/></w:pPr>${run}</w:p>`;
             } else {
                 let spacing = '';
                 if (block.before != null || block.after != null) {
@@ -260,6 +283,7 @@ async function buildFinDocxBlob(ir, format) {
 <Default Extension="xml" ContentType="application/xml"/>${extDefaults}
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
 </Types>`);
 
     zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -269,7 +293,8 @@ async function buildFinDocxBlob(ir, format) {
 
     let docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
+<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+<Relationship Id="${FIN_FOOTER_RID}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`;
     for (const m of media) {
         docRels += `\n<Relationship Id="${m.rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${m.target}"/>`;
     }
@@ -277,6 +302,7 @@ async function buildFinDocxBlob(ir, format) {
     zip.file('word/_rels/document.xml.rels', docRels);
 
     zip.file('word/styles.xml', finStylesXml(format));
+    zip.file('word/footer1.xml', finFooterXml());
 
     zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
