@@ -13,9 +13,10 @@
 // 포맷별 기본 글꼴 크기(half-point)
 const FIN_BASE_SIZE = { ropks: 24, kipo: 20 };
 
-// ROPKS 고정 행 높이(twips): 텍스트영역(16833-2239-1106=13488) ÷ 20 ≈ 674.
-// 20행은 채우되 21행은 안 되도록 (642, 674] 범위에서 여유 있는 670 사용.
-const FIN_ROPKS_LINE = 670;
+// ROPKS 고정 행 높이(twips). 상단 여백 축소 후 텍스트영역 ≈13913(=16833-1814-1106).
+// 정확히 20행 구간 (13913/21≈662, 13913/20≈696]. 양쪽 여유 있는 680 사용
+// (20×680=13600 → 313 여유, 21×680=14280 > 13913 → 21행 불가). widowControl=0과 함께 20행 보장.
+const FIN_ROPKS_LINE = 680;
 
 // ROPKS 샘플의 공통 탭 스톱(12개, 약 799 간격)
 const FIN_ROPKS_TABS = '<w:tabs>'
@@ -87,8 +88,9 @@ function finRopksParagraphXml(block) {
     // 정렬 미지정 시 양쪽맞춤(both) — 샘플의 Normal 스타일 기본값
     const jc = `<w:jc w:val="${block.align || 'both'}"/>`;
     const outline = bold ? '<w:outlineLvl w:val="0"/>' : '';
-    // 고정 행 높이(exact)로 각 행 = 텍스트영역/20 → 페이지당 20행 (FIN_ROPKS_LINE)
-    const pPr = `<w:pPr>${brk}${suppress}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="${FIN_ROPKS_LINE}" w:lineRule="exact"/>${ind}${jc}<w:contextualSpacing/>${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
+    // widowControl=0: 위도우/고아 제어를 꺼 단락 끝줄이 다음 페이지로 밀리지 않게 → 페이지당 20행 유지
+    // 고정 행 높이(exact)로 각 행 = FIN_ROPKS_LINE. wordWrap/autoSpace off는 참조 샘플과 동일(양쪽맞춤 채움)
+    const pPr = `<w:pPr>${brk}<w:widowControl w:val="0"/>${suppress}${FIN_ROPKS_TABS}<w:wordWrap w:val="0"/><w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/><w:adjustRightInd w:val="0"/><w:spacing w:line="${FIN_ROPKS_LINE}" w:lineRule="exact"/>${ind}<w:contextualSpacing/>${jc}${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
     return `<w:p>${pPr}${finRunsFromText(block.text, rPrInner)}</w:p>`;
 }
 
@@ -209,9 +211,9 @@ function finSectPr(format) {
         return `<w:sectPr>${footerRef}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1134" w:bottom="850" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
     }
     // ROPKS 샘플 역설계값 + 줄번호(페이지마다 1부터) + 페이지번호 footer
-    // 페이지당 20행은 단락의 고정 행 높이(FIN_ROPKS_LINE, lineRule="exact")로 제어한다.
-    // (docGrid type="lines" + 자동행간은 행간을 그리드에 곱해 행수가 크게 줄어드는 문제가 있어 사용하지 않음)
-    return `<w:sectPr>${footerRef}<w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1" w:restart="newPage"/><w:cols w:space="720"/></w:sectPr>`;
+    // 페이지당 20행은 단락의 고정 행 높이(FIN_ROPKS_LINE, lineRule="exact") + widowControl=0으로 제어.
+    // 상단 여백을 2239→1814로 약간 줄여(사용자 허용) 20행이 확실히 들어가도록 여유 확보(텍스트영역 ≈13913).
+    return `<w:sectPr>${footerRef}<w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="1814" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1" w:restart="newPage"/><w:cols w:space="720"/></w:sectPr>`;
 }
 
 /**
@@ -249,9 +251,9 @@ async function buildFinDocxBlob(ir, format) {
             });
             const align = block.align || 'center';
             if (isRopks) {
-                // ROPKS 공통 단락 서식(탭·행간518) + 중앙 정렬 + (도면) 줄번호 생략
+                // ROPKS 공통 단락 서식(탭) + 중앙 정렬 + (도면) 줄번호 생략. 이미지는 자동 행간(전체 크기)
                 const suppress = block.suppressLineNum ? '<w:suppressLineNumbers/>' : '';
-                body += `<w:p><w:pPr>${suppress}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/><w:jc w:val="${align}"/><w:contextualSpacing/></w:pPr>${run}</w:p>`;
+                body += `<w:p><w:pPr><w:widowControl w:val="0"/>${suppress}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/><w:contextualSpacing/><w:jc w:val="${align}"/></w:pPr>${run}</w:p>`;
             } else {
                 let spacing = '';
                 if (block.before != null || block.after != null) {
