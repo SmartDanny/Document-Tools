@@ -462,8 +462,8 @@ const server = http.createServer((req, res) => {
         const ftrR = zr.file('word/footer1.xml') ? await zr.file('word/footer1.xml').async('string') : '';
         r.ropksFooter = !!zr.file('word/footer1.xml') && docR.includes('footerReference') &&
             ftrR.includes(' PAGE ') && ftrR.includes('fldChar') && ftrR.includes('w:jc w:val="center"');
-        // 20행/페이지: docGrid type=lines
-        r.ropksLineGrid = /w:type="lines" w:linePitch="\d+"/.test(docR);
+        // 20행/페이지: 본문 단락 고정 행높이(exact) + docGrid type=lines 미사용
+        r.ropksLineGrid = /w:line="\d+" w:lineRule="exact"/.test(docR) && !/w:type="lines"/.test(docR);
         // 도면 섹션 줄번호 생략(suppressLineNumbers)
         r.ropksSuppressDrawing = docR.includes('<w:suppressLineNumbers/>');
         // 해외관리번호 파일명 규칙

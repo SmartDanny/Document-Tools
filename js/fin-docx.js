@@ -13,6 +13,10 @@
 // 포맷별 기본 글꼴 크기(half-point)
 const FIN_BASE_SIZE = { ropks: 24, kipo: 20 };
 
+// ROPKS 고정 행 높이(twips): 텍스트영역(16833-2239-1106=13488) ÷ 20 ≈ 674.
+// 20행은 채우되 21행은 안 되도록 (642, 674] 범위에서 여유 있는 670 사용.
+const FIN_ROPKS_LINE = 670;
+
 // ROPKS 샘플의 공통 탭 스톱(12개, 약 799 간격)
 const FIN_ROPKS_TABS = '<w:tabs>'
     + [799, 1599, 2398, 3197, 3997, 4796, 5596, 6395, 7194, 7994, 8793, 9592]
@@ -83,7 +87,8 @@ function finRopksParagraphXml(block) {
     // 정렬 미지정 시 양쪽맞춤(both) — 샘플의 Normal 스타일 기본값
     const jc = `<w:jc w:val="${block.align || 'both'}"/>`;
     const outline = bold ? '<w:outlineLvl w:val="0"/>' : '';
-    const pPr = `<w:pPr>${brk}${suppress}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="518" w:lineRule="auto"/>${ind}${jc}<w:contextualSpacing/>${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
+    // 고정 행 높이(exact)로 각 행 = 텍스트영역/20 → 페이지당 20행 (FIN_ROPKS_LINE)
+    const pPr = `<w:pPr>${brk}${suppress}${FIN_ROPKS_TABS}<w:adjustRightInd w:val="0"/><w:spacing w:line="${FIN_ROPKS_LINE}" w:lineRule="exact"/>${ind}${jc}<w:contextualSpacing/>${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
     return `<w:p>${pPr}${finRunsFromText(block.text, rPrInner)}</w:p>`;
 }
 
@@ -204,8 +209,9 @@ function finSectPr(format) {
         return `<w:sectPr>${footerRef}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1134" w:bottom="850" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
     }
     // ROPKS 샘플 역설계값 + 줄번호(페이지마다 1부터) + 페이지번호 footer
-    // docGrid type="lines": 텍스트영역 ≈ 13488twip. 20행 구간 (642, 674]의 중앙값 658 → 페이지당 20행
-    return `<w:sectPr>${footerRef}<w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1" w:restart="newPage"/><w:cols w:space="720"/><w:docGrid w:type="lines" w:linePitch="658"/></w:sectPr>`;
+    // 페이지당 20행은 단락의 고정 행 높이(FIN_ROPKS_LINE, lineRule="exact")로 제어한다.
+    // (docGrid type="lines" + 자동행간은 행간을 그리드에 곱해 행수가 크게 줄어드는 문제가 있어 사용하지 않음)
+    return `<w:sectPr>${footerRef}<w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1" w:restart="newPage"/><w:cols w:space="720"/></w:sectPr>`;
 }
 
 /**
