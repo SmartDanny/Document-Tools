@@ -22,7 +22,7 @@ const ROOT = path.join(__dirname, '..');
 // 합성 .fin 픽스처(zip → hlz(zip) → KIPO XML + 도면 이미지) 생성
 async function buildSampleFin() {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<KIPO keapsVersion="5.6" editorKind="K" pageCount="3" xmlns="http://www.kipo.go.kr"><PatentCAFDOC docflag="1.0" documentID="123"><description><invention-title>테스트 발명{TEST INVENTION}</invention-title><technical-field><p num="0001">기술분야 단락.</p></technical-field><background-art><p num="0002">배경기술 H₂O₂ 포함.</p></background-art><summary-of-invention><tech-solution><p num="0003">SiO<sub>2</sub> 포함.</p></tech-solution></summary-of-invention><description-of-drawings><p num="0004">도 1은 예시이다.</p></description-of-drawings><description-of-embodiments><p num="0005">실시예 설명.</p><p num="0006"><tables num="1"><table><tgroup xmlns='http://www.oasis-open.org/tables/exchange/1.0' cols="2"><colspec colnum="1" colname="col1"/><colspec colnum="2" colname="col2"/><tbody><row><entry colname="col1">A</entry><entry colname="col2">B</entry></row></tbody></tgroup></table></tables></p><p num="0007">이후 단락.</p></description-of-embodiments><reference-signs-list><p num="0008">SUB: 기판<br/>TR: 트랜지스터</p></reference-signs-list></description><claims><claim num="1"><claim-text>A; <br/>B를 포함하는 장치.</claim-text></claim></claims><abstract><summary><p num="0001a">요약 내용.</p></summary><abstract-figure><p num="0002a"><figref num="1"/></p></abstract-figure></abstract><drawings><figure num="1"><img id="i0001" he="50" wi="50" file="pat00001.png" img-format="png"/></figure></drawings></PatentCAFDOC></KIPO>`;
+<KIPO keapsVersion="5.6" editorKind="K" pageCount="3" xmlns="http://www.kipo.go.kr"><PatentCAFDOC docflag="1.0" documentID="123"><description><invention-title>테스트 발명{TEST INVENTION}</invention-title><technical-field><p num="0001">기술분야 단락.</p></technical-field><background-art><p num="0002">배경기술 H₂O₂ 포함.</p></background-art><summary-of-invention><tech-solution><p num="0003">SiO<sub>2</sub> 포함.</p></tech-solution></summary-of-invention><description-of-drawings><p num="0004">도 1은 예시이다.</p></description-of-drawings><description-of-embodiments><p num="0005">실시예 설명.</p><p num="0006"><tables num="1"><table><tgroup xmlns='http://www.oasis-open.org/tables/exchange/1.0' cols="3"><colspec colnum="1" colname="col1"/><colspec colnum="2" colname="col2"/><colspec colnum="3" colname="col3"/><tbody><row><entry morerows="1" colname="col1">Ex</entry><entry colname="col2">A</entry><entry colname="col3">B</entry></row><row><entry namest="col2" nameend="col3">C</entry></row></tbody></tgroup></table></tables></p><p num="0007">이후 단락.</p></description-of-embodiments><reference-signs-list><p num="0008">SUB: 기판<br/>TR: 트랜지스터</p></reference-signs-list></description><claims><claim num="1"><claim-text>A; <br/>B를 포함하는 장치.</claim-text></claim></claims><abstract><summary><p num="0001a">요약 내용.</p></summary><abstract-figure><p num="0002a"><figref num="1"/></p></abstract-figure></abstract><drawings><figure num="1"><img id="i0001" he="50" wi="50" file="pat00001.png" img-format="png"/></figure></drawings></PatentCAFDOC></KIPO>`;
     const png1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
     const hlz = new JSZipNode();
     hlz.file('DOC_251222.xml', xml);
@@ -436,6 +436,8 @@ const server = http.createServer((req, res) => {
         // 1단계 창 = .fin 원본 국문 부제(【】)
         r.textHasTitle = ta.includes('【발명의 명칭】') && ta.includes('【기술분야】') && !ta.includes('TITLE OF THE INVENTION');
         r.textHasTable = ta.includes('<table');
+        // HTML 변환: 가로/세로 병합 속성 유지
+        r.textTableMerge = ta.includes('rowspan="2"') && ta.includes('colspan="2"');
         r.textHasClaim = ta.includes('【청구항 1】');
         // 변환결과(output1) = ROPKS (영문 부제)
         r.resultIsRopks = document.getElementById('output1').innerHTML.includes('TITLE OF THE INVENTION');
@@ -446,6 +448,9 @@ const server = http.createServer((req, res) => {
         const zr = await JSZip.loadAsync(new Uint8Array(await blobR.arrayBuffer()));
         const docR = await zr.file('word/document.xml').async('string');
         r.ropksTable = /<w:tbl>/.test(docR);
+        // docx 표: 세로 병합(vMerge restart/continue) + 가로 병합(gridSpan)
+        r.ropksTableMerge = docR.includes('<w:vMerge w:val="restart"/>') &&
+            docR.includes('<w:vMerge/>') && docR.includes('<w:gridSpan w:val="2"/>');
         r.ropksImg = /<w:drawing>/.test(docR);
         r.ropksSubtitle = docR.includes('TITLE OF THE INVENTION');
         r.ropksSub2 = /vertAlign w:val="subscript"/.test(docR);
@@ -486,8 +491,8 @@ const server = http.createServer((req, res) => {
         return r;
     });
     results['탭1 .fin 파싱→텍스트'] = (finRes.textHasTitle && finRes.textHasTable && finRes.textHasClaim &&
-        finRes.resultIsRopks && finRes.sectionVisible && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
-    results['탭1 .fin→ROPKS DOCX'] = (finRes.ropksSize > 0 && finRes.ropksTable && finRes.ropksImg &&
+        finRes.textTableMerge && finRes.resultIsRopks && finRes.sectionVisible && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+    results['탭1 .fin→ROPKS DOCX'] = (finRes.ropksSize > 0 && finRes.ropksTable && finRes.ropksTableMerge && finRes.ropksImg &&
         finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia &&
         finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline &&
         finRes.ropksLineNo && finRes.ropksJustify && finRes.ropksPageBreak &&

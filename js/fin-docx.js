@@ -118,7 +118,8 @@ function finParagraphXml(block, baseSize) {
 }
 
 /**
- * HTML <table> → OOXML 표 (셀 가운데 정렬, 표 뒤 빈 단락 포함)
+ * HTML <table> → OOXML 표 (가로 병합 gridSpan + 세로 병합 vMerge, 셀 가운데 정렬, 표 뒤 빈 단락 포함)
+ * finParseHtmlTable/finLayoutTableGrid(utils.js)로 그리드를 계산해 rowspan 연속 행에 vMerge 셀을 채운다.
  * @param {string} tableHtml
  * @param {string} format - 'ropks' | 'kipo' (셀 글꼴/크기 결정)
  * @returns {string}
@@ -129,39 +130,30 @@ function finTableToOoxml(tableHtml, format) {
     const cellRPr = format === 'ropks'
         ? finRopksRunProps(false)
         : `<w:sz w:val="${baseSize}"/><w:szCs w:val="${baseSize}"/>`;
-    const trs = tableHtml.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
-    if (!trs || !trs.length) return '';
-    let maxCols = 0;
-    trs.forEach(tr => {
-        let c = 0;
-        (tr.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []).forEach(td => {
-            const cs = td.match(/colspan\s*=\s*["']?(\d+)/i);
-            c += cs ? parseInt(cs[1], 10) : 1;
-        });
-        maxCols = Math.max(maxCols, c);
-    });
-    if (!maxCols) return '';
+    const grid = finLayoutTableGrid(finParseHtmlTable(tableHtml));
+    if (!grid.maxCols || !grid.rows.length) return '';
 
     const borders = ['top', 'left', 'bottom', 'right', 'insideH', 'insideV']
         .map(s => `<w:${s} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`).join('');
     let xml = '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/>'
         + `<w:jc w:val="center"/><w:tblBorders>${borders}</w:tblBorders></w:tblPr><w:tblGrid>`
-        + Array(maxCols).fill('<w:gridCol w:w="1500"/>').join('')
+        + Array(grid.maxCols).fill('<w:gridCol w:w="1500"/>').join('')
         + '</w:tblGrid>';
 
-    trs.forEach(tr => {
+    const pPr = `<w:pPr><w:jc w:val="center"/><w:rPr>${cellRPr}</w:rPr></w:pPr>`;
+    for (const slots of grid.rows) {
         xml += '<w:tr>';
-        (tr.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi) || []).forEach(td => {
-            const cs = td.match(/colspan\s*=\s*["']?(\d+)/i);
+        for (const s of slots) {
             let tcPr = '<w:tcPr>';
-            if (cs && parseInt(cs[1], 10) > 1) tcPr += `<w:gridSpan w:val="${cs[1]}"/>`;
+            if (s.colspan > 1) tcPr += `<w:gridSpan w:val="${s.colspan}"/>`;
+            if (s.vMerge === 'restart') tcPr += '<w:vMerge w:val="restart"/>';
+            else if (s.vMerge === 'continue') tcPr += '<w:vMerge/>';
             tcPr += '<w:vAlign w:val="center"/></w:tcPr>';
-            let inner = td.replace(/<t[dh][^>]*>/i, '').replace(/<\/t[dh]>/i, '').replace(/<br\s*\/?>/gi, '\n');
-            const pPr = `<w:pPr><w:jc w:val="center"/><w:rPr>${cellRPr}</w:rPr></w:pPr>`;
+            const inner = String(s.content).replace(/<br\s*\/?>/gi, '\n');
             xml += `<w:tc>${tcPr}<w:p>${pPr}${finRunsFromText(inner, cellRPr)}</w:p></w:tc>`;
-        });
+        }
         xml += '</w:tr>';
-    });
+    }
     return xml + '</w:tbl><w:p/>';
 }
 
