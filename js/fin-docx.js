@@ -87,8 +87,9 @@ function finRopksParagraphXml(block) {
 }
 
 /**
- * KIPO 단락 블록 → <w:p> XML (bold/align/size/before/after 반영)
- * @param {Object} block - {text, bold, align, size, before, after}
+ * KIPO 단락 블록 → <w:p> XML (bold/align/size/before/after/indent 반영)
+ * 정렬 미지정 시 양쪽맞춤(both). indent 지정 시 첫줄 들여쓰기.
+ * @param {Object} block - {text, bold, align, size, before, after, indent}
  * @param {number} baseSize - 포맷 기본 글꼴 크기(half-point)
  * @returns {string}
  */
@@ -100,9 +101,11 @@ function finParagraphXml(block, baseSize) {
         const a = block.after != null ? ` w:after="${block.after}"` : '';
         spacing = `<w:spacing${b}${a}/>`;
     }
-    const jc = block.align ? `<w:jc w:val="${block.align}"/>` : '';
+    const ind = block.indent ? '<w:ind w:firstLine="400"/>' : '';
+    // 정렬 미지정 단락은 양쪽맞춤(both)
+    const jc = `<w:jc w:val="${block.align || 'both'}"/>`;
     const boldMark = block.bold ? '<w:b/><w:bCs/>' : '';
-    const pPr = `<w:pPr>${spacing}${jc}<w:rPr>${boldMark}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr></w:pPr>`;
+    const pPr = `<w:pPr>${spacing}${ind}${jc}<w:rPr>${boldMark}<w:sz w:val="${size}"/><w:szCs w:val="${size}"/></w:rPr></w:pPr>`;
     return `<w:p>${pPr}${finTextToRuns(block.text, { bold: block.bold, size })}</w:p>`;
 }
 
@@ -180,18 +183,26 @@ function finStylesXml(format) {
 </w:styles>`;
 }
 
+// 페이지 하단 가운데 페이지 번호 footer (PAGE 필드)
+const FIN_FOOTER_RID = 'rIdFooter1';
+function finFooterXml() {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:fldSimple w:instr=" PAGE "><w:r><w:t>1</w:t></w:r></w:fldSimple></w:p></w:ftr>`;
+}
+
 /**
- * 포맷별 <w:sectPr> (용지·여백)
+ * 포맷별 <w:sectPr> (용지·여백 + 페이지번호 footer 참조)
  * @param {string} format - 'ropks' | 'kipo'
  * @returns {string}
  */
 function finSectPr(format) {
+    const footerRef = `<w:footerReference w:type="default" r:id="${FIN_FOOTER_RID}"/>`;
     if (format === 'kipo') {
-        // KIPO 출원서식 샘플 역설계값
-        return '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1134" w:bottom="850" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>';
+        // KIPO 출원서식 샘플 역설계값 + 페이지번호 footer
+        return `<w:sectPr>${footerRef}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1701" w:right="1134" w:bottom="850" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>`;
     }
-    // ROPKS 샘플 역설계값 + 줄번호(페이지마다 1부터)
-    return '<w:sectPr><w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1"/><w:cols w:space="720"/></w:sectPr>';
+    // ROPKS 샘플 역설계값 + 줄번호(페이지마다 1부터) + 페이지번호 footer
+    return `<w:sectPr>${footerRef}<w:pgSz w:w="11908" w:h="16833"/><w:pgMar w:top="2239" w:right="1134" w:bottom="1106" w:left="1417" w:header="1134" w:footer="567" w:gutter="0"/><w:lnNumType w:countBy="1"/><w:cols w:space="720"/></w:sectPr>`;
 }
 
 /**
@@ -260,6 +271,7 @@ async function buildFinDocxBlob(ir, format) {
 <Default Extension="xml" ContentType="application/xml"/>${extDefaults}
 <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
 <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>
 </Types>`);
 
     zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -269,7 +281,8 @@ async function buildFinDocxBlob(ir, format) {
 
     let docRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
+<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+<Relationship Id="${FIN_FOOTER_RID}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>`;
     for (const m of media) {
         docRels += `\n<Relationship Id="${m.rid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${m.target}"/>`;
     }
@@ -277,6 +290,7 @@ async function buildFinDocxBlob(ir, format) {
     zip.file('word/_rels/document.xml.rels', docRels);
 
     zip.file('word/styles.xml', finStylesXml(format));
+    zip.file('word/footer1.xml', finFooterXml());
 
     zip.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">

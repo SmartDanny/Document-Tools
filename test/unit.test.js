@@ -402,7 +402,10 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.ok(texts.includes('연마 슬러리') && texts.includes('POLISHING SLURRY')); // 제목 분리
         assert.ok(texts.includes('[0001] 본 개시는 A에 관한 것이다.')); // 단락번호 있음
         assert.ok(texts.includes('[0004b] 도 1은 A이다.\n도 2는 B이다.')); // 도면설명은 하나의 단락(br)
-        assert.ok(texts.includes('A;\nB를 포함하는 장치.')); // 청구항 본문은 하나의 단락(br)
+        // 청구항 본문: 각 행이 개별 단락 + 행마다 들여쓰기(indent)
+        assert.ok(texts.includes('A;') && texts.includes('B를 포함하는 장치.'));
+        assert.ok(m.find(b => b.text === 'A;').indent === true);
+        assert.ok(m.find(b => b.text === 'B를 포함하는 장치.').indent === true);
         assert.ok(texts.includes('[도 1]')); // 도면 캡션은 대괄호
         // 도면: 이미지 다음에 [도 N] 캡션
         const imgIdx = m.findIndex(b => b.t === 'img');

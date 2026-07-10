@@ -930,7 +930,9 @@ function finBuildKipoModel(ir) {
     parthdr('청구범위');
     for (const c of (ir.claims || [])) {
         sub(`【청구항 ${c.num}】`, { before: 160, after: 40 });
-        p((c.text || '').replace(/\n/g, '\n'), { after: 160 }); // 청구항 본문: 하나의 단락(내부 \n=<br/>)
+        // 청구항 본문: 각 행을 개별 단락으로 + 행마다 들여쓰기
+        const lines = String(c.text || '').split('\n').filter(l => l.trim());
+        lines.forEach((line, idx) => p(line, { indent: true, after: idx === lines.length - 1 ? 160 : 0 }));
     }
 
     // ── 요약서 (새 페이지) ──
