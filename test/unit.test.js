@@ -326,8 +326,9 @@ describe('.fin 변환 순수 헬퍼', () => {
         const t = u.finBuildKipoLineText(ir);
         assert.ok(t.includes('【발명의 명칭】\n연마 슬러리\nPOLISHING SLURRY')); // 국문/영문 분리
         assert.ok(t.includes('【기술분야】\n[0001] 본 개시는'));
-        assert.ok(t.includes('【해결하려는 과제】')); // .fin/KIPO 표준 부제 (KIPO docx와 일치)
-        assert.ok(!t.includes('【해결하고자 하는 과제】'));
+        assert.ok(t.includes('【발명의 배경이 되는 기술】')); // KIPO 공식 서식 부제 (background-art)
+        assert.ok(t.includes('【해결하고자 하는 과제】')); // KIPO 공식 서식 부제 (tech-problem)
+        assert.ok(!t.includes('【해결하려는 과제】'));
         assert.ok(t.includes('【과제의 해결 수단】\n[0004] SiO<sub>2</sub> 해결.'));
         assert.ok(t.includes('【도면의 간단한 설명】\n[0004b] 도 1은 A이다.\n도 2는 B이다.')); // br → 여러 줄, 번호는 첫 줄만
         assert.ok(t.includes('[표 1]'));
@@ -401,7 +402,9 @@ describe('.fin 변환 순수 헬퍼', () => {
         const texts = m.filter(b => b.t === 'p').map(b => b.text);
         assert.ok(texts.includes('연마 슬러리') && texts.includes('POLISHING SLURRY')); // 제목 분리
         assert.ok(texts.includes('[0001] 본 개시는 A에 관한 것이다.')); // 단락번호 있음
-        assert.ok(texts.includes('[0004b] 도 1은 A이다.\n도 2는 B이다.')); // 도면설명은 하나의 단락(br)
+        // 도면설명은 각 행이 개별 단락(양쪽맞춤 시 늘어남 방지), 번호는 첫 줄만
+        assert.ok(texts.includes('[0004b] 도 1은 A이다.') && texts.includes('도 2는 B이다.'));
+        assert.ok(!texts.some(t => t.includes('\n'))); // 개별 단락이므로 내부 \n(br) 없음
         // 청구항 본문: 각 행이 개별 단락 + 행마다 들여쓰기(indent)
         assert.ok(texts.includes('A;') && texts.includes('B를 포함하는 장치.'));
         assert.ok(m.find(b => b.text === 'A;').indent === true);

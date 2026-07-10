@@ -720,11 +720,11 @@ function finBuildKipoLineText(ir) {
     if (ir.titleEn) L.push(ir.titleEn);
     L.push('【기술분야】');
     L.push(...finParasToLines(ir.technicalField, true));
-    L.push('【배경기술】');
+    L.push('【발명의 배경이 되는 기술】');
     L.push(...finParasToLines(ir.backgroundArt, true));
     L.push('【발명의 내용】');
     if (ir.techProblem && ir.techProblem.length) {
-        L.push('【해결하려는 과제】');
+        L.push('【해결하고자 하는 과제】');
         L.push(...finParasToLines(ir.techProblem, true));
     }
     if (ir.techSolution && ir.techSolution.length) {
@@ -889,14 +889,8 @@ function finBuildKipoModel(ir) {
     const sub = (text, opt) => { if (text) B.push(Object.assign({ t: 'p', text, bold: true, size: 22, before: 280, after: 140 }, opt || {})); };
     // 본문 단락: 10pt, after120
     const p = (text, opt) => B.push(Object.assign({ t: 'p', text: text == null ? '' : text, after: 120 }, opt || {}));
+    // 각 행을 개별 단락으로 (도면의 간단한 설명·부호의 설명 포함) — 양쪽맞춤 시 줄이 늘어나지 않도록
     const paras = (arr, withNum) => { for (const line of finParasToLines(arr, withNum)) p(line); };
-    // 하나의 단락(내부 \n=<br/>)으로 유지: 도면의 간단한 설명·부호의 설명
-    const paraBr = (arr, withNum) => {
-        for (const item of (arr || [])) {
-            const num = withNum && item.num ? `[${item.num}] ` : '';
-            p(num + (item.text || ''));
-        }
-    };
 
     // ── 명세서 ──
     parthdr('명세서', true);
@@ -906,14 +900,14 @@ function finBuildKipoModel(ir) {
     if (ir.titleEn) p(ir.titleEn, { after: 200 });
     sub('【기술분야】');
     paras(ir.technicalField, true);
-    sub('【배경기술】');
+    sub('【발명의 배경이 되는 기술】');
     paras(ir.backgroundArt, true);
     sub('【발명의 내용】');
-    if (ir.techProblem && ir.techProblem.length) { sub('【해결하려는 과제】'); paras(ir.techProblem, true); }
+    if (ir.techProblem && ir.techProblem.length) { sub('【해결하고자 하는 과제】'); paras(ir.techProblem, true); }
     if (ir.techSolution && ir.techSolution.length) { sub('【과제의 해결 수단】'); paras(ir.techSolution, true); }
     if (ir.advantageousEffects && ir.advantageousEffects.length) { sub('【발명의 효과】'); paras(ir.advantageousEffects, true); }
     sub('【도면의 간단한 설명】');
-    paraBr(ir.descriptionOfDrawings, true);
+    paras(ir.descriptionOfDrawings, true);
     sub('【발명을 실시하기 위한 구체적인 내용】');
     for (const item of (ir.embodiments || [])) {
         if (item.kind === 'table') {
@@ -923,7 +917,7 @@ function finBuildKipoModel(ir) {
             p((item.num ? `[${item.num}] ` : '') + (item.text || ''));
         }
     }
-    if (ir.referenceSigns && ir.referenceSigns.length) { sub('【부호의 설명】'); paraBr(ir.referenceSigns, true); }
+    if (ir.referenceSigns && ir.referenceSigns.length) { sub('【부호의 설명】'); paras(ir.referenceSigns, true); }
 
     // ── 청구범위 (새 페이지) ──
     B.push({ t: 'pagebreak' });
