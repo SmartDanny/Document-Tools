@@ -15,12 +15,14 @@
                 await handleFinFile(file);
                 return;
             }
-            // 기존 .docx 경로 (동작 변경 없음)
+            // 기존 .docx 경로
             finParsedIR1 = null;
             document.getElementById('finOutputSection').classList.add('hidden');
             await handleDocxUpload(file, 'fileName1', async (file) => {
                 const result = await processDocx1(file);
                 document.getElementById('textInput1').value = result.text;
+                // 의심 문자 검사 (.docx: 행 번호 + 앞뒤 발췌로 위치 표기)
+                fileAnalysisResult.suspicious = { mode: 'line', items: findSuspiciousInText(result.text) };
                 displayResult1(result);
             });
         }
@@ -44,6 +46,8 @@
                 // 분석 결과(5단계)는 변환결과(6단계) 텍스트 기준으로 집계
                 const subscriptCount = (ropksText.match(/<sub>/gi) || []).length;
                 const superscriptCount = (ropksText.match(/<sup>/gi) || []).length;
+                // 의심 문자 검사 (.fin: 정규화 전 원문 단락 기준, 단락번호로 위치 표기)
+                fileAnalysisResult.suspicious = { mode: 'para', items: findSuspiciousInParas(ir.rawParas) };
                 displayResult1({ text: kipoText, outputText: ropksText, subscriptCount, superscriptCount });
 
                 // .fin 산출물 섹션 표시
@@ -201,6 +205,52 @@
                 tableEl.innerHTML = '<span class="analysis-icon">❌</span> 표';
                 tableEl.className = 'analysis-item not-exists';
             }
+
+            // 특수문자(의심 문자) 경고
+            updateSuspiciousDisplay1();
+        }
+
+        // 의심 문자 검사 결과 표시 (배지 + 상세 패널).
+        // .fin은 단락번호(loc), .docx는 행 번호 + 앞뒤 발췌로 위치를 표기한다.
+        function updateSuspiciousDisplay1() {
+            const badgeEl = document.getElementById('analysisSuspicious');
+            const detailEl = document.getElementById('suspiciousDetail1');
+            const s = fileAnalysisResult.suspicious;
+            const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            if (!s) { // 검사 이력 없음 (직접 입력 등) — 배지/패널 숨김
+                badgeEl.className = 'analysis-item hidden';
+                detailEl.className = 'suspicious-detail hidden';
+                detailEl.innerHTML = '';
+                return;
+            }
+
+            const total = s.items.reduce((a, it) => a + it.count, 0);
+            if (!total) {
+                badgeEl.innerHTML = '<span class="analysis-icon">✅</span> 특수문자 없음';
+                badgeEl.className = 'analysis-item exists';
+                detailEl.className = 'suspicious-detail hidden';
+                detailEl.innerHTML = '';
+                return;
+            }
+
+            badgeEl.innerHTML = `<span class="analysis-icon">⚠️</span> 특수문자 ${total}건`;
+            badgeEl.className = 'analysis-item warn';
+
+            const MAX_SHOWN = 5; // 패턴당 표시 상한
+            let html = '<div class="suspicious-title">⚠️ 특허명세서에서 잘 사용되지 않는 문자가 발견되었습니다. 아래 위치를 확인해주세요.</div>';
+            for (const it of s.items) {
+                html += `<div class="suspicious-group"><strong>${esc(it.label)}</strong> ${it.count}건<ul>`;
+                for (const o of it.occurrences.slice(0, MAX_SHOWN)) {
+                    const where = s.mode === 'para' ? (o.loc || '(위치 미상)') : `${o.line}행`;
+                    html += `<li><span class="suspicious-loc">${esc(where)}</span>`
+                        + `…${esc(o.before)}<span class="warn-mark">${esc(o.match)}</span>${esc(o.after)}…</li>`;
+                }
+                if (it.occurrences.length > MAX_SHOWN) html += `<li>외 ${it.occurrences.length - MAX_SHOWN}건</li>`;
+                html += '</ul></div>';
+            }
+            detailEl.innerHTML = html;
+            detailEl.className = 'suspicious-detail';
         }
         
         function displayResult1(r) {
@@ -963,7 +1013,9 @@
             document.getElementById('subtitleMessage').classList.add('hidden');
             document.getElementById('paragraphNumMessage').classList.add('hidden');
             rawOutput1 = '';
-            fileAnalysisResult = { hasCrossRef: false, hasScript: false, hasParagraphNum: false, hasTable: false };
+            fileAnalysisResult = { hasCrossRef: false, hasScript: false, hasParagraphNum: false, hasTable: false, suspicious: null };
+            document.getElementById('suspiciousDetail1').className = 'suspicious-detail hidden';
+            document.getElementById('suspiciousDetail1').innerHTML = '';
             document.getElementById('subCount1').textContent = '0';
             document.getElementById('supCount1').textContent = '0';
             document.getElementById('paragraphCount1').textContent = '0';

@@ -218,6 +218,27 @@ const server = http.createServer((req, res) => {
             assert('processDocx1', r1.text.includes('[0001] Numbered para.') &&
                 r1.subscriptCount === 1 && r1.superscriptCount === 1, r1);
 
+            // 의심 문자 경고 (.docx 업로드: 행 번호 + 앞뒤 발췌)
+            const zipSusp = new JSZip();
+            zipSusp.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+<w:p><w:r><w:t>온도 300? 및 A**B 처리.</w:t></w:r></w:p>
+<w:p><w:r><w:t>H₂O 잔존 확인.</w:t></w:r></w:p>
+</w:body></w:document>`);
+            const fileSusp = new File([await zipSusp.generateAsync({ type: 'blob' })], 'susp.docx');
+            await handleFile1(fileSusp);
+            const suspD = fileAnalysisResult.suspicious;
+            assert('의심문자 docx 행 기반 검출', !!suspD && suspD.mode === 'line' &&
+                JSON.stringify(suspD.items.map(i => [i.label, i.count, i.occurrences[0].line])) ===
+                JSON.stringify([['유니코드 첨자', 1, 2], ['"**"', 1, 1], ['"?"', 1, 1]]), suspD);
+            const suspBadgeD = document.getElementById('analysisSuspicious');
+            const suspPanelD = document.getElementById('suspiciousDetail1');
+            assert('의심문자 docx 배지+상세 패널', suspBadgeD.textContent.includes('특수문자 3건') &&
+                suspBadgeD.className.includes('warn') &&
+                !suspPanelD.className.includes('hidden') &&
+                suspPanelD.textContent.includes('2행') && suspPanelD.textContent.includes('H₂O'),
+                { badge: suspBadgeD.textContent, panel: suspPanelD.textContent });
+
             // extractTextFromDocx3 / Simple
             const t3 = await extractTextFromDocx3(file);
             const t3s = await extractTextFromDocx3Simple(file);
@@ -447,6 +468,12 @@ const server = http.createServer((req, res) => {
         r.resultIsRopks = document.getElementById('output1').innerHTML.includes('TITLE OF THE INVENTION');
         r.sectionVisible = !document.getElementById('finOutputSection').classList.contains('hidden');
         r.irOk = !!(typeof finParsedIR1 === 'object' && finParsedIR1 && finParsedIR1.drawings.length === 1);
+        // 의심 문자 경고 (.fin: 정규화 전 원문 + 단락번호 위치) — 샘플의 H₂O₂([0002])가 검출되어야 함
+        const susp = fileAnalysisResult.suspicious;
+        r.suspMode = susp && susp.mode;
+        r.suspItems = susp ? susp.items.map(i => [i.label, i.count, i.occurrences[0].loc]) : null;
+        r.suspBadge = document.getElementById('analysisSuspicious').textContent;
+        r.suspPanel = document.getElementById('suspiciousDetail1').textContent;
         const blobR = await buildFinDocxBlob(finParsedIR1, 'ropks');
         r.ropksSize = blobR.size;
         const zr = await JSZip.loadAsync(new Uint8Array(await blobR.arrayBuffer()));
@@ -496,6 +523,10 @@ const server = http.createServer((req, res) => {
     });
     results['탭1 .fin 파싱→텍스트'] = (finRes.textHasTitle && finRes.textHasTable && finRes.textHasClaim &&
         finRes.textTableMerge && finRes.resultIsRopks && finRes.sectionVisible && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+    results['탭1 .fin 특수문자 경고(정규화 전+단락번호)'] = (finRes.suspMode === 'para' &&
+        JSON.stringify(finRes.suspItems) === JSON.stringify([['유니코드 첨자', 2, '[0002]']]) &&
+        finRes.suspBadge.includes('특수문자 2건') && finRes.suspPanel.includes('[0002]'))
+        ? 'PASS' : 'FAIL ' + JSON.stringify({ mode: finRes.suspMode, items: finRes.suspItems, badge: finRes.suspBadge });
     results['탭1 .fin→ROPKS DOCX'] = (finRes.ropksSize > 0 && finRes.ropksTable && finRes.ropksTableMerge && finRes.ropksImg &&
         finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia &&
         finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline &&

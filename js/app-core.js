@@ -10,7 +10,8 @@
             hasCrossRef: false,
             hasScript: false,
             hasParagraphNum: false,
-            hasTable: false
+            hasTable: false,
+            suspicious: null // {mode:'line'|'para', items:[{label,count,occurrences}]} — 업로드 시 의심 문자 검사 결과
         };
         let priorityList1 = [];
         let priorityList2 = [];

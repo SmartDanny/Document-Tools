@@ -180,13 +180,42 @@ function finXmlToIr(doc) {
         drawings: []
     };
 
+    // 의심 문자 검사용 원문 단락 수집 (정규화 전 — 유니코드 첨자 잔존 여부까지 검사 가능)
+    // loc은 .fin 원문의 단락번호([NNNN])/표 번호/청구항 번호로 위치를 표기한다.
+    const rawParas = [];
+    if (inventionTitle) {
+        const raw = finSerializeInline(inventionTitle).trim();
+        if (raw) rawParas.push({ loc: '【발명의 명칭】', text: raw });
+    }
+    for (const p of doc.getElementsByTagName('p')) {
+        const raw = finSerializeInline(p).trim(); // <tables> 내용은 제외(아래에서 표 단위로 수집)
+        if (!raw) continue;
+        const num = p.getAttribute('num') || '';
+        rawParas.push({ loc: num ? `[${num}]` : '', text: raw });
+    }
+    for (const t of doc.getElementsByTagName('tables')) {
+        const cells = [];
+        for (const e of t.getElementsByTagName('entry')) {
+            const raw = finSerializeInline(e).trim();
+            if (raw) cells.push(raw);
+        }
+        if (cells.length) {
+            const num = t.getAttribute('num') || '';
+            rawParas.push({ loc: num ? `[표 ${num}]` : '[표]', text: cells.join(' | ') });
+        }
+    }
+    ir.rawParas = rawParas;
+
     // 청구항
     const claimsEl = first('claims');
     if (claimsEl) {
         for (const claim of claimsEl.getElementsByTagName('claim')) {
             const ct = claim.getElementsByTagName('claim-text')[0];
             const text = ct ? finCleanText(finSerializeInline(ct)) : '';
-            ir.claims.push({ num: claim.getAttribute('num') || '', text });
+            const num = claim.getAttribute('num') || '';
+            ir.claims.push({ num, text });
+            const raw = ct ? finSerializeInline(ct).trim() : '';
+            if (raw) rawParas.push({ loc: `【청구항 ${num}】`, text: raw });
         }
     }
 
