@@ -394,6 +394,14 @@ input[type="file"] { display: none; }
     color: #856404;
 }
 .suspicious-detail .suspicious-title { font-weight: 600; margin-bottom: 6px; }
+.suspicious-detail .suspicious-notice {
+    margin: 6px 0 8px;
+    padding: 8px 10px;
+    background: #fdecea;
+    border: 1px solid #f5c6cb;
+    border-radius: 6px;
+    color: #842029;
+}
 .suspicious-detail .suspicious-group { margin-top: 6px; }
 .suspicious-detail ul { margin: 4px 0 2px 20px; padding: 0; }
 .suspicious-detail li { margin: 2px 0; word-break: break-all; }

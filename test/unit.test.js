@@ -382,6 +382,25 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.equal(u.findSuspiciousInParas([]).length, 0);
     });
 
+    test('findSuspiciousInParas: 본문 인라인 이미지 경고 항목', () => {
+        const items = u.findSuspiciousInParas([
+            { loc: '[0002]', text: '정상 단락.' },
+            { loc: '[0010]', text: '과이황산이온 포함.', inlineImgs: 2 },
+            { loc: '[0011]', text: '', inlineImgs: 1 }
+        ]);
+        assert.equal(items.length, 1); // 텍스트 패턴 없음 + 이미지 항목 1개
+        const img = items[0];
+        assert.equal(img.label, '본문 인라인 이미지(특수문자 소실 위험)');
+        assert.equal(img.count, 3); // 이미지 총 개수
+        assert.equal(img.occurrences.length, 2); // 단락별 1건
+        assert.equal(img.occurrences[0].loc, '[0010]');
+        assert.ok(img.occurrences[0].match.includes('2개'));
+        assert.ok(img.occurrences[0].after.includes('과이황산이온'));
+        assert.equal(img.occurrences[1].loc, '[0011]');
+        // 이미지 없는 단락만 있으면 항목 없음
+        assert.equal(u.findSuspiciousInParas([{ loc: '[0001]', text: '정상.' }]).length, 0);
+    });
+
     test('finImgFormatToMime', () => {
         assert.equal(u.finImgFormatToMime('jpg'), 'image/jpeg');
         assert.equal(u.finImgFormatToMime('JPEG'), 'image/jpeg');

@@ -189,9 +189,14 @@ function finXmlToIr(doc) {
     }
     for (const p of doc.getElementsByTagName('p')) {
         const raw = finSerializeInline(p).trim(); // <tables> 내용은 제외(아래에서 표 단위로 수집)
-        if (!raw) continue;
+        // 본문 인라인 <img> = 문자표에 없는 특수문자를 이미지로 저장한 것(추정).
+        // 파서가 텍스트로 변환하지 못해 소실되므로 개수를 기록해 경고에 사용한다.
+        const inlineImgs = p.getElementsByTagName('img').length;
+        if (!raw && !inlineImgs) continue;
         const num = p.getAttribute('num') || '';
-        rawParas.push({ loc: num ? `[${num}]` : '', text: raw });
+        const entry = { loc: num ? `[${num}]` : '', text: raw };
+        if (inlineImgs) entry.inlineImgs = inlineImgs;
+        rawParas.push(entry);
     }
     for (const t of doc.getElementsByTagName('tables')) {
         const cells = [];

@@ -22,7 +22,7 @@ const ROOT = path.join(__dirname, '..');
 // 합성 .fin 픽스처(zip → hlz(zip) → KIPO XML + 도면 이미지) 생성
 async function buildSampleFin() {
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<KIPO keapsVersion="5.6" editorKind="K" pageCount="3" xmlns="http://www.kipo.go.kr"><PatentCAFDOC docflag="1.0" documentID="123"><description><invention-title>테스트 발명{TEST INVENTION}</invention-title><technical-field><p num="0001">기술분야 단락.</p></technical-field><background-art><p num="0002">배경기술 H₂O₂ 포함.</p></background-art><summary-of-invention><tech-solution><p num="0003">SiO<sub>2</sub> 포함.</p></tech-solution></summary-of-invention><description-of-drawings><p num="0004">도 1은 예시이다.</p></description-of-drawings><description-of-embodiments><p num="0005">실시예 설명.</p><p num="0006"><tables num="1"><table><tgroup xmlns='http://www.oasis-open.org/tables/exchange/1.0' cols="3"><colspec colnum="1" colname="col1"/><colspec colnum="2" colname="col2"/><colspec colnum="3" colname="col3"/><tbody><row><entry morerows="1" colname="col1">Ex</entry><entry colname="col2">A</entry><entry colname="col3">B</entry></row><row><entry namest="col2" nameend="col3">C</entry></row></tbody></tgroup></table></tables></p><p num="0007">이후 단락.</p></description-of-embodiments><reference-signs-list><p num="0008">SUB: 기판<br/>TR: 트랜지스터</p></reference-signs-list></description><claims><claim num="1"><claim-text>A; <br/>B를 포함하는 장치.</claim-text></claim></claims><abstract><summary><p num="0001a">요약 내용.</p></summary><abstract-figure><p num="0002a"><figref num="1"/></p></abstract-figure></abstract><drawings><figure num="1"><img id="i0001" he="50" wi="50" file="pat00001.png" img-format="png"/></figure></drawings></PatentCAFDOC></KIPO>`;
+<KIPO keapsVersion="5.6" editorKind="K" pageCount="3" xmlns="http://www.kipo.go.kr"><PatentCAFDOC docflag="1.0" documentID="123"><description><invention-title>테스트 발명{TEST INVENTION}</invention-title><technical-field><p num="0001">기술분야 단락.</p></technical-field><background-art><p num="0002">배경기술 H₂O₂ 포함.</p></background-art><summary-of-invention><tech-solution><p num="0003">SiO<sub>2</sub> 포함.</p></tech-solution></summary-of-invention><description-of-drawings><p num="0004">도 1은 예시이다.</p></description-of-drawings><description-of-embodiments><p num="0005">실시예 설명.<img id="i0002" he="3" wi="3" file="pat00099.png" img-format="png"/></p><p num="0006"><tables num="1"><table><tgroup xmlns='http://www.oasis-open.org/tables/exchange/1.0' cols="3"><colspec colnum="1" colname="col1"/><colspec colnum="2" colname="col2"/><colspec colnum="3" colname="col3"/><tbody><row><entry morerows="1" colname="col1">Ex</entry><entry colname="col2">A</entry><entry colname="col3">B</entry></row><row><entry namest="col2" nameend="col3">C</entry></row></tbody></tgroup></table></tables></p><p num="0007">이후 단락.</p></description-of-embodiments><reference-signs-list><p num="0008">SUB: 기판<br/>TR: 트랜지스터</p></reference-signs-list></description><claims><claim num="1"><claim-text>A; <br/>B를 포함하는 장치.</claim-text></claim></claims><abstract><summary><p num="0001a">요약 내용.</p></summary><abstract-figure><p num="0002a"><figref num="1"/></p></abstract-figure></abstract><drawings><figure num="1"><img id="i0001" he="50" wi="50" file="pat00001.png" img-format="png"/></figure></drawings></PatentCAFDOC></KIPO>`;
     const png1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
     const hlz = new JSZipNode();
     hlz.file('DOC_251222.xml', xml);
@@ -236,7 +236,8 @@ const server = http.createServer((req, res) => {
             assert('의심문자 docx 배지+상세 패널', suspBadgeD.textContent.includes('특수문자 3건') &&
                 suspBadgeD.className.includes('warn') &&
                 !suspPanelD.className.includes('hidden') &&
-                suspPanelD.textContent.includes('2행') && suspPanelD.textContent.includes('H₂O'),
+                suspPanelD.textContent.includes('2행') && suspPanelD.textContent.includes('H₂O') &&
+                !suspPanelD.textContent.includes('원본과의 대조'), // .fin 전용 안내는 docx에 미표시
                 { badge: suspBadgeD.textContent, panel: suspPanelD.textContent });
 
             // extractTextFromDocx3 / Simple
@@ -524,9 +525,13 @@ const server = http.createServer((req, res) => {
     results['탭1 .fin 파싱→텍스트'] = (finRes.textHasTitle && finRes.textHasTable && finRes.textHasClaim &&
         finRes.textTableMerge && finRes.resultIsRopks && finRes.sectionVisible && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin 특수문자 경고(정규화 전+단락번호)'] = (finRes.suspMode === 'para' &&
-        JSON.stringify(finRes.suspItems) === JSON.stringify([['유니코드 첨자', 2, '[0002]']]) &&
-        finRes.suspBadge.includes('특수문자 2건') && finRes.suspPanel.includes('[0002]'))
-        ? 'PASS' : 'FAIL ' + JSON.stringify({ mode: finRes.suspMode, items: finRes.suspItems, badge: finRes.suspBadge });
+        JSON.stringify(finRes.suspItems) === JSON.stringify([
+            ['유니코드 첨자', 2, '[0002]'],
+            ['본문 인라인 이미지(특수문자 소실 위험)', 1, '[0005]']
+        ]) &&
+        finRes.suspBadge.includes('특수문자 3건') && finRes.suspPanel.includes('[0002]') &&
+        finRes.suspPanel.includes('[0005]') && finRes.suspPanel.includes('원본과의 대조'))
+        ? 'PASS' : 'FAIL ' + JSON.stringify({ mode: finRes.suspMode, items: finRes.suspItems, badge: finRes.suspBadge, panel: finRes.suspPanel && finRes.suspPanel.slice(0, 300) });
     results['탭1 .fin→ROPKS DOCX'] = (finRes.ropksSize > 0 && finRes.ropksTable && finRes.ropksTableMerge && finRes.ropksImg &&
         finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia &&
         finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline &&
