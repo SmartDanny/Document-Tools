@@ -154,6 +154,10 @@ const server = http.createServer((req, res) => {
             'A device comprising a sensor.'
         ].join('\n');
         assert('countParagraphsInText', countParagraphsInText(sampleText) === 3, countParagraphsInText(sampleText));
+        // 이미 번호가 붙은 단락도 실제 단락으로 카운트
+        assert('countParagraphsInText 번호포함',
+            countParagraphsInText('BACKGROUND\n[0001] Numbered body para.\nPlain body para.') === 2,
+            countParagraphsInText('BACKGROUND\n[0001] Numbered body para.\nPlain body para.'));
 
         // 5) addParagraphNumbersToText
         const numbered0 = addParagraphNumbersToText([
@@ -503,6 +507,64 @@ const server = http.createServer((req, res) => {
     results['탭1 .fin→KIPO 출원서식 DOCX'] = (finRes.kipoSize > 0 && finRes.kipoParts &&
         finRes.kipoPageBreaks === 3 && finRes.kipoCaption && finRes.kipoMalgun &&
         finRes.kipoClaimIndent && finRes.kipoJustify && finRes.kipoFooter) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+
+    // .fin 흐름: 단락번호 기본 제거 + 분석결과(5단계)=변환결과(6단계) 일치 + 4단계 단락번호 추가/제거 동작
+    const finNumRes = await page.evaluate(() => {
+        const r = {};
+        const ta = document.getElementById('textInput1').value;
+        r.noNum = !/^\[\d{4,5}\]\s/m.test(ta); // .fin의 단락번호는 기본 제거
+        r.paraShown = document.getElementById('paragraphCount1').textContent;
+        r.paraRopks = countParagraphsInText(rawOutput1); // 분석결과 = 변환결과(ROPKS) 기준
+        // 4단계 단락번호 추가: '이미 존재' 오류 없이 입력창+변환결과 모두 번호 부여
+        addParagraphNumbers();
+        r.addMsg = document.getElementById('paragraphNumMessage').textContent;
+        r.addOk = r.addMsg.includes('추가되었습니다');
+        r.inputNumbered = /^\[0001\]\s/m.test(document.getElementById('textInput1').value);
+        r.outputNumbered = /^\[0001\]\s/m.test(rawOutput1) && rawOutput1.includes('TITLE OF THE INVENTION');
+        r.paraAfterAdd = document.getElementById('paragraphCount1').textContent;
+        // 단락번호 제거: 양쪽 모두 원복
+        removeParagraphNumbers();
+        r.removedInput = !/^\[\d{4,5}\]\s/m.test(document.getElementById('textInput1').value);
+        r.removedOutput = !/^\[\d{4,5}\]\s/m.test(rawOutput1) && rawOutput1.includes('TITLE OF THE INVENTION');
+        r.paraAfterRemove = document.getElementById('paragraphCount1').textContent;
+        return r;
+    });
+    results['탭1 .fin 단락번호 기본제거+추가/제거'] = (finNumRes.noNum &&
+        finNumRes.paraShown === String(finNumRes.paraRopks) && Number(finNumRes.paraShown) === 6 &&
+        finNumRes.addOk && finNumRes.inputNumbered && finNumRes.outputNumbered &&
+        finNumRes.paraAfterAdd === finNumRes.paraShown &&
+        finNumRes.removedInput && finNumRes.removedOutput &&
+        finNumRes.paraAfterRemove === finNumRes.paraShown) ? 'PASS' : 'FAIL ' + JSON.stringify(finNumRes);
+
+    // 후처리/US서식 HTML표 → OOXML: 가로+세로 병합 그리드 정합성 (fin 미리보기와 docx 일치)
+    const tblRes = await page.evaluate(() => {
+        const html = '<table>'
+            + '<tr><td rowspan="2"></td><td rowspan="2"></td><td colspan="2">Energy</td><td colspan="2">Device</td></tr>'
+            + '<tr><td>A Host</td><td>B Host</td><td>Cd/A</td><td>T97</td></tr>'
+            + '<tr><td rowspan="2">Ex 1</td><td>HOMO</td><td>-5.58</td><td>-5.42</td><td rowspan="2">11.83</td><td rowspan="2">105%</td></tr>'
+            + '<tr><td>LUMO</td><td>-1.88</td><td>-1.99</td></tr>'
+            + '</table>';
+        // 각 행의 그리드 폭(gridSpan 합) 계산
+        const rowWidths = (xml) => (xml.match(/<w:tr>[\s\S]*?<\/w:tr>/g) || []).map(tr =>
+            (tr.match(/<w:tc>[\s\S]*?<\/w:tc>/g) || []).reduce((a, tc) => {
+                const m = tc.match(/<w:gridSpan w:val="(\d+)"\/>/);
+                return a + (m ? parseInt(m[1], 10) : 1);
+            }, 0));
+        const check = (xml) => ({
+            widths: rowWidths(xml),
+            restart: (xml.match(/<w:vMerge w:val="restart"\/>/g) || []).length,
+            cont: (xml.match(/<w:vMerge\/>/g) || []).length,
+            gridCols: (xml.match(/<w:gridCol /g) || []).length
+        });
+        return { tab2: check(convertHtmlTableToOoxml(html)), tab3: check(convertTableToDocx3(html)) };
+    });
+    for (const key of ['tab2', 'tab3']) {
+        const c = tblRes[key];
+        const ok = c.widths.length === 4 && c.widths.every(w => w === 6) &&
+            c.restart === 5 && c.cont === 5 && c.gridCols === 6;
+        results[`${key === 'tab2' ? '탭2 후처리' : '탭3 US서식'} HTML표 세로병합 그리드`] =
+            ok ? 'PASS' : 'FAIL ' + JSON.stringify(c);
+    }
 
     console.log('=== 테스트 결과 ===');
     for (const [k, v] of Object.entries(results)) console.log(`${v.startsWith('PASS') ? '✅' : '❌'} ${k}: ${v}`);

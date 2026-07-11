@@ -713,31 +713,17 @@
             return res;
         }
         
-        // HTML 표를 OOXML 표로 변환 (정규식 기반)
+        // HTML 표를 OOXML 표로 변환
+        // finParseHtmlTable/finLayoutTableGrid(utils.js)로 그리드를 계산해
+        // 가로 병합(gridSpan) + 세로 병합(vMerge restart/continue 자리 셀)을 모두 반영한다.
+        // (Word 표는 rowspan이 이어지는 행에도 vMerge 자리 셀이 있어야 열이 틀어지지 않음)
         function convertHtmlTableToOoxml(tableHtml) {
-            // 행 추출
-            const trMatches = tableHtml.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi);
-            if (!trMatches || trMatches.length === 0) return '';
-            
-            // 열 개수 계산
-            let maxCols = 0;
-            trMatches.forEach(tr => {
-                let colCount = 0;
-                const tdMatches = tr.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi);
-                if (tdMatches) {
-                    tdMatches.forEach(td => {
-                        const colspanMatch = td.match(/colspan\s*=\s*["']?(\d+)["']?/i);
-                        colCount += colspanMatch ? parseInt(colspanMatch[1]) : 1;
-                    });
-                }
-                maxCols = Math.max(maxCols, colCount);
-            });
-            
-            if (maxCols === 0) return '';
-            
+            const grid = finLayoutTableGrid(finParseHtmlTable(tableHtml));
+            if (!grid.maxCols || !grid.rows.length) return '';
+
             // 테이블 XML 생성
             let tblXml = '<w:tbl>';
-            
+
             // 테이블 속성 (테두리 설정)
             tblXml += '<w:tblPr>';
             tblXml += '<w:tblStyle w:val="TableGrid"/>';
@@ -751,56 +737,48 @@
             tblXml += '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="000000"/>';
             tblXml += '</w:tblBorders>';
             tblXml += '</w:tblPr>';
-            
+
             // 테이블 그리드
             tblXml += '<w:tblGrid>';
-            for (let i = 0; i < maxCols; i++) {
+            for (let i = 0; i < grid.maxCols; i++) {
                 tblXml += '<w:gridCol w:w="2000"/>';
             }
             tblXml += '</w:tblGrid>';
-            
-            // 행 처리
-            trMatches.forEach(tr => {
+
+            // 행 처리 (그리드 슬롯 단위 — 병합 자리 셀 포함)
+            for (const slots of grid.rows) {
                 tblXml += '<w:tr>';
-                const tdMatches = tr.match(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi);
-                if (tdMatches) {
-                    tdMatches.forEach(td => {
-                        tblXml += '<w:tc>';
-                        
-                        // colspan 추출
-                        const colspanMatch = td.match(/colspan\s*=\s*["']?(\d+)["']?/i);
-                        if (colspanMatch && parseInt(colspanMatch[1]) > 1) {
-                            tblXml += '<w:tcPr>';
-                            tblXml += `<w:gridSpan w:val="${colspanMatch[1]}"/>`;
-                            tblXml += '</w:tcPr>';
+                for (const s of slots) {
+                    tblXml += '<w:tc>';
+
+                    // tcPr 자식 순서: gridSpan → vMerge (OOXML 스키마 순서)
+                    let tcPr = '';
+                    if (s.colspan > 1) tcPr += `<w:gridSpan w:val="${s.colspan}"/>`;
+                    if (s.vMerge === 'restart') tcPr += '<w:vMerge w:val="restart"/>';
+                    else if (s.vMerge === 'continue') tcPr += '<w:vMerge/>';
+                    if (tcPr) tblXml += `<w:tcPr>${tcPr}</w:tcPr>`;
+
+                    // <br> 태그를 줄바꿈으로 변환 후, 여러 줄이면 여러 단락으로
+                    const cellContent = String(s.content).replace(/<br\s*\/?>/gi, '\n');
+                    const lines = cellContent.split('\n');
+                    let hasContent = false;
+                    lines.forEach(line => {
+                        if (line.trim()) {
+                            tblXml += `<w:p>${parseOoxml(line)}</w:p>`;
+                            hasContent = true;
                         }
-                        
-                        // 셀 내용 추출 (태그 제거하고 내용만)
-                        let cellContent = td.replace(/<t[dh][^>]*>/i, '').replace(/<\/t[dh]>/i, '');
-                        // <br> 태그를 줄바꿈으로 변환
-                        cellContent = cellContent.replace(/<br\s*\/?>/gi, '\n');
-                        
-                        // 여러 줄이면 여러 단락으로
-                        const lines = cellContent.split('\n');
-                        let hasContent = false;
-                        lines.forEach(line => {
-                            if (line.trim()) {
-                                tblXml += `<w:p>${parseOoxml(line)}</w:p>`;
-                                hasContent = true;
-                            }
-                        });
-                        
-                        // 빈 셀이면 빈 단락 추가
-                        if (!hasContent) {
-                            tblXml += '<w:p></w:p>';
-                        }
-                        
-                        tblXml += '</w:tc>';
                     });
+
+                    // 빈 셀이면 빈 단락 추가
+                    if (!hasContent) {
+                        tblXml += '<w:p></w:p>';
+                    }
+
+                    tblXml += '</w:tc>';
                 }
                 tblXml += '</w:tr>';
-            });
-            
+            }
+
             tblXml += '</w:tbl>';
             return tblXml;
         }

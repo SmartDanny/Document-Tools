@@ -118,6 +118,7 @@
         }, { threshold: 0 }).observe(_tabNavEl);
 
         // 단락 개수 계산 헬퍼 (단락번호 추가 기준과 동일한 규칙 적용)
+        // 이미 [NNNN] 번호가 붙은 단락도 하나의 단락으로 센다(번호 유무와 무관한 실제 단락 개수).
         // isPatentSectionSubtitle, isClaimsStartLine, isCrossRefLine은 utils.js에서 로드됨
         function countParagraphsInText(text) {
             const lines = text.split('\n');
@@ -125,11 +126,13 @@
             const crossIdx = lines.findIndex(isCrossRefLine);
             let count = 0, inTable = false;
             for (let i = 0; i < lines.length; i++) {
-                const line = lines[i], t = line.trim();
+                const t = lines[i].trim();
                 if (t.startsWith('<table')) inTable = true;
                 if (t.endsWith('</table>')) { inTable = false; continue; }
                 const stopped = (stopIdx >= 0 && i >= stopIdx) || (crossIdx >= 0 && i < crossIdx);
-                if (!stopped && t && !isPatentSectionSubtitle(line) && !inTable && /[.。]["']?$/.test(t) && !/^\[\d{4,5}\]\s/.test(t)) count++;
+                // 기존 단락번호를 떼고 판별 → 번호가 있어도 같은 규칙으로 카운트
+                const core = t.replace(/^\[\d{4,5}\]\s?/, '');
+                if (!stopped && core && !isPatentSectionSubtitle(core) && !inTable && /[.。]["']?$/.test(core)) count++;
             }
             return count;
         }
