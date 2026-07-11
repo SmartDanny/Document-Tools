@@ -690,6 +690,97 @@ function finImgFormatToMime(fmt) {
     return 'image/jpeg'; // jpg/jpeg 및 기본값
 }
 
+// ============================================
+// 의심 문자 검사 (특허명세서에서 잘 사용되지 않는 문자)
+// ============================================
+
+// 검사 패턴 목록. 배열 순서 = 매칭 우선순위(긴 패턴 먼저) = 보고서 표시 순서.
+// 유니코드 첨자는 정규화(finNormalizeScripts) 전 원문에서 검사해야 누락분까지 잡힌다.
+const SUSPICIOUS_CHAR_PATTERNS = [
+    { label: '유니코드 첨자', re: /[₀-ₜ⁰-ⁿ¹²³]/g }, // ₀-ₜ ⁰-ⁿ ¹²³
+    { label: '"**"', re: /\*\*/g },
+    { label: '"*?"', re: /\*\?/g },
+    { label: '"?*"', re: /\?\*/g },
+    { label: '"?"', re: /[?？]/g }, // 반각/전각 물음표
+    { label: '대체문자(�)', re: /�/g }
+];
+
+/**
+ * 문자열에서 의심 문자 발생 위치 수집. 긴 패턴이 먼저 소비한 위치는
+ * 뒤 패턴에서 제외한다(예: "*?"의 ?는 단독 "?"로 중복 집계하지 않음).
+ * @param {string} str
+ * @returns {Array<{label:string, index:number, match:string}>} index 오름차순
+ */
+function finScanSuspicious(str) {
+    const found = [];
+    const consumed = new Set();
+    for (const p of SUSPICIOUS_CHAR_PATTERNS) {
+        p.re.lastIndex = 0;
+        let m;
+        while ((m = p.re.exec(str)) !== null) {
+            const start = m.index, end = m.index + m[0].length;
+            let overlap = false;
+            for (let i = start; i < end; i++) { if (consumed.has(i)) { overlap = true; break; } }
+            if (overlap) continue;
+            for (let i = start; i < end; i++) consumed.add(i);
+            found.push({ label: p.label, index: start, match: m[0] });
+        }
+    }
+    found.sort((a, b) => a.index - b.index);
+    return found;
+}
+
+// 발생 위치 앞뒤 ±15자 발췌 (줄바꿈 등 공백류는 한 칸으로 축약)
+function finSuspiciousExcerpt(str, index, len) {
+    const clip = (s) => s.replace(/\s+/g, ' ');
+    return {
+        before: clip(str.slice(Math.max(0, index - 15), index)),
+        match: str.substr(index, len),
+        after: clip(str.slice(index + len, index + len + 15))
+    };
+}
+
+// 발생 목록을 패턴(label)별로 그룹화 → [{label, count, occurrences}]
+function finGroupSuspicious(all) {
+    const out = [];
+    for (const p of SUSPICIOUS_CHAR_PATTERNS) {
+        const occurrences = all.filter(a => a.label === p.label).map(a => a.occ);
+        if (occurrences.length) out.push({ label: p.label, count: occurrences.length, occurrences });
+    }
+    return out;
+}
+
+/**
+ * 라인 텍스트에서 의심 문자 검사 (.docx 업로드용 — 행 번호 + 앞뒤 발췌로 위치 표기)
+ * @param {string} text
+ * @returns {Array<{label, count, occurrences:Array<{line, before, match, after}>}>}
+ */
+function findSuspiciousInText(text) {
+    const all = [];
+    String(text == null ? '' : text).split('\n').forEach((lineStr, i) => {
+        for (const f of finScanSuspicious(lineStr)) {
+            all.push({ label: f.label, occ: Object.assign({ line: i + 1 }, finSuspiciousExcerpt(lineStr, f.index, f.match.length)) });
+        }
+    });
+    return finGroupSuspicious(all);
+}
+
+/**
+ * 단락 배열에서 의심 문자 검사 (.fin 업로드용 — 단락번호 등 loc + 앞뒤 발췌로 위치 표기)
+ * @param {Array<{loc:string, text:string}>} paras - 정규화 전 원문 단락 (fin-parser의 ir.rawParas)
+ * @returns {Array<{label, count, occurrences:Array<{loc, before, match, after}>}>}
+ */
+function findSuspiciousInParas(paras) {
+    const all = [];
+    for (const p of (paras || [])) {
+        const t = String(p.text == null ? '' : p.text);
+        for (const f of finScanSuspicious(t)) {
+            all.push({ label: f.label, occ: Object.assign({ loc: p.loc || '' }, finSuspiciousExcerpt(t, f.index, f.match.length)) });
+        }
+    }
+    return finGroupSuspicious(all);
+}
+
 /**
  * IR의 단락 배열을 라인 텍스트로 직렬화 (내부 <br/>는 별도 라인으로 분해, 번호는 첫 줄에만)
  * @param {Array} paras - {num, text} 또는 문자열의 배열

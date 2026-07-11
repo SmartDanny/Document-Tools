@@ -348,6 +348,40 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.equal(u.finCleanMultiline(''), '');
     });
 
+    test('findSuspiciousInText: 의심 문자 행 기반 검출 (.docx)', () => {
+        const text = 'AB₂C\n정상 문장.\nX** Y*? Z?* W?\n？전각 문장';
+        const items = u.findSuspiciousInText(text);
+        const byLabel = Object.fromEntries(items.map(i => [i.label, i]));
+        // 유니코드 첨자: 1건, 1행, 앞뒤 발췌
+        assert.equal(byLabel['유니코드 첨자'].count, 1);
+        assertSameJson(byLabel['유니코드 첨자'].occurrences[0],
+            { line: 1, before: 'AB', match: '₂', after: 'C' });
+        // 조합 패턴 우선 매칭: "*?"/"?*"에 소비된 ?는 단독 "?"로 중복 집계하지 않음
+        assert.equal(byLabel['"**"'].count, 1);
+        assert.equal(byLabel['"*?"'].count, 1);
+        assert.equal(byLabel['"?*"'].count, 1);
+        assert.equal(byLabel['"?"'].count, 2); // W?(반각) + ？(전각)
+        assert.equal(byLabel['"?"'].occurrences[1].line, 4);
+        // 정상 텍스트/<sub> 태그는 미검출
+        assert.equal(u.findSuspiciousInText('SiO<sub>2</sub>를 포함하는 정상 문장.').length, 0);
+        assert.equal(u.findSuspiciousInText('').length, 0);
+    });
+
+    test('findSuspiciousInParas: 단락번호 위치 표기 (.fin)', () => {
+        const items = u.findSuspiciousInParas([
+            { loc: '[0002]', text: '배경기술 H₂O₂ 포함.' },
+            { loc: '【청구항 1】', text: '온도 300?에서 처리.' },
+            { loc: '[표 1]', text: 'Ex | A** | B' }
+        ]);
+        const byLabel = Object.fromEntries(items.map(i => [i.label, i]));
+        assert.equal(byLabel['유니코드 첨자'].count, 2);
+        assert.equal(byLabel['유니코드 첨자'].occurrences[0].loc, '[0002]');
+        assert.equal(byLabel['"?"'].count, 1);
+        assert.equal(byLabel['"?"'].occurrences[0].loc, '【청구항 1】');
+        assert.equal(byLabel['"**"'].occurrences[0].loc, '[표 1]');
+        assert.equal(u.findSuspiciousInParas([]).length, 0);
+    });
+
     test('finImgFormatToMime', () => {
         assert.equal(u.finImgFormatToMime('jpg'), 'image/jpeg');
         assert.equal(u.finImgFormatToMime('JPEG'), 'image/jpeg');
