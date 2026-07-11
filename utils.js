@@ -712,10 +712,12 @@ function finParasToLines(paras, withNum) {
  * IR → KIPO 출원서식 라인 텍스트(【】 부제 + [NNNN] 단락번호 + <table>/<sub> 태그).
  * 기존 탭1 텍스트 파이프라인(부제표준화·단락번호·HTML 미리보기)과 그대로 합류한다.
  * @param {Object} ir - fin-parser의 parseFinFile 결과
+ * @param {boolean} [numbered=true] - false면 .fin의 [NNNN] 단락번호를 제외 (단락번호 추가 기능으로 새로 부여 가능)
  * @returns {string} 줄바꿈으로 연결된 라인 텍스트
  */
-function finBuildKipoLineText(ir) {
+function finBuildKipoLineText(ir, numbered) {
     if (!ir) return '';
+    if (numbered == null) numbered = true;
     const L = [];
     L.push('【발명의 설명】');
     L.push('【발명의 명칭】');
@@ -723,36 +725,36 @@ function finBuildKipoLineText(ir) {
     else if (ir.titleRaw) L.push(ir.titleRaw);
     if (ir.titleEn) L.push(ir.titleEn);
     L.push('【기술분야】');
-    L.push(...finParasToLines(ir.technicalField, true));
+    L.push(...finParasToLines(ir.technicalField, numbered));
     L.push('【발명의 배경이 되는 기술】');
-    L.push(...finParasToLines(ir.backgroundArt, true));
+    L.push(...finParasToLines(ir.backgroundArt, numbered));
     L.push('【발명의 내용】');
     if (ir.techProblem && ir.techProblem.length) {
         L.push('【해결하고자 하는 과제】');
-        L.push(...finParasToLines(ir.techProblem, true));
+        L.push(...finParasToLines(ir.techProblem, numbered));
     }
     if (ir.techSolution && ir.techSolution.length) {
         L.push('【과제의 해결 수단】');
-        L.push(...finParasToLines(ir.techSolution, true));
+        L.push(...finParasToLines(ir.techSolution, numbered));
     }
     if (ir.advantageousEffects && ir.advantageousEffects.length) {
         L.push('【발명의 효과】');
-        L.push(...finParasToLines(ir.advantageousEffects, true));
+        L.push(...finParasToLines(ir.advantageousEffects, numbered));
     }
     L.push('【도면의 간단한 설명】');
-    L.push(...finParasToLines(ir.descriptionOfDrawings, true));
+    L.push(...finParasToLines(ir.descriptionOfDrawings, numbered));
     L.push('【발명을 실시하기 위한 구체적인 내용】');
     for (const item of (ir.embodiments || [])) {
         if (item.kind === 'table') {
             if (item.num) L.push(`[표 ${item.num}]`);
             L.push(item.html);
         } else {
-            L.push((item.num ? `[${item.num}] ` : '') + (item.text || ''));
+            L.push((numbered && item.num ? `[${item.num}] ` : '') + (item.text || ''));
         }
     }
     if (ir.referenceSigns && ir.referenceSigns.length) {
         L.push('【부호의 설명】');
-        L.push(...finParasToLines(ir.referenceSigns, true));
+        L.push(...finParasToLines(ir.referenceSigns, numbered));
     }
     L.push('【청구범위】');
     for (const c of (ir.claims || [])) {

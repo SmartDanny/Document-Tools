@@ -154,6 +154,10 @@ const server = http.createServer((req, res) => {
             'A device comprising a sensor.'
         ].join('\n');
         assert('countParagraphsInText', countParagraphsInText(sampleText) === 3, countParagraphsInText(sampleText));
+        // 이미 번호가 붙은 단락도 실제 단락으로 카운트
+        assert('countParagraphsInText 번호포함',
+            countParagraphsInText('BACKGROUND\n[0001] Numbered body para.\nPlain body para.') === 2,
+            countParagraphsInText('BACKGROUND\n[0001] Numbered body para.\nPlain body para.'));
 
         // 5) addParagraphNumbersToText
         const numbered0 = addParagraphNumbersToText([
@@ -503,6 +507,34 @@ const server = http.createServer((req, res) => {
     results['탭1 .fin→KIPO 출원서식 DOCX'] = (finRes.kipoSize > 0 && finRes.kipoParts &&
         finRes.kipoPageBreaks === 3 && finRes.kipoCaption && finRes.kipoMalgun &&
         finRes.kipoClaimIndent && finRes.kipoJustify && finRes.kipoFooter) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+
+    // .fin 흐름: 단락번호 기본 제거 + 분석결과(5단계)=변환결과(6단계) 일치 + 4단계 단락번호 추가/제거 동작
+    const finNumRes = await page.evaluate(() => {
+        const r = {};
+        const ta = document.getElementById('textInput1').value;
+        r.noNum = !/^\[\d{4,5}\]\s/m.test(ta); // .fin의 단락번호는 기본 제거
+        r.paraShown = document.getElementById('paragraphCount1').textContent;
+        r.paraRopks = countParagraphsInText(rawOutput1); // 분석결과 = 변환결과(ROPKS) 기준
+        // 4단계 단락번호 추가: '이미 존재' 오류 없이 입력창+변환결과 모두 번호 부여
+        addParagraphNumbers();
+        r.addMsg = document.getElementById('paragraphNumMessage').textContent;
+        r.addOk = r.addMsg.includes('추가되었습니다');
+        r.inputNumbered = /^\[0001\]\s/m.test(document.getElementById('textInput1').value);
+        r.outputNumbered = /^\[0001\]\s/m.test(rawOutput1) && rawOutput1.includes('TITLE OF THE INVENTION');
+        r.paraAfterAdd = document.getElementById('paragraphCount1').textContent;
+        // 단락번호 제거: 양쪽 모두 원복
+        removeParagraphNumbers();
+        r.removedInput = !/^\[\d{4,5}\]\s/m.test(document.getElementById('textInput1').value);
+        r.removedOutput = !/^\[\d{4,5}\]\s/m.test(rawOutput1) && rawOutput1.includes('TITLE OF THE INVENTION');
+        r.paraAfterRemove = document.getElementById('paragraphCount1').textContent;
+        return r;
+    });
+    results['탭1 .fin 단락번호 기본제거+추가/제거'] = (finNumRes.noNum &&
+        finNumRes.paraShown === String(finNumRes.paraRopks) && Number(finNumRes.paraShown) === 6 &&
+        finNumRes.addOk && finNumRes.inputNumbered && finNumRes.outputNumbered &&
+        finNumRes.paraAfterAdd === finNumRes.paraShown &&
+        finNumRes.removedInput && finNumRes.removedOutput &&
+        finNumRes.paraAfterRemove === finNumRes.paraShown) ? 'PASS' : 'FAIL ' + JSON.stringify(finNumRes);
 
     // 후처리/US서식 HTML표 → OOXML: 가로+세로 병합 그리드 정합성 (fin 미리보기와 docx 일치)
     const tblRes = await page.evaluate(() => {

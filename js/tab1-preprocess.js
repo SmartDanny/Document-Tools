@@ -34,13 +34,16 @@
                 const ir = await parseFinFile(file);
                 finParsedIR1 = ir;
 
-                // 1단계 창: .fin 원본 부제(국문 【】) 그대로 표시
-                const kipoText = finBuildKipoLineText(ir);
+                // 1단계 창: .fin 원본 부제(국문 【】) 그대로 표시.
+                // 단, .fin의 [NNNN] 단락번호는 기본 제거 — ROPKS 변환 산출물에는 번호가 없고,
+                // 필요 시 4단계 '단락번호 추가'로 새로 부여한다. (KIPO 출원서식 DOCX는 IR 기반이라 번호 유지)
+                const kipoText = finBuildKipoLineText(ir, false);
                 // 변환결과(6단계): 해외출원용 국문(ROPKS) 기준
                 const ropksText = finBuildRopksLineText(ir);
                 document.getElementById('textInput1').value = kipoText;
-                const subscriptCount = (kipoText.match(/<sub>/gi) || []).length;
-                const superscriptCount = (kipoText.match(/<sup>/gi) || []).length;
+                // 분석 결과(5단계)는 변환결과(6단계) 텍스트 기준으로 집계
+                const subscriptCount = (ropksText.match(/<sub>/gi) || []).length;
+                const superscriptCount = (ropksText.match(/<sup>/gi) || []).length;
                 displayResult1({ text: kipoText, outputText: ropksText, subscriptCount, superscriptCount });
 
                 // .fin 산출물 섹션 표시
@@ -207,7 +210,8 @@
             const outText = (r.outputText != null) ? r.outputText : r.text;
             document.getElementById('subCount1').textContent = r.subscriptCount;
             document.getElementById('supCount1').textContent = r.superscriptCount;
-            document.getElementById('paragraphCount1').textContent = countParagraphsInText(r.text);
+            // 분석 결과(단락/청구항/표 개수)는 변환결과 텍스트(outText) 기준 — 6단계 표시 내용과 일치
+            document.getElementById('paragraphCount1').textContent = countParagraphsInText(outText);
 
             originalText1 = r.text; // 원본 저장
             rawOutput1 = outText;
@@ -221,9 +225,9 @@
             // 파일 분석 결과 표시
             updateFileAnalysisDisplay();
             
-            // 청구항 개수 계산 - 【청구항 XX】 패턴에서 가장 큰 숫자 찾기
+            // 청구항 개수 계산 - 【청구항 XX】 패턴에서 가장 큰 숫자 찾기 (변환결과 기준)
             let claimCount = 0;
-            const claimMatches = r.text.match(/【청구항\s*(\d+)】/g);
+            const claimMatches = outText.match(/【청구항\s*(\d+)】/g);
             if (claimMatches) {
                 claimMatches.forEach(match => {
                     const num = parseInt(match.match(/\d+/)[0]);
@@ -231,9 +235,9 @@
                 });
             }
             document.getElementById('claimCount1').textContent = claimCount;
-            
-            // 표 개수 계산
-            const tableMatches = r.text.match(/<table[^>]*>/gi);
+
+            // 표 개수 계산 (변환결과 기준)
+            const tableMatches = outText.match(/<table[^>]*>/gi);
             const tableCount = tableMatches ? tableMatches.length : 0;
             document.getElementById('tableCount1').textContent = tableCount;
             
@@ -251,7 +255,8 @@
                 .replace(/&lt;td([^&]*)&gt;/g,'<span class="table-tag">&lt;td$1&gt;</span>')
                 .replace(/&lt;\/td&gt;/g,'<span class="table-tag">&lt;/td&gt;</span>')
                 .replace(/&lt;br&gt;/g,'<span class="table-tag">&lt;br&gt;</span>')
-                .replace(/__([^_]+)__/g,'<span class="warn-mark">$1</span>');
+                .replace(/__([^_]+)__/g,'<span class="warn-mark">$1</span>')
+                .replace(/\[(\d{4,5})\]/g,'<span class="para-num-mark">[$1]</span>');
             document.getElementById('output1').innerHTML = outputHtml;
             
             // 미리보기 - 표는 실제 HTML로 렌더링
@@ -654,13 +659,10 @@
             executeAddParagraphNumbers();
         }
         
-        function executeAddParagraphNumbers() {
-            const msg = document.getElementById('paragraphNumMessage');
-            const textInput1El = document.getElementById('textInput1');
-            const currentText = textInput1El.value;
-            
-            // 부제목/청구항/CROSS-REFERENCE 판별 함수는 utils.js에서 로드됨
-            const lines = currentText.split('\n');
+        // 라인 텍스트에 [NNNN] 단락번호 부여 (표 내용/부제/청구항 이후 제외, 마침표로 끝나는 단락만)
+        // 부제목/청구항/CROSS-REFERENCE 판별 함수는 utils.js에서 로드됨
+        function numberParagraphLines1(text) {
+            const lines = text.split('\n');
 
             // CROSS-REFERENCE 시작 위치 찾기 (이전 줄은 단락번호 부여 안함)
             const crossRefIndex = lines.findIndex(isCrossRefLine);
@@ -688,7 +690,7 @@
 
                 // 종료 지점 도달 시, 또는 CROSS-REFERENCE 이전이면 번호 추가 중단
                 let stopNumbering = (stopIndex >= 0 && i >= stopIndex) || (crossRefIndex >= 0 && i < crossRefIndex);
-                
+
                 // 번호 붙이기 로직 (표 내용에는 번호 부여하지 않음, 마침표로 끝나는 단락만)
                 if (!stopNumbering && trimmed && !isPatentSectionSubtitle(line) && !insideTable && /[.。]["']?$/.test(trimmed)) {
                     // 이미 단락번호가 있는지 확인 (4~5자리)
@@ -703,28 +705,50 @@
                     resultLines.push(line);
                 }
             }
-            
-            rawOutput1 = resultLines.join('\n');
-            document.getElementById('textInput1').value = rawOutput1;
-            
-            // 분석 결과 업데이트
-            fileAnalysisResult.hasParagraphNum = true;
-            updateFileAnalysisDisplay();
-            
-            // 화면 업데이트
-            document.getElementById('output1').innerHTML = rawOutput1.replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                .replace(/&lt;sub&gt;/g,'<span class="sub-tag">&lt;sub&gt;</span>')
-                .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
-                .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
-                .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>')
-                .replace(/\[(\d{4,5})\]/g,'<span class="para-num-mark">[$1]</span>');
-            document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>');
-            
-            showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${counter - 1}개 단락)`, 'success');
-            
-            // 단락 개수 업데이트
-            document.getElementById('paragraphCount1').textContent = counter - 1;
-            
+
+            return { text: resultLines.join('\n'), count: counter - 1 };
+        }
+
+        function executeAddParagraphNumbers() {
+            const msg = document.getElementById('paragraphNumMessage');
+            const textInput1El = document.getElementById('textInput1');
+            const currentText = textInput1El.value;
+
+            const numberedInput = numberParagraphLines1(currentText);
+            textInput1El.value = numberedInput.text;
+            let count = numberedInput.count;
+
+            if (finParsedIR1 && rawOutput1) {
+                // fin 흐름: 변환결과(ROPKS)가 입력창과 다른 텍스트 — 같은 규칙으로 별도 번호 부여 후 재렌더링
+                const numberedOutput = numberParagraphLines1(rawOutput1);
+                count = numberedOutput.count;
+                displayResult1({
+                    text: numberedInput.text,
+                    outputText: numberedOutput.text,
+                    subscriptCount: (numberedOutput.text.match(/<sub>/gi) || []).length,
+                    superscriptCount: (numberedOutput.text.match(/<sup>/gi) || []).length
+                });
+            } else {
+                rawOutput1 = numberedInput.text;
+
+                // 분석 결과 업데이트
+                fileAnalysisResult.hasParagraphNum = true;
+                updateFileAnalysisDisplay();
+
+                // 화면 업데이트
+                document.getElementById('output1').innerHTML = rawOutput1.replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/&lt;sub&gt;/g,'<span class="sub-tag">&lt;sub&gt;</span>')
+                    .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
+                    .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
+                    .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>')
+                    .replace(/\[(\d{4,5})\]/g,'<span class="para-num-mark">[$1]</span>');
+                document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>');
+
+                // 단락 개수 업데이트
+                document.getElementById('paragraphCount1').textContent = count;
+            }
+
+            showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${count}개 단락)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
@@ -742,39 +766,58 @@
             }
             
             // 모든 단락을 검사하여 규정된 양식(4~5자리 숫자)의 단락번호 제거
-            const lines = currentText.split('\n');
-            let removedCount = 0;
-            const resultLines = lines.map(line => {
-                if (/^\[\d{4,5}\]\s?/.test(line)) {
-                    removedCount++;
-                    return line.replace(/^\[\d{4,5}\]\s?/, '');
-                }
-                return line;
-            });
-            
+            const strip = (text) => {
+                let removed = 0;
+                const out = text.split('\n').map(line => {
+                    if (/^\[\d{4,5}\]\s?/.test(line)) {
+                        removed++;
+                        return line.replace(/^\[\d{4,5}\]\s?/, '');
+                    }
+                    return line;
+                }).join('\n');
+                return { text: out, removed };
+            };
+
+            const inputStripped = strip(currentText);
+            // fin 흐름: 변환결과(ROPKS)가 입력창과 다른 텍스트 — 거기서도 제거
+            const finFlow = !!(finParsedIR1 && rawOutput1);
+            const outputStripped = finFlow ? strip(rawOutput1) : null;
+
+            const removedCount = Math.max(inputStripped.removed, outputStripped ? outputStripped.removed : 0);
             if (removedCount === 0) {
                 showMessage(msg, '❌ 제거할 단락번호가 없습니다.', 'error');
                 return;
             }
-            
-            rawOutput1 = resultLines.join('\n');
-            document.getElementById('textInput1').value = rawOutput1;
-            
-            // 분석 결과 업데이트
-            fileAnalysisResult.hasParagraphNum = false;
-            updateFileAnalysisDisplay();
-            
-            // 화면 업데이트
-            document.getElementById('output1').innerHTML = rawOutput1.replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                .replace(/&lt;sub&gt;/g,'<span class="sub-tag">&lt;sub&gt;</span>')
-                .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
-                .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
-                .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>');
-            document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>');
-            
-            // 단락 개수 초기화
-            document.getElementById('paragraphCount1').textContent = 0;
-            
+
+            document.getElementById('textInput1').value = inputStripped.text;
+
+            if (finFlow) {
+                // 재렌더링 + 분석결과 재계산 (변환결과 기준)
+                displayResult1({
+                    text: inputStripped.text,
+                    outputText: outputStripped.text,
+                    subscriptCount: (outputStripped.text.match(/<sub>/gi) || []).length,
+                    superscriptCount: (outputStripped.text.match(/<sup>/gi) || []).length
+                });
+            } else {
+                rawOutput1 = inputStripped.text;
+
+                // 분석 결과 업데이트
+                fileAnalysisResult.hasParagraphNum = false;
+                updateFileAnalysisDisplay();
+
+                // 화면 업데이트
+                document.getElementById('output1').innerHTML = rawOutput1.replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/&lt;sub&gt;/g,'<span class="sub-tag">&lt;sub&gt;</span>')
+                    .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
+                    .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
+                    .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>');
+                document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>');
+
+                // 단락 개수 재계산 (번호 제거 후에도 실제 단락 수 유지)
+                document.getElementById('paragraphCount1').textContent = countParagraphsInText(rawOutput1);
+            }
+
             showMessage(msg, `✅ 단락번호가 제거되었습니다! (${removedCount}개 제거)`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }

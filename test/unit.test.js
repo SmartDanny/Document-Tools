@@ -373,6 +373,17 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.ok(!t.includes('【발명의 효과】'));
     });
 
+    test('finBuildKipoLineText(numbered=false): [NNNN] 단락번호 제외', () => {
+        const t = u.finBuildKipoLineText(ir, false);
+        assert.ok(!/^\[\d{4,5}\]\s/m.test(t)); // 단락번호 없음
+        assert.ok(t.includes('【기술분야】\n본 개시는'));
+        assert.ok(t.includes('【발명을 실시하기 위한 구체적인 내용】\n실시예 설명.')); // embodiment 번호도 제외
+        assert.ok(t.includes('[표 1]')); // 표 캡션은 유지
+        assert.ok(t.includes('【부호의 설명】\nSUB: 기판\nTR: 트랜지스터'));
+        // 부제/본문 구성은 numbered=true와 동일
+        assert.ok(t.includes('【청구범위】\n【청구항 1】'));
+    });
+
     test('finBuildRopksLineText: 변환결과(ROPKS 기준) 라인 텍스트', () => {
         const t = u.finBuildRopksLineText(ir);
         assert.ok(t.includes('TITLE OF THE INVENTION\n연마 슬러리{POLISHING SLURRY}')); // 부제 영문 + 제목 국문{영문}
