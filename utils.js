@@ -765,9 +765,13 @@ function findSuspiciousInText(text) {
     return finGroupSuspicious(all);
 }
 
+// 인라인 이미지 경고 항목의 label (본문 <p> 안의 <img> — 특수문자 이미지 추정, 텍스트 변환 시 소실)
+const FIN_INLINE_IMG_LABEL = '본문 인라인 이미지(특수문자 소실 위험)';
+
 /**
  * 단락 배열에서 의심 문자 검사 (.fin 업로드용 — 단락번호 등 loc + 앞뒤 발췌로 위치 표기)
- * @param {Array<{loc:string, text:string}>} paras - 정규화 전 원문 단락 (fin-parser의 ir.rawParas)
+ * 단락에 inlineImgs(본문 인라인 <img> 개수)가 있으면 별도 경고 항목으로 함께 보고한다.
+ * @param {Array<{loc:string, text:string, inlineImgs?:number}>} paras - 정규화 전 원문 단락 (fin-parser의 ir.rawParas)
  * @returns {Array<{label, count, occurrences:Array<{loc, before, match, after}>}>}
  */
 function findSuspiciousInParas(paras) {
@@ -778,7 +782,24 @@ function findSuspiciousInParas(paras) {
             all.push({ label: f.label, occ: Object.assign({ loc: p.loc || '' }, finSuspiciousExcerpt(t, f.index, f.match.length)) });
         }
     }
-    return finGroupSuspicious(all);
+    const out = finGroupSuspicious(all);
+
+    // 본문 인라인 이미지 — 단락별 1개 항목(개수 표기), count는 이미지 총 개수
+    const imgOcc = [];
+    let imgTotal = 0;
+    for (const p of (paras || [])) {
+        const n = p.inlineImgs || 0;
+        if (!n) continue;
+        imgTotal += n;
+        imgOcc.push({
+            loc: p.loc || '',
+            before: '',
+            match: `[인라인 이미지 ${n}개]`,
+            after: p.text ? ' ' + String(p.text).replace(/\s+/g, ' ').slice(0, 20) : ''
+        });
+    }
+    if (imgTotal) out.push({ label: FIN_INLINE_IMG_LABEL, count: imgTotal, occurrences: imgOcc });
+    return out;
 }
 
 /**
