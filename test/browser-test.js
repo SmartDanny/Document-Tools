@@ -504,6 +504,36 @@ const server = http.createServer((req, res) => {
         finRes.kipoPageBreaks === 3 && finRes.kipoCaption && finRes.kipoMalgun &&
         finRes.kipoClaimIndent && finRes.kipoJustify && finRes.kipoFooter) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
 
+    // 후처리/US서식 HTML표 → OOXML: 가로+세로 병합 그리드 정합성 (fin 미리보기와 docx 일치)
+    const tblRes = await page.evaluate(() => {
+        const html = '<table>'
+            + '<tr><td rowspan="2"></td><td rowspan="2"></td><td colspan="2">Energy</td><td colspan="2">Device</td></tr>'
+            + '<tr><td>A Host</td><td>B Host</td><td>Cd/A</td><td>T97</td></tr>'
+            + '<tr><td rowspan="2">Ex 1</td><td>HOMO</td><td>-5.58</td><td>-5.42</td><td rowspan="2">11.83</td><td rowspan="2">105%</td></tr>'
+            + '<tr><td>LUMO</td><td>-1.88</td><td>-1.99</td></tr>'
+            + '</table>';
+        // 각 행의 그리드 폭(gridSpan 합) 계산
+        const rowWidths = (xml) => (xml.match(/<w:tr>[\s\S]*?<\/w:tr>/g) || []).map(tr =>
+            (tr.match(/<w:tc>[\s\S]*?<\/w:tc>/g) || []).reduce((a, tc) => {
+                const m = tc.match(/<w:gridSpan w:val="(\d+)"\/>/);
+                return a + (m ? parseInt(m[1], 10) : 1);
+            }, 0));
+        const check = (xml) => ({
+            widths: rowWidths(xml),
+            restart: (xml.match(/<w:vMerge w:val="restart"\/>/g) || []).length,
+            cont: (xml.match(/<w:vMerge\/>/g) || []).length,
+            gridCols: (xml.match(/<w:gridCol /g) || []).length
+        });
+        return { tab2: check(convertHtmlTableToOoxml(html)), tab3: check(convertTableToDocx3(html)) };
+    });
+    for (const key of ['tab2', 'tab3']) {
+        const c = tblRes[key];
+        const ok = c.widths.length === 4 && c.widths.every(w => w === 6) &&
+            c.restart === 5 && c.cont === 5 && c.gridCols === 6;
+        results[`${key === 'tab2' ? '탭2 후처리' : '탭3 US서식'} HTML표 세로병합 그리드`] =
+            ok ? 'PASS' : 'FAIL ' + JSON.stringify(c);
+    }
+
     console.log('=== 테스트 결과 ===');
     for (const [k, v] of Object.entries(results)) console.log(`${v.startsWith('PASS') ? '✅' : '❌'} ${k}: ${v}`);
     console.log('\n=== 콘솔 에러 ===');

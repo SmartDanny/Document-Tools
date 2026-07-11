@@ -1408,6 +1408,7 @@
             let inClaims = false;
             let inAbstract = false;
             let inTable = false;
+            let tableBuffer = '';
 
             const crossRefIndex = lines.findIndex(isCrossRefLine);
 
@@ -1427,15 +1428,15 @@
                     continue;
                 }
 
-                // 표 내부 추적
+                // 표 내부 추적 — 여러 줄에 걸친 표는 </table>까지 모아 한 번에 변환
                 if (trimmed.toLowerCase().startsWith('<table')) inTable = true;
-                if (trimmed.toLowerCase().includes('</table>')) {
-                    inTable = false;
-                    bodyContent += convertTableToDocx3(para);
-                    continue;
-                }
                 if (inTable) {
-                    bodyContent += convertTableToDocx3(para);
+                    tableBuffer += para + '\n';
+                    if (trimmed.toLowerCase().includes('</table>')) {
+                        bodyContent += convertTableToDocx3(tableBuffer);
+                        tableBuffer = '';
+                        inTable = false;
+                    }
                     continue;
                 }
 
@@ -1850,13 +1851,13 @@
         }
         
         // 표를 DOCX 형식으로 변환
+        // finParseHtmlTable/finLayoutTableGrid(utils.js)로 그리드를 계산해
+        // 가로 병합(gridSpan) + 세로 병합(vMerge restart/continue 자리 셀)을 모두 반영한다.
+        // (Word 표는 rowspan이 이어지는 행에도 vMerge 자리 셀이 있어야 열이 틀어지지 않음)
         function convertTableToDocx3(html) {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
-            const table = doc.querySelector('table');
-            
-            if (!table) return `<w:p><w:r><w:t>${escapeXml(html)}</w:t></w:r></w:p>`;
-            
+            const grid = finLayoutTableGrid(finParseHtmlTable(html));
+            if (!grid.maxCols || !grid.rows.length) return `<w:p><w:r><w:t>${escapeXml(html)}</w:t></w:r></w:p>`;
+
             let tableXml = '<w:tbl><w:tblPr><w:tblBorders>';
             tableXml += '<w:top w:val="single" w:sz="4" w:color="000000"/>';
             tableXml += '<w:left w:val="single" w:sz="4" w:color="000000"/>';
@@ -1865,25 +1866,26 @@
             tableXml += '<w:insideH w:val="single" w:sz="4" w:color="000000"/>';
             tableXml += '<w:insideV w:val="single" w:sz="4" w:color="000000"/>';
             tableXml += '</w:tblBorders></w:tblPr>';
-            
-            const rows = table.querySelectorAll('tr');
-            rows.forEach(row => {
+
+            tableXml += '<w:tblGrid>';
+            for (let i = 0; i < grid.maxCols; i++) tableXml += '<w:gridCol w:w="1500"/>';
+            tableXml += '</w:tblGrid>';
+
+            for (const slots of grid.rows) {
                 tableXml += '<w:tr>';
-                const cells = row.querySelectorAll('td, th');
-                cells.forEach(cell => {
-                    const colspan = cell.getAttribute('colspan') || 1;
-                    const rowspan = cell.getAttribute('rowspan') || 1;
-                    
+                for (const s of slots) {
+                    // tcPr 자식 순서: gridSpan → vMerge (OOXML 스키마 순서)
                     tableXml += '<w:tc><w:tcPr>';
-                    if (colspan > 1) tableXml += `<w:gridSpan w:val="${colspan}"/>`;
-                    if (rowspan > 1) tableXml += `<w:vMerge w:val="restart"/>`;
+                    if (s.colspan > 1) tableXml += `<w:gridSpan w:val="${s.colspan}"/>`;
+                    if (s.vMerge === 'restart') tableXml += '<w:vMerge w:val="restart"/>';
+                    else if (s.vMerge === 'continue') tableXml += '<w:vMerge/>';
                     tableXml += '</w:tcPr>';
-                    tableXml += `<w:p><w:r>${convertRunToDocx3(cell.innerHTML)}</w:r></w:p>`;
+                    tableXml += `<w:p><w:r>${convertRunToDocx3(String(s.content))}</w:r></w:p>`;
                     tableXml += '</w:tc>';
-                });
+                }
                 tableXml += '</w:tr>';
-            });
-            
+            }
+
             tableXml += '</w:tbl>';
             return tableXml;
         }
