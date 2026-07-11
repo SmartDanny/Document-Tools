@@ -27,6 +27,7 @@ async function buildSampleFin() {
     const hlz = new JSZipNode();
     hlz.file('DOC_251222.xml', xml);
     hlz.file('pat00001.png', png1x1, { base64: true });
+    hlz.file('pat00099.png', png1x1, { base64: true }); // 본문 인라인 특수문자 이미지
     const hlzBuf = await hlz.generateAsync({ type: 'nodebuffer' });
     const fin = new JSZipNode();
     fin.file('xresult.inf', '[APPLICATION]\nAPPNAME=DOC_251222.hlz,2025-12-22,1\n');
@@ -475,6 +476,8 @@ const server = http.createServer((req, res) => {
         r.suspItems = susp ? susp.items.map(i => [i.label, i.count, i.occurrences[0].loc]) : null;
         r.suspBadge = document.getElementById('analysisSuspicious').textContent;
         r.suspPanel = document.getElementById('suspiciousDetail1').textContent;
+        // 인라인 이미지 마커는 표시/복사용 텍스트에서 제거됨
+        r.textNoMarker = !ta.includes('data-finimg') && !rawOutput1.includes('data-finimg');
         const blobR = await buildFinDocxBlob(finParsedIR1, 'ropks');
         r.ropksSize = blobR.size;
         const zr = await JSZip.loadAsync(new Uint8Array(await blobR.arrayBuffer()));
@@ -484,6 +487,9 @@ const server = http.createServer((req, res) => {
         r.ropksTableMerge = docR.includes('<w:vMerge w:val="restart"/>') &&
             docR.includes('<w:vMerge/>') && docR.includes('<w:gridSpan w:val="2"/>');
         r.ropksImg = /<w:drawing>/.test(docR);
+        // 본문 인라인 이미지([0005]의 pat00099.png) 임베드: 도면 + 인라인 = 미디어 2개, 마커 잔존 없음
+        r.ropksMediaCount = Object.keys(zr.files).filter(f => f.startsWith('word/media/') && !zr.files[f].dir).length;
+        r.ropksInlineImg = docR.includes('name="pat00099.png"') && !docR.includes('data-finimg');
         r.ropksSubtitle = docR.includes('TITLE OF THE INVENTION');
         r.ropksSub2 = /vertAlign w:val="subscript"/.test(docR);
         r.ropksMedia = Object.keys(zr.files).some(f => f.startsWith('word/media/'));
@@ -527,13 +533,16 @@ const server = http.createServer((req, res) => {
     results['탭1 .fin 특수문자 경고(정규화 전+단락번호)'] = (finRes.suspMode === 'para' &&
         JSON.stringify(finRes.suspItems) === JSON.stringify([
             ['유니코드 첨자', 2, '[0002]'],
-            ['본문 인라인 이미지(특수문자 소실 위험)', 1, '[0005]']
+            ['본문 인라인 이미지(이미지로 임베드됨)', 1, '[0005]']
         ]) &&
         finRes.suspBadge.includes('특수문자 3건') && finRes.suspPanel.includes('[0002]') &&
-        finRes.suspPanel.includes('[0005]') && finRes.suspPanel.includes('원본과의 대조'))
-        ? 'PASS' : 'FAIL ' + JSON.stringify({ mode: finRes.suspMode, items: finRes.suspItems, badge: finRes.suspBadge, panel: finRes.suspPanel && finRes.suspPanel.slice(0, 300) });
+        finRes.suspPanel.includes('[0005]') &&
+        // 손상 잔재 없음(첨자·인라인 이미지뿐) → 원본 대조 안내 미표시
+        !finRes.suspPanel.includes('원본과의 대조') && finRes.textNoMarker)
+        ? 'PASS' : 'FAIL ' + JSON.stringify({ mode: finRes.suspMode, items: finRes.suspItems, badge: finRes.suspBadge, panel: finRes.suspPanel && finRes.suspPanel.slice(0, 300), noMarker: finRes.textNoMarker });
     results['탭1 .fin→ROPKS DOCX'] = (finRes.ropksSize > 0 && finRes.ropksTable && finRes.ropksTableMerge && finRes.ropksImg &&
         finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia &&
+        finRes.ropksMediaCount === 2 && finRes.ropksInlineImg &&
         finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline &&
         finRes.ropksLineNo && finRes.ropksJustify && finRes.ropksPageBreak &&
         finRes.ropksNoUnicodeScript && finRes.ropksFooter &&

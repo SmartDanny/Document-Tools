@@ -239,9 +239,9 @@
 
             const MAX_SHOWN = 5; // 패턴당 표시 상한
             let html = '<div class="suspicious-title">⚠️ 특허명세서에서 잘 사용되지 않는 문자가 발견되었습니다. 아래 위치를 확인해주세요.</div>';
-            // .fin에서 손상 잔재("**"/"?" 등)나 인라인 이미지가 발견되면 특수문자 소실 가능성 안내
-            // (유니코드 첨자 항목만 있는 경우는 정상 변환 대상이므로 제외)
-            if (s.mode === 'para' && s.items.some(it => it.label !== '유니코드 첨자')) {
+            // .fin에서 손상 잔재("**"/"?" 등)가 발견되면 특수문자 소실 가능성 안내.
+            // 유니코드 첨자(정상 변환됨)·인라인 이미지(docx에 임베드됨)만 있는 경우는 제외.
+            if (s.mode === 'para' && s.items.some(it => it.label !== '유니코드 첨자' && it.label !== FIN_INLINE_IMG_LABEL)) {
                 html += '<div class="suspicious-notice">🔍 이 .fin은 전자출원 문서 작성 단계에서 특수문자(문자표 미지원 첨자 등)가'
                     + ' 소실·대체되었을 가능성이 있습니다. 사무소 원본과의 대조(문서비교 탭)를 권장합니다.</div>';
             }

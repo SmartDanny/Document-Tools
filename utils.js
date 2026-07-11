@@ -765,8 +765,15 @@ function findSuspiciousInText(text) {
     return finGroupSuspicious(all);
 }
 
-// 인라인 이미지 경고 항목의 label (본문 <p> 안의 <img> — 특수문자 이미지 추정, 텍스트 변환 시 소실)
-const FIN_INLINE_IMG_LABEL = '본문 인라인 이미지(특수문자 소실 위험)';
+// 인라인 이미지 경고 항목의 label (본문 <p> 안의 <img> — 특수문자 이미지 추정.
+// docx에는 원본 이미지로 임베드되지만 텍스트가 아니므로 확인 대상으로 표시)
+const FIN_INLINE_IMG_LABEL = '본문 인라인 이미지(이미지로 임베드됨)';
+
+// 본문 인라인 이미지 마커 (fin-parser가 <p> 내 <img>를 보존한 형태) 제거 —
+// 라인 텍스트(변환결과 표시/복사·후처리 파이프라인)에서 사용. docx 모델에는 마커가 유지된다.
+function finStripInlineImgMarkers(s) {
+    return String(s == null ? '' : s).replace(/<img\b[^>]*data-finimg[^>]*>/gi, '');
+}
 
 /**
  * 단락 배열에서 의심 문자 검사 (.fin 업로드용 — 단락번호 등 loc + 앞뒤 발췌로 위치 표기)
@@ -777,7 +784,8 @@ const FIN_INLINE_IMG_LABEL = '본문 인라인 이미지(특수문자 소실 위
 function findSuspiciousInParas(paras) {
     const all = [];
     for (const p of (paras || [])) {
-        const t = String(p.text == null ? '' : p.text);
+        // 마커(<img data-finimg…>) 자체는 검사/발췌 대상에서 제외
+        const t = finStripInlineImgMarkers(p.text);
         for (const f of finScanSuspicious(t)) {
             all.push({ label: f.label, occ: Object.assign({ loc: p.loc || '' }, finSuspiciousExcerpt(t, f.index, f.match.length)) });
         }
@@ -791,11 +799,12 @@ function findSuspiciousInParas(paras) {
         const n = p.inlineImgs || 0;
         if (!n) continue;
         imgTotal += n;
+        const plain = finStripInlineImgMarkers(p.text).replace(/\s+/g, ' ').trim();
         imgOcc.push({
             loc: p.loc || '',
             before: '',
             match: `[인라인 이미지 ${n}개]`,
-            after: p.text ? ' ' + String(p.text).replace(/\s+/g, ' ').slice(0, 20) : ''
+            after: plain ? ' ' + plain.slice(0, 20) : ''
         });
     }
     if (imgTotal) out.push({ label: FIN_INLINE_IMG_LABEL, count: imgTotal, occurrences: imgOcc });
@@ -884,7 +893,8 @@ function finBuildKipoLineText(ir, numbered) {
         L.push('【도면】');
         for (const d of ir.drawings) L.push(`【도 ${d.num}】`);
     }
-    return L.join('\n');
+    // 본문 인라인 이미지 마커는 텍스트 파이프라인에서 제외 (docx 모델에는 유지되어 이미지로 임베드)
+    return finStripInlineImgMarkers(L.join('\n'));
 }
 
 /**
@@ -899,7 +909,8 @@ function finModelToLineText(model) {
         else if (b.t === 'p') L.push(b.text == null ? '' : b.text);
         // img / pagebreak → 텍스트 표시 제외
     }
-    return L.join('\n');
+    // 본문 인라인 이미지 마커는 텍스트 파이프라인에서 제외 (docx 모델에는 유지되어 이미지로 임베드)
+    return finStripInlineImgMarkers(L.join('\n'));
 }
 
 /**
