@@ -316,40 +316,68 @@
                 priorityText1 = `본 출원은 ${parts.join(' 및 ')}에 기초한 것으로서, 그 전체 내용이 참조로 여기에 포함된다.`;
             }
             const crossRef = `CROSS-REFERENCE TO RELATED APPLICATIONS\n${priorityText1}`;
-            
-            // BACKGROUND로 시작하는 단락 찾기
-            const lines = currentText.split('\n');
-            let insertIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-                if (lines[i].trim().toUpperCase().startsWith('BACKGROUND')) {
-                    insertIndex = i;
-                    break;
+
+            // 삽입 위치: BACKGROUND(영문) 앞. 국문 KIPO 텍스트는 【기술분야】 앞
+            // (US 서식에서 Field는 BACKGROUND 하위 절이므로 【기술분야】 앞이 같은 위치),
+            // 【기술분야】가 없으면 【발명의 배경이 되는 기술】/【배경기술】 앞.
+            const findInsertIndex = (lines) => {
+                const patterns = [
+                    (t) => t.toUpperCase().startsWith('BACKGROUND'),
+                    (t) => /^【기술\s*분야】$/.test(t),
+                    (t) => /^【(발명의 배경이 되는 기술|배경\s*기술)】$/.test(t)
+                ];
+                for (const match of patterns) {
+                    const idx = lines.findIndex(l => match(l.trim()));
+                    if (idx >= 0) return idx;
                 }
-            }
-            
-            if (insertIndex < 0) {
-                showMessage(msg, '❌ BACKGROUND 단락을 찾을 수 없습니다.', 'error');
+                return -1;
+            };
+            const insertInto = (text) => {
+                const lines = text.split('\n');
+                const idx = findInsertIndex(lines);
+                if (idx < 0) return null;
+                lines.splice(idx, 0, crossRef); // 삽입 (빈줄 없이)
+                return lines.join('\n');
+            };
+
+            const newInput = insertInto(currentText);
+            if (newInput == null) {
+                showMessage(msg, '❌ BACKGROUND(또는 【기술분야】) 단락을 찾을 수 없습니다.', 'error');
                 return;
             }
-            
-            // 삽입 (빈줄 없이)
-            lines.splice(insertIndex, 0, crossRef);
-            rawOutput1 = lines.join('\n');
-            document.getElementById('textInput1').value = rawOutput1;
-            
-            // 분석 결과 업데이트
-            fileAnalysisResult.hasCrossRef = true;
-            updateFileAnalysisDisplay();
-            
-            // 화면 업데이트
-            document.getElementById('output1').innerHTML = rawOutput1.replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                .replace(/&lt;sub&gt;/g,'<span class="sub-tag">&lt;sub&gt;</span>')
-                .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
-                .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
-                .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>')
-                .replace(/__([^_]+)__/g,'<span class="warn-mark">$1</span>');
-            document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>').replace(/__([^_]+)__/g,'<strong>$1</strong>');
-            
+
+            if (finParsedIR1 && rawOutput1) {
+                // fin 흐름: 변환결과(ROPKS)에도 같은 위치 규칙으로 삽입 후 재렌더링
+                const newOutput = insertInto(rawOutput1);
+                if (newOutput == null) {
+                    showMessage(msg, '❌ 변환결과에서 BACKGROUND 단락을 찾을 수 없습니다.', 'error');
+                    return;
+                }
+                document.getElementById('textInput1').value = newInput;
+                displayResult1({
+                    text: newInput,
+                    outputText: newOutput,
+                    subscriptCount: (newOutput.match(/<sub>/gi) || []).length,
+                    superscriptCount: (newOutput.match(/<sup>/gi) || []).length
+                });
+            } else {
+                rawOutput1 = newInput;
+                document.getElementById('textInput1').value = rawOutput1;
+
+                // 분석 결과 업데이트
+                fileAnalysisResult.hasCrossRef = true;
+                updateFileAnalysisDisplay();
+
+                // 화면 업데이트
+                document.getElementById('output1').innerHTML = rawOutput1.replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/&lt;sub&gt;/g,'<span class="sub-tag">&lt;sub&gt;</span>')
+                    .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
+                    .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
+                    .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>')
+                    .replace(/__([^_]+)__/g,'<span class="warn-mark">$1</span>');
+                document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>').replace(/__([^_]+)__/g,'<strong>$1</strong>');
+            }
+
             showMessage(msg, '✅ Cross-reference가 삽입되었습니다!', 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }

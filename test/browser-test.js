@@ -536,6 +536,32 @@ const server = http.createServer((req, res) => {
         finNumRes.removedInput && finNumRes.removedOutput &&
         finNumRes.paraAfterRemove === finNumRes.paraShown) ? 'PASS' : 'FAIL ' + JSON.stringify(finNumRes);
 
+    // .fin 흐름: Cross-reference 삽입 — 국문 KIPO(【기술분야】 앞) + 변환결과 ROPKS(BACKGROUND 앞) 동시 삽입
+    const finXrefRes = await page.evaluate(() => {
+        const r = {};
+        priorityList1.push({ year: '2026', month: '01', day: '29', appNum: '10-2026-0017835' });
+        insertCrossReference();
+        r.msg = document.getElementById('crossRefMessage').textContent;
+        r.ok = r.msg.includes('삽입되었습니다');
+        const ta = document.getElementById('textInput1').value;
+        const xref = 'CROSS-REFERENCE TO RELATED APPLICATIONS';
+        // 국문 KIPO: 【기술분야】 바로 앞에 삽입
+        r.inputPos = ta.indexOf(xref) >= 0 && ta.indexOf(xref) < ta.indexOf('【기술분야】');
+        r.inputBody = ta.includes('2026년 01월 29일 출원된 대한민국 특허출원 제10-2026-0017835호');
+        // 변환결과 ROPKS: TITLE 뒤, BACKGROUND OF THE INVENTION 앞에 삽입
+        r.outputPos = rawOutput1.indexOf(xref) > rawOutput1.indexOf('TITLE OF THE INVENTION') &&
+            rawOutput1.indexOf(xref) < rawOutput1.indexOf('BACKGROUND OF THE INVENTION');
+        r.analysis = fileAnalysisResult.hasCrossRef === true;
+        // 분석결과 단락 개수: 본문 6 + Cross-reference 본문 1 = 7 (변환결과 기준과 일치)
+        r.paraShown = document.getElementById('paragraphCount1').textContent;
+        r.paraRopks = countParagraphsInText(rawOutput1);
+        return r;
+    });
+    results['탭1 .fin Cross-reference 삽입'] = (finXrefRes.ok && finXrefRes.inputPos && finXrefRes.inputBody &&
+        finXrefRes.outputPos && finXrefRes.analysis &&
+        finXrefRes.paraShown === String(finXrefRes.paraRopks) && Number(finXrefRes.paraShown) === 7)
+        ? 'PASS' : 'FAIL ' + JSON.stringify(finXrefRes);
+
     // 후처리/US서식 HTML표 → OOXML: 가로+세로 병합 그리드 정합성 (fin 미리보기와 docx 일치)
     const tblRes = await page.evaluate(() => {
         const html = '<table>'
