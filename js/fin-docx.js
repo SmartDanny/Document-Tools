@@ -98,9 +98,13 @@ function finRopksParagraphXml(block) {
     // 정렬 미지정 시 양쪽맞춤(both) — 샘플의 Normal 스타일 기본값
     const jc = `<w:jc w:val="${block.align || 'both'}"/>`;
     const outline = bold ? '<w:outlineLvl w:val="0"/>' : '';
+    // 고정 행 높이(exact)로 각 행 = FIN_ROPKS_LINE.
+    // 단, 인라인 이미지가 포함된 단락은 exact이면 이미지가 행 높이에 잘려 글자와 겹치므로
+    // 최소 행 높이(atLeast)로 렌더링해 이미지가 있는 행만 이미지 높이만큼 늘어나게 한다.
+    const lineRule = /<img\b[^>]*data-finimg/i.test(String(block.text)) ? 'atLeast' : 'exact';
     // widowControl=0: 위도우/고아 제어를 꺼 단락 끝줄이 다음 페이지로 밀리지 않게 → 페이지당 20행 유지
-    // 고정 행 높이(exact)로 각 행 = FIN_ROPKS_LINE. wordWrap/autoSpace off는 참조 샘플과 동일(양쪽맞춤 채움)
-    const pPr = `<w:pPr>${brk}<w:widowControl w:val="0"/>${suppress}${FIN_ROPKS_TABS}<w:wordWrap w:val="0"/><w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/><w:adjustRightInd w:val="0"/><w:spacing w:line="${FIN_ROPKS_LINE}" w:lineRule="exact"/>${ind}<w:contextualSpacing/>${jc}${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
+    // wordWrap/autoSpace off는 참조 샘플과 동일(양쪽맞춤 채움)
+    const pPr = `<w:pPr>${brk}<w:widowControl w:val="0"/>${suppress}${FIN_ROPKS_TABS}<w:wordWrap w:val="0"/><w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/><w:adjustRightInd w:val="0"/><w:spacing w:line="${FIN_ROPKS_LINE}" w:lineRule="${lineRule}"/>${ind}<w:contextualSpacing/>${jc}${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
     return `<w:p>${pPr}${finRunsFromText(block.text, rPrInner)}</w:p>`;
 }
 

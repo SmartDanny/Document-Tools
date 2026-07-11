@@ -225,8 +225,12 @@
                 return;
             }
 
-            const total = s.items.reduce((a, it) => a + it.count, 0);
-            if (!total) {
+            // 인라인 이미지(docx에 원본 임베드됨)는 경고가 아닌 정보성 안내로 분리
+            const warnItems = s.items.filter(it => it.label !== FIN_INLINE_IMG_LABEL);
+            const imgItem = s.items.find(it => it.label === FIN_INLINE_IMG_LABEL) || null;
+            const warnTotal = warnItems.reduce((a, it) => a + it.count, 0);
+
+            if (!warnTotal && !imgItem) {
                 badgeEl.innerHTML = '<span class="analysis-icon">✅</span> 특수문자 없음';
                 badgeEl.className = 'analysis-item exists';
                 detailEl.className = 'suspicious-detail hidden';
@@ -234,29 +238,44 @@
                 return;
             }
 
-            badgeEl.innerHTML = `<span class="analysis-icon">⚠️</span> 특수문자 ${total}건`;
-            badgeEl.className = 'analysis-item warn';
-
             const MAX_SHOWN = 5; // 패턴당 표시 상한
-            let html = '<div class="suspicious-title">⚠️ 특허명세서에서 잘 사용되지 않는 문자가 발견되었습니다. 아래 위치를 확인해주세요.</div>';
-            // .fin에서 손상 잔재("**"/"?" 등)가 발견되면 특수문자 소실 가능성 안내.
-            // 유니코드 첨자(정상 변환됨)·인라인 이미지(docx에 임베드됨)만 있는 경우는 제외.
-            if (s.mode === 'para' && s.items.some(it => it.label !== '유니코드 첨자' && it.label !== FIN_INLINE_IMG_LABEL)) {
-                html += '<div class="suspicious-notice">🔍 이 .fin은 전자출원 문서 작성 단계에서 특수문자(문자표 미지원 첨자 등)가'
-                    + ' 소실·대체되었을 가능성이 있습니다. 사무소 원본과의 대조(문서비교 탭)를 권장합니다.</div>';
-            }
-            for (const it of s.items) {
-                html += `<div class="suspicious-group"><strong>${esc(it.label)}</strong> ${it.count}건<ul>`;
+            const occListHtml = (it) => {
+                let ul = '<ul>';
                 for (const o of it.occurrences.slice(0, MAX_SHOWN)) {
                     const where = s.mode === 'para' ? (o.loc || '(위치 미상)') : `${o.line}행`;
-                    html += `<li><span class="suspicious-loc">${esc(where)}</span>`
+                    ul += `<li><span class="suspicious-loc">${esc(where)}</span>`
                         + `…${esc(o.before)}<span class="warn-mark">${esc(o.match)}</span>${esc(o.after)}…</li>`;
                 }
-                if (it.occurrences.length > MAX_SHOWN) html += `<li>외 ${it.occurrences.length - MAX_SHOWN}건</li>`;
-                html += '</ul></div>';
+                if (it.occurrences.length > MAX_SHOWN) ul += `<li>외 ${it.occurrences.length - MAX_SHOWN}건</li>`;
+                return ul + '</ul>';
+            };
+
+            let html = '';
+            if (warnTotal) {
+                badgeEl.innerHTML = `<span class="analysis-icon">⚠️</span> 특수문자 ${warnTotal}건`;
+                badgeEl.className = 'analysis-item warn';
+                html += '<div class="suspicious-title">⚠️ 특허명세서에서 잘 사용되지 않는 문자가 발견되었습니다. 아래 위치를 확인해주세요.</div>';
+                // .fin에서 손상 잔재("**"/"?" 등)가 발견되면 특수문자 소실 가능성 안내.
+                // 유니코드 첨자(정상 변환됨)만 있는 경우는 제외.
+                if (s.mode === 'para' && warnItems.some(it => it.label !== '유니코드 첨자')) {
+                    html += '<div class="suspicious-notice">🔍 이 .fin은 전자출원 문서 작성 단계에서 특수문자(문자표 미지원 첨자 등)가'
+                        + ' 소실·대체되었을 가능성이 있습니다. 사무소 원본과의 대조(문서비교 탭)를 권장합니다.</div>';
+                }
+                for (const it of warnItems) {
+                    html += `<div class="suspicious-group"><strong>${esc(it.label)}</strong> ${it.count}건${occListHtml(it)}</div>`;
+                }
+            } else {
+                // 인라인 이미지만 있는 경우 — 정보성 배지 (경고 아님)
+                badgeEl.innerHTML = `<span class="analysis-icon">ℹ️</span> 인라인 이미지 ${imgItem.count}건`;
+                badgeEl.className = 'analysis-item info';
+            }
+            if (imgItem) {
+                html += `<div class="suspicious-info">ℹ️ <strong>본문 인라인 이미지</strong> ${imgItem.count}건 —`
+                    + ' docx 변환 시 해당 위치에 원본 이미지가 그대로 삽입됩니다.'
+                    + ` 텍스트가 아니므로 번역·복사 작업 시 참고하세요.${occListHtml(imgItem)}</div>`;
             }
             detailEl.innerHTML = html;
-            detailEl.className = 'suspicious-detail';
+            detailEl.className = warnTotal ? 'suspicious-detail' : 'suspicious-detail info';
         }
         
         function displayResult1(r) {
