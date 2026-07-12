@@ -492,8 +492,15 @@ const server = http.createServer((req, res) => {
 <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="160"/></w:pPr></w:style>
 <w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:after="240"/></w:pPr></w:style>
 </w:styles>`;
-            const fileSpA = await makeComparePkg('<w:p><w:r><w:t>Spacing test line.</w:t></w:r></w:p>');
-            const fileSpB = await makeComparePkg('<w:p><w:r><w:t>Spacing test line changed.</w:t></w:r></w:p>');
+            // 단락 직접 서식(pPr>spacing w:after)이 있는 same/modified/added 단락 — Word가
+            // 단락마다 직접 넣은 8pt는 스타일보다 우선하므로 body 레벨에서도 0으로 통일되어야 함
+            const fileSpA = await makeComparePkg(
+                '<w:p><w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:t>Same spacing line.</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:spacing w:after="160"/></w:pPr><w:r><w:t>Spacing test line.</w:t></w:r></w:p>');
+            const fileSpB = await makeComparePkg(
+                '<w:p><w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:t>Same spacing line.</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:spacing w:after="160"/></w:pPr><w:r><w:t>Spacing test line changed.</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:spacing w:after="160" w:afterAutospacing="1"/></w:pPr><w:r><w:t>Added spacing paragraph fresh.</w:t></w:r></w:p>');
             docxDataA = await loadDocxForCompare(fileSpA);
             docxDataB = await loadDocxForCompare(fileSpB);
             docxDataB.zip.file('word/styles.xml', spacedStyles);
@@ -507,6 +514,13 @@ const server = http.createServer((req, res) => {
                 assert('비교: 기본 단락 뒤 간격 0pt 패치', !spStyles.includes('w:after="160"') &&
                     /w:pPrDefault[\s\S]*?w:after="0"/.test(spStyles) &&
                     spStyles.includes('w:after="240"') && spStyles.includes('w:line="259"'), spStyles);
+                // 단락 직접 서식: same/modified/added 모두 w:after=0, 줄간격(w:line)은 유지
+                const spXml = await zsp.file('word/document.xml').async('string');
+                assert('비교: 단락 직접 서식 뒤 간격 0pt', !spXml.includes('w:after="160"') &&
+                    !spXml.includes('afterAutospacing') &&
+                    (spXml.match(/w:after="0"/g) || []).length >= 3 &&
+                    spXml.includes('w:line="276"') &&
+                    spXml.includes('<w:ins ') && spXml.includes('<w:del '), spXml.slice(0, 1500));
             }
         }
 

@@ -1539,6 +1539,26 @@ ${bodyContent}
             return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + serializeXmlNode(dom.documentElement);
         }
 
+        // 비교 결과 body의 단락 직접 서식(pPr>spacing)에서 단락 뒤 간격 제거
+        // (Word가 단락마다 직접 넣은 w:after는 스타일 기본값보다 우선하므로,
+        //  styles 패치만으로는 부족 — 본문 단락 레벨에서도 0pt로 통일.
+        //  줄간격(w:line)·단락 앞 간격(w:before)은 유지)
+        function stripBodySpacingAfter(bodyXml) {
+            const dom = new DOMParser().parseFromString(
+                `<w:body xmlns:w="${DOCX_W_NS}">${bodyXml}</w:body>`, 'application/xml');
+            if (dom.getElementsByTagName('parsererror').length) return bodyXml;
+            for (const spacing of Array.from(dom.getElementsByTagName('w:spacing'))) {
+                if (spacing.parentNode && spacing.parentNode.nodeName === 'w:pPr') {
+                    spacing.setAttributeNS(DOCX_W_NS, 'w:after', '0');
+                    spacing.removeAttribute('w:afterLines');
+                    spacing.removeAttribute('w:afterAutospacing');
+                }
+            }
+            let out = '';
+            for (const c of dom.documentElement.childNodes) out += serializeXmlNode(c);
+            return out;
+        }
+
         // Track Changes가 적용된 DOCX 파일 생성
         // 수정본(B)의 패키지(스타일/글꼴/머리글/섹션 설정)를 기반으로 결과를 생성하여
         // 첨자·표·빈줄·단락 나누기 등 원본 서식을 유지한다 (MS Word 검토>비교와 동일한 방식)
@@ -1599,12 +1619,14 @@ ${bodyContent}
                     for (const c of bodyB.childNodes) {
                         if (c.nodeName === 'w:sectPr') tailSect = serializeXmlNode(c);
                     }
-                    // 단락 뒤 여백 0pt: 수정본 styles의 기본 단락 뒤 간격(Word 기본 8pt) 제거
-                    // (탭2 '워드파일 다운로드'와 동일한 규칙)
+                    // 단락 뒤 여백 0pt (탭2 '워드파일 다운로드'와 동일한 규칙):
+                    //  1) 수정본 styles의 문서 기본값(Word 기본 8pt) 제거
+                    //  2) 단락 직접 서식의 w:after도 0으로 (직접 서식이 스타일보다 우선하므로)
                     const stylesFile = dataB.zip.file('word/styles.xml');
                     if (stylesFile) {
                         dataB.zip.file('word/styles.xml', stripStylesSpacingAfter(await stylesFile.async('string')));
                     }
+                    bodyContent = stripBodySpacingAfter(bodyContent);
                 }
 
                 dataB.zip.file('word/document.xml', head + bodyContent + tailSect + '</w:body></w:document>');
