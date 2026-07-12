@@ -22,6 +22,14 @@ function finSerializeNode(node) {
     if (name === 'sup') return '<sup>' + finSerializeInline(node) + '</sup>';
     if (name === 'figref') { const n = node.getAttribute('num'); return n ? `도 ${n}` : ''; }
     if (name === 'tables') return '';                      // 표는 별도 블록으로 처리(인라인 제외)
+    if (name === 'img') {
+        // 본문 인라인 이미지(문자표 미지원 특수문자 등) — 소거하지 않고 마커로 보존.
+        // fin-docx가 마커를 이미지 런으로 임베드하고, 라인 텍스트(변환결과 표시/복사)에서는 제거된다.
+        const f = node.getAttribute('file') || '';
+        if (!f) return '';
+        return `<img data-finimg="${f}" data-wi="${node.getAttribute('wi') || ''}"`
+            + ` data-he="${node.getAttribute('he') || ''}" data-fmt="${node.getAttribute('img-format') || ''}">`;
+    }
     return finSerializeInline(node);                       // 기타 태그는 내용만
 }
 
@@ -75,6 +83,7 @@ function finCalsToHtml(tablesEl) {
                 if (nm === 'br') content += '<br>';
                 else if (nm === 'sub') content += '<sub>' + finSerializeInline(child) + '</sub>';
                 else if (nm === 'sup') content += '<sup>' + finSerializeInline(child) + '</sup>';
+                else if (nm === 'img') content += finSerializeNode(child); // 셀 내 인라인 이미지도 마커로 보존
                 else content += finSerializeInline(child);
             }
         }
@@ -294,6 +303,21 @@ async function parseFinFile(file) {
     await Promise.all(ir.drawings.map(async d => {
         const entry = imageEntries[d.file] || imageEntries[(d.file || '').split('/').pop()];
         d.base64 = entry ? await entry.async('base64') : null;
+    }));
+
+    // 본문 인라인 이미지 base64 로드 — rawParas가 제목/단락/표/청구항 원문을 모두 포함하므로
+    // 마커(data-finimg)를 여기서 스캔하면 전체 커버된다. fin-docx가 이미지 런 임베드에 사용.
+    ir.inlineImages = {};
+    const inlineFiles = new Set();
+    const markerRe = /<img\b[^>]*data-finimg="([^"]+)"[^>]*>/gi;
+    for (const p of (ir.rawParas || [])) {
+        let m;
+        markerRe.lastIndex = 0;
+        while ((m = markerRe.exec(p.text || '')) !== null) inlineFiles.add(m[1]);
+    }
+    await Promise.all([...inlineFiles].map(async f => {
+        const entry = imageEntries[f] || imageEntries[f.split('/').pop()];
+        if (entry) ir.inlineImages[f] = { base64: await entry.async('base64') };
     }));
 
     // 메타

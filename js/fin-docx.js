@@ -24,8 +24,12 @@ const FIN_ROPKS_TABS = '<w:tabs>'
         .map(pos => `<w:tab w:val="left" w:pos="${pos}"/>`).join('')
     + '</w:tabs>';
 
+// 본문 인라인 이미지 마커(data-finimg) → 이미지 런 XML 해석기.
+// buildFinDocxBlob이 빌드 동안 설정하며(미디어 등록·rid 관리 포함), 미설정 시 마커는 무시된다.
+let finInlineImgRun = null;
+
 /**
- * 첨자/줄바꿈을 포함한 텍스트를 <w:r> 런들로 변환 (rPrInner 는 vertAlign 이전까지의 런 속성)
+ * 첨자/줄바꿈/인라인 이미지 마커를 포함한 텍스트를 <w:r> 런들로 변환 (rPrInner 는 vertAlign 이전까지의 런 속성)
  * @param {string} text
  * @param {string} rPrInner - 런 공통 속성(rFonts/b/kern/sz 등)
  * @returns {string}
@@ -36,10 +40,16 @@ function finRunsFromText(text, rPrInner) {
         const parts = String(chunk).split('\n');
         for (let i = 0; i < parts.length; i++) {
             if (i > 0) runs += `<w:r><w:rPr>${rPrInner}</w:rPr><w:br/></w:r>`;
-            const t = parts[i];
-            if (t === '') continue;
-            const va = vert ? `<w:vertAlign w:val="${vert}"/>` : '';
-            runs += `<w:r><w:rPr>${rPrInner}${va}</w:rPr><w:t xml:space="preserve">${escapeXml(t)}</w:t></w:r>`;
+            // 인라인 이미지 마커는 이미지 런으로, 나머지는 텍스트 런으로
+            for (const seg of parts[i].split(/(<img\b[^>]*data-finimg="[^"]*"[^>]*>)/gi)) {
+                if (!seg) continue;
+                if (/^<img\b[^>]*data-finimg/i.test(seg)) {
+                    runs += finInlineImgRun ? finInlineImgRun(seg) : '';
+                    continue;
+                }
+                const va = vert ? `<w:vertAlign w:val="${vert}"/>` : '';
+                runs += `<w:r><w:rPr>${rPrInner}${va}</w:rPr><w:t xml:space="preserve">${escapeXml(seg)}</w:t></w:r>`;
+            }
         }
     };
     const re = /<(sub|sup)>([\s\S]*?)<\/\1>/gi;
@@ -88,9 +98,13 @@ function finRopksParagraphXml(block) {
     // 정렬 미지정 시 양쪽맞춤(both) — 샘플의 Normal 스타일 기본값
     const jc = `<w:jc w:val="${block.align || 'both'}"/>`;
     const outline = bold ? '<w:outlineLvl w:val="0"/>' : '';
+    // 고정 행 높이(exact)로 각 행 = FIN_ROPKS_LINE.
+    // 단, 인라인 이미지가 포함된 단락은 exact이면 이미지가 행 높이에 잘려 글자와 겹치므로
+    // 최소 행 높이(atLeast)로 렌더링해 이미지가 있는 행만 이미지 높이만큼 늘어나게 한다.
+    const lineRule = /<img\b[^>]*data-finimg/i.test(String(block.text)) ? 'atLeast' : 'exact';
     // widowControl=0: 위도우/고아 제어를 꺼 단락 끝줄이 다음 페이지로 밀리지 않게 → 페이지당 20행 유지
-    // 고정 행 높이(exact)로 각 행 = FIN_ROPKS_LINE. wordWrap/autoSpace off는 참조 샘플과 동일(양쪽맞춤 채움)
-    const pPr = `<w:pPr>${brk}<w:widowControl w:val="0"/>${suppress}${FIN_ROPKS_TABS}<w:wordWrap w:val="0"/><w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/><w:adjustRightInd w:val="0"/><w:spacing w:line="${FIN_ROPKS_LINE}" w:lineRule="exact"/>${ind}<w:contextualSpacing/>${jc}${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
+    // wordWrap/autoSpace off는 참조 샘플과 동일(양쪽맞춤 채움)
+    const pPr = `<w:pPr>${brk}<w:widowControl w:val="0"/>${suppress}${FIN_ROPKS_TABS}<w:wordWrap w:val="0"/><w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/><w:adjustRightInd w:val="0"/><w:spacing w:line="${FIN_ROPKS_LINE}" w:lineRule="${lineRule}"/>${ind}<w:contextualSpacing/>${jc}${outline}<w:rPr>${rPrInner}</w:rPr></w:pPr>`;
     return `<w:p>${pPr}${finRunsFromText(block.text, rPrInner)}</w:p>`;
 }
 
@@ -222,6 +236,32 @@ async function buildFinDocxBlob(ir, format) {
     let imgCount = 0;
     let body = '';
 
+    // 본문 인라인 이미지(문자표 미지원 특수문자 등) 마커 → 이미지 런.
+    // 같은 파일은 미디어/관계(rid)를 재사용하고, wp:docPr id는 런마다 고유해야 하므로 별도 카운터 사용.
+    const inlineRegistry = {};
+    let inlineDocPrId = 10000; // 도면 id(1~N)와 충돌하지 않는 대역
+    finInlineImgRun = (marker) => {
+        const attr = (n) => { const m = marker.match(new RegExp(n + '="([^"]*)"', 'i')); return m ? m[1] : ''; };
+        const file = attr('data-finimg');
+        const info = (ir.inlineImages || {})[file];
+        if (!info || !info.base64) return '';
+        let reg = inlineRegistry[file];
+        if (!reg) {
+            imgCount++;
+            const fmt = (attr('data-fmt') || file.split('.').pop() || 'jpg').toLowerCase();
+            const ext = ['png', 'gif', 'bmp', 'tif', 'tiff'].indexOf(fmt) >= 0 ? fmt : 'jpg';
+            usedExt[ext] = finImgFormatToMime(ext);
+            const rid = 'rIdImg' + imgCount;
+            const target = 'media/finimg' + imgCount + '.' + ext;
+            media.push({ path: 'word/' + target, base64: info.base64, rid, target });
+            reg = inlineRegistry[file] = { rid };
+        }
+        // 크기: KEAPS wi/he(mm). 미지정 시 글자 크기 수준(4mm)
+        const wi = parseFloat(attr('data-wi')) > 0 ? parseFloat(attr('data-wi')) : 4;
+        const he = parseFloat(attr('data-he')) > 0 ? parseFloat(attr('data-he')) : 4;
+        return mdDocxImageRunXml({ rid: reg.rid, id: ++inlineDocPrId, name: file, cx: finMmToEmu(wi), cy: finMmToEmu(he) });
+    };
+
     const isRopks = format === 'ropks';
     for (const block of model) {
         if (block.t === 'pagebreak') {
@@ -260,6 +300,8 @@ async function buildFinDocxBlob(ir, format) {
             body += isRopks ? finRopksParagraphXml(block) : finParagraphXml(block, baseSize);
         }
     }
+
+    finInlineImgRun = null; // 빌드 종료 — 해석기 해제
 
     if (!body.trim()) body = '<w:p/>';
     body += finSectPr(format);

@@ -27,6 +27,7 @@ async function buildSampleFin() {
     const hlz = new JSZipNode();
     hlz.file('DOC_251222.xml', xml);
     hlz.file('pat00001.png', png1x1, { base64: true });
+    hlz.file('pat00099.png', png1x1, { base64: true }); // 본문 인라인 특수문자 이미지
     const hlzBuf = await hlz.generateAsync({ type: 'nodebuffer' });
     const fin = new JSZipNode();
     fin.file('xresult.inf', '[APPLICATION]\nAPPNAME=DOC_251222.hlz,2025-12-22,1\n');
@@ -475,6 +476,8 @@ const server = http.createServer((req, res) => {
         r.suspItems = susp ? susp.items.map(i => [i.label, i.count, i.occurrences[0].loc]) : null;
         r.suspBadge = document.getElementById('analysisSuspicious').textContent;
         r.suspPanel = document.getElementById('suspiciousDetail1').textContent;
+        // 인라인 이미지 마커는 표시/복사용 텍스트에서 제거됨
+        r.textNoMarker = !ta.includes('data-finimg') && !rawOutput1.includes('data-finimg');
         const blobR = await buildFinDocxBlob(finParsedIR1, 'ropks');
         r.ropksSize = blobR.size;
         const zr = await JSZip.loadAsync(new Uint8Array(await blobR.arrayBuffer()));
@@ -484,6 +487,11 @@ const server = http.createServer((req, res) => {
         r.ropksTableMerge = docR.includes('<w:vMerge w:val="restart"/>') &&
             docR.includes('<w:vMerge/>') && docR.includes('<w:gridSpan w:val="2"/>');
         r.ropksImg = /<w:drawing>/.test(docR);
+        // 본문 인라인 이미지([0005]의 pat00099.png) 임베드: 도면 + 인라인 = 미디어 2개, 마커 잔존 없음
+        r.ropksMediaCount = Object.keys(zr.files).filter(f => f.startsWith('word/media/') && !zr.files[f].dir).length;
+        r.ropksInlineImg = docR.includes('name="pat00099.png"') && !docR.includes('data-finimg');
+        // 이미지 포함 단락은 고정 행높이(exact) 대신 최소 행높이(atLeast) — 이미지·글자 중첩 방지
+        r.ropksImgParaAtLeast = docR.includes(`w:line="680" w:lineRule="atLeast"`);
         r.ropksSubtitle = docR.includes('TITLE OF THE INVENTION');
         r.ropksSub2 = /vertAlign w:val="subscript"/.test(docR);
         r.ropksMedia = Object.keys(zr.files).some(f => f.startsWith('word/media/'));
@@ -527,13 +535,18 @@ const server = http.createServer((req, res) => {
     results['탭1 .fin 특수문자 경고(정규화 전+단락번호)'] = (finRes.suspMode === 'para' &&
         JSON.stringify(finRes.suspItems) === JSON.stringify([
             ['유니코드 첨자', 2, '[0002]'],
-            ['본문 인라인 이미지(특수문자 소실 위험)', 1, '[0005]']
+            ['본문 인라인 이미지(이미지로 임베드됨)', 1, '[0005]']
         ]) &&
-        finRes.suspBadge.includes('특수문자 3건') && finRes.suspPanel.includes('[0002]') &&
-        finRes.suspPanel.includes('[0005]') && finRes.suspPanel.includes('원본과의 대조'))
-        ? 'PASS' : 'FAIL ' + JSON.stringify({ mode: finRes.suspMode, items: finRes.suspItems, badge: finRes.suspBadge, panel: finRes.suspPanel && finRes.suspPanel.slice(0, 300) });
+        // 배지는 경고 항목(첨자 2건)만 집계 — 인라인 이미지는 정보성으로 분리
+        finRes.suspBadge.includes('특수문자 2건') && finRes.suspPanel.includes('[0002]') &&
+        finRes.suspPanel.includes('[0005]') &&
+        finRes.suspPanel.includes('원본 이미지가 그대로 삽입') &&
+        // 손상 잔재 없음(첨자·인라인 이미지뿐) → 원본 대조 안내 미표시
+        !finRes.suspPanel.includes('원본과의 대조') && finRes.textNoMarker)
+        ? 'PASS' : 'FAIL ' + JSON.stringify({ mode: finRes.suspMode, items: finRes.suspItems, badge: finRes.suspBadge, panel: finRes.suspPanel && finRes.suspPanel.slice(0, 300), noMarker: finRes.textNoMarker });
     results['탭1 .fin→ROPKS DOCX'] = (finRes.ropksSize > 0 && finRes.ropksTable && finRes.ropksTableMerge && finRes.ropksImg &&
         finRes.ropksSubtitle && finRes.ropksSub2 && finRes.ropksMedia &&
+        finRes.ropksMediaCount === 2 && finRes.ropksInlineImg && finRes.ropksImgParaAtLeast &&
         finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline &&
         finRes.ropksLineNo && finRes.ropksJustify && finRes.ropksPageBreak &&
         finRes.ropksNoUnicodeScript && finRes.ropksFooter &&
@@ -543,6 +556,34 @@ const server = http.createServer((req, res) => {
     results['탭1 .fin→KIPO 출원서식 DOCX'] = (finRes.kipoSize > 0 && finRes.kipoParts &&
         finRes.kipoPageBreaks === 3 && finRes.kipoCaption && finRes.kipoMalgun &&
         finRes.kipoClaimIndent && finRes.kipoJustify && finRes.kipoFooter) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+
+    // 인라인 이미지만 있는 경우: 경고(⚠️/warn)가 아닌 정보성(ℹ️/info) 배지·패널
+    const infoOnlyRes = await page.evaluate(() => {
+        const saved = fileAnalysisResult.suspicious;
+        fileAnalysisResult.suspicious = {
+            mode: 'para',
+            items: [{
+                label: FIN_INLINE_IMG_LABEL, count: 2,
+                occurrences: [{ loc: '[0005]', before: '', match: '[인라인 이미지 2개]', after: ' 실시예 설명.' }]
+            }]
+        };
+        updateSuspiciousDisplay1();
+        const badge = document.getElementById('analysisSuspicious');
+        const panel = document.getElementById('suspiciousDetail1');
+        const r = {
+            badgeText: badge.textContent, badgeClass: badge.className,
+            panelClass: panel.className,
+            panelHasWarnTitle: panel.textContent.includes('잘 사용되지 않는'),
+            panelHasInfo: panel.textContent.includes('원본 이미지가 그대로 삽입')
+        };
+        fileAnalysisResult.suspicious = saved;
+        updateSuspiciousDisplay1();
+        return r;
+    });
+    results['탭1 인라인 이미지 정보성 표시'] = (infoOnlyRes.badgeText.includes('인라인 이미지 2건') &&
+        infoOnlyRes.badgeClass.includes('info') && !infoOnlyRes.badgeClass.includes('warn') &&
+        infoOnlyRes.panelClass.includes('info') && !infoOnlyRes.panelHasWarnTitle && infoOnlyRes.panelHasInfo)
+        ? 'PASS' : 'FAIL ' + JSON.stringify(infoOnlyRes);
 
     // .fin 흐름: 단락번호 기본 제거 + 분석결과(5단계)=변환결과(6단계) 일치 + 4단계 단락번호 추가/제거 동작
     const finNumRes = await page.evaluate(() => {

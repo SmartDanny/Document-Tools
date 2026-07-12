@@ -390,7 +390,7 @@ describe('.fin 변환 순수 헬퍼', () => {
         ]);
         assert.equal(items.length, 1); // 텍스트 패턴 없음 + 이미지 항목 1개
         const img = items[0];
-        assert.equal(img.label, '본문 인라인 이미지(특수문자 소실 위험)');
+        assert.equal(img.label, '본문 인라인 이미지(이미지로 임베드됨)');
         assert.equal(img.count, 3); // 이미지 총 개수
         assert.equal(img.occurrences.length, 2); // 단락별 1건
         assert.equal(img.occurrences[0].loc, '[0010]');
@@ -399,6 +399,23 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.equal(img.occurrences[1].loc, '[0011]');
         // 이미지 없는 단락만 있으면 항목 없음
         assert.equal(u.findSuspiciousInParas([{ loc: '[0001]', text: '정상.' }]).length, 0);
+        // 마커 텍스트 자체는 검사/발췌 대상 아님
+        const mk = '<img data-finimg="pat00099.png" data-wi="3" data-he="3" data-fmt="png">';
+        assert.equal(u.findSuspiciousInParas([{ loc: '[0001]', text: `온도${mk} 유지.` }]).length, 0);
+    });
+
+    test('본문 인라인 이미지 마커: 라인 텍스트에서 제거, docx 모델에는 유지', () => {
+        const mk = '<img data-finimg="pat00099.png" data-wi="3" data-he="3" data-fmt="png">';
+        const ir2 = { technicalField: [{ num: '0001', text: `온도 300${mk} 이상.` }] };
+        const kipo = u.finBuildKipoLineText(ir2);
+        assert.ok(!kipo.includes('data-finimg')); // 표시/복사용 텍스트에서는 제거
+        assert.ok(kipo.includes('온도 300 이상.'));
+        const ropksLine = u.finBuildRopksLineText(ir2);
+        assert.ok(!ropksLine.includes('data-finimg'));
+        assert.ok(ropksLine.includes('온도 300 이상.'));
+        // docx 모델에는 마커 유지 → fin-docx가 이미지 런으로 임베드
+        const model = u.finBuildDocModel(ir2, 'ropks');
+        assert.ok(model.some(b => b.t === 'p' && String(b.text).includes('data-finimg="pat00099.png"')));
     });
 
     test('finImgFormatToMime', () => {
