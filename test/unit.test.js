@@ -506,6 +506,30 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.ok(!m.some(b => b.t === 'p' && b.text === ''));
     });
 
+    test('finBuildDocModel(ropks, {crossRef}): 삽입된 Cross-reference를 BACKGROUND 앞에 포함', () => {
+        const xrefText = '본 출원은 2026년 01월 29일 출원된 대한민국 특허출원 제10-2026-0017835호에 기초한 것으로서, 그 전체 내용이 참조로 여기에 포함된다.';
+        const m = u.finBuildDocModel(ir, 'ropks', {
+            crossRef: { title: 'CROSS-REFERENCE TO RELATED APPLICATIONS', text: xrefText }
+        });
+        const texts = m.filter(b => b.t === 'p').map(b => b.text);
+        const xrefIdx = texts.indexOf('CROSS-REFERENCE TO RELATED APPLICATIONS');
+        // 제목(TITLE) 뒤, BACKGROUND 앞에 부제+본문 순으로 삽입
+        assert.ok(xrefIdx > texts.indexOf('TITLE OF THE INVENTION'));
+        assert.ok(xrefIdx < texts.indexOf('BACKGROUND OF THE INVENTION'));
+        assert.equal(texts[xrefIdx + 1], xrefText);
+        // 부제는 볼드·들여쓰기 없음, 본문은 첫줄 들여쓰기
+        const sub = m.find(b => b.text === 'CROSS-REFERENCE TO RELATED APPLICATIONS');
+        assert.ok(sub.bold === true && !sub.indent);
+        assert.ok(m.find(b => b.text === xrefText).indent === true);
+        // title 생략 시 기본 제목 사용, crossRef 미지정/텍스트 없음이면 미포함
+        const m2 = u.finBuildDocModel(ir, 'ropks', { crossRef: { text: xrefText } });
+        assert.ok(m2.some(b => b.text === 'CROSS-REFERENCE TO RELATED APPLICATIONS'));
+        const m3 = u.finBuildDocModel(ir, 'ropks');
+        assert.ok(!m3.some(b => String(b.text).includes('CROSS-REFERENCE')));
+        const m4 = u.finBuildDocModel(ir, 'ropks', { crossRef: { title: 'CROSS-REFERENCE TO RELATED APPLICATIONS' } });
+        assert.ok(!m4.some(b => String(b.text).includes('CROSS-REFERENCE')));
+    });
+
     test('finBuildDocModel(kipo): 4부 구조 + 페이지 나누기 + [NNNN] 단락번호', () => {
         const m = u.finBuildDocModel(ir, 'kipo');
         const bold = m.filter(b => b.t === 'p' && b.bold).map(b => b.text);

@@ -1013,18 +1013,19 @@ const FIN_ROPKS_SUBTITLES = {
  * size 는 half-point, before/after 는 twips (생략 시 렌더러의 포맷 기본값).
  * @param {Object} ir - parseFinFile 결과
  * @param {string} format - 'kipo'(KIPO 출원서식) | 'ropks'(해외출원용 국문)
+ * @param {Object} [opts] - ropks 전용 { crossRef: {title, text} } — 2단계에서 삽입된 Cross-reference
  * @returns {Array<Object>} 블록 배열
  */
-function finBuildDocModel(ir, format) {
+function finBuildDocModel(ir, format, opts) {
     if (!ir) return [];
-    return format === 'ropks' ? finBuildRopksModel(ir) : finBuildKipoModel(ir);
+    return format === 'ropks' ? finBuildRopksModel(ir, opts) : finBuildKipoModel(ir);
 }
 
 // 해외출원용 국문(ROPKS): ROPKS 샘플 역설계.
 //   sub  = 볼드+밑줄 부제(들여쓰기 없음)  | body = 첫줄 들여쓰기 본문
 //   plain = 들여쓰기·볼드 없음(청구항 헤더·【도면】·【도 N】)
 //   렌더러(fin-docx.js)가 바탕체·행간518·탭스톱을 공통 적용한다.
-function finBuildRopksModel(ir) {
+function finBuildRopksModel(ir, opts) {
     const B = [];
     const sub = (text) => { if (text) B.push({ t: 'p', text, bold: true }); };
     const body = (text) => B.push({ t: 'p', text: text == null ? '' : text, indent: true });
@@ -1033,6 +1034,11 @@ function finBuildRopksModel(ir) {
 
     sub(FIN_ROPKS_SUBTITLES.title);
     body(ir.titleRaw);
+    // 2단계에서 삽입된 Cross-reference — 변환결과 텍스트와 같은 위치(BACKGROUND 앞)에 포함
+    if (opts && opts.crossRef && opts.crossRef.text) {
+        sub(opts.crossRef.title || 'CROSS-REFERENCE TO RELATED APPLICATIONS');
+        body(opts.crossRef.text);
+    }
     sub(FIN_ROPKS_SUBTITLES.background);
     sub(FIN_ROPKS_SUBTITLES.field);
     bodyParas(ir.technicalField, false);

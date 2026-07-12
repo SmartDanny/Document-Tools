@@ -226,11 +226,12 @@ function finSectPr(format) {
  * IR → DOCX Blob (KIPO 출원서식 또는 ROPKS)
  * @param {Object} ir - parseFinFile 결과
  * @param {string} format - 'kipo' | 'ropks'
+ * @param {Object} [opts] - ropks 전용 { crossRef: {title, text} } — 삽입된 Cross-reference 포함
  * @returns {Promise<Blob>}
  */
-async function buildFinDocxBlob(ir, format) {
+async function buildFinDocxBlob(ir, format, opts) {
     const baseSize = FIN_BASE_SIZE[format] || 24;
-    const model = finBuildDocModel(ir, format);
+    const model = finBuildDocModel(ir, format, opts);
     const media = [];
     const usedExt = {};
     let imgCount = 0;

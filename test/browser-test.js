@@ -469,6 +469,12 @@ const server = http.createServer((req, res) => {
         // 변환결과(output1) = ROPKS (영문 부제)
         r.resultIsRopks = document.getElementById('output1').innerHTML.includes('TITLE OF THE INVENTION');
         r.sectionVisible = !document.getElementById('finOutputSection').classList.contains('hidden');
+        // ROPKS DOCX 버튼 섹션은 2단계(Cross-reference 삽입 단계)에 표시
+        const ropksSection = document.getElementById('finRopksSection');
+        r.ropksSectionVisible = !ropksSection.classList.contains('hidden');
+        r.ropksBtnInStep2 = !!(ropksSection.querySelector('button[onclick*="downloadFinRopksDocx"]') &&
+            ropksSection.closest('.section') === document.getElementById('priorityList1').closest('.section') &&
+            !document.getElementById('finOutputSection').querySelector('button[onclick*="downloadFinRopksDocx"]'));
         r.irOk = !!(typeof finParsedIR1 === 'object' && finParsedIR1 && finParsedIR1.drawings.length === 1);
         // 의심 문자 경고 (.fin: 정규화 전 원문 + 단락번호 위치) — 샘플의 H₂O₂([0002])가 검출되어야 함
         const susp = fileAnalysisResult.suspicious;
@@ -531,7 +537,8 @@ const server = http.createServer((req, res) => {
         return r;
     });
     results['탭1 .fin 파싱→텍스트'] = (finRes.textHasTitle && finRes.textHasTable && finRes.textHasClaim &&
-        finRes.textTableMerge && finRes.resultIsRopks && finRes.sectionVisible && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+        finRes.textTableMerge && finRes.resultIsRopks && finRes.sectionVisible &&
+        finRes.ropksSectionVisible && finRes.ropksBtnInStep2 && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin 특수문자 경고(정규화 전+단락번호)'] = (finRes.suspMode === 'para' &&
         JSON.stringify(finRes.suspItems) === JSON.stringify([
             ['유니코드 첨자', 2, '[0002]'],
@@ -614,7 +621,8 @@ const server = http.createServer((req, res) => {
         finNumRes.paraAfterRemove === finNumRes.paraShown) ? 'PASS' : 'FAIL ' + JSON.stringify(finNumRes);
 
     // .fin 흐름: Cross-reference 삽입 — 국문 KIPO(【기술분야】 앞) + 변환결과 ROPKS(BACKGROUND 앞) 동시 삽입
-    const finXrefRes = await page.evaluate(() => {
+    //           + 삽입 후 ROPKS DOCX에 Cross-reference 포함
+    const finXrefRes = await page.evaluate(async () => {
         const r = {};
         priorityList1.push({ year: '2026', month: '01', day: '29', appNum: '10-2026-0017835' });
         insertCrossReference();
@@ -632,11 +640,19 @@ const server = http.createServer((req, res) => {
         // 분석결과 단락 개수: 본문 6 + Cross-reference 본문 1 = 7 (변환결과 기준과 일치)
         r.paraShown = document.getElementById('paragraphCount1').textContent;
         r.paraRopks = countParagraphsInText(rawOutput1);
+        // 삽입된 Cross-reference 보관 → ROPKS DOCX에 포함 (downloadFinDocx와 동일 경로)
+        r.xrefStored = !!(finCrossRef1 && finCrossRef1.text.includes('제10-2026-0017835호'));
+        const blob = await buildFinDocxBlob(finParsedIR1, 'ropks', finCrossRef1 ? { crossRef: finCrossRef1 } : undefined);
+        const z = await JSZip.loadAsync(new Uint8Array(await blob.arrayBuffer()));
+        const doc = await z.file('word/document.xml').async('string');
+        r.docxXref = doc.indexOf(xref) >= 0 && doc.indexOf(xref) < doc.indexOf('BACKGROUND OF THE INVENTION');
+        r.docxXrefBody = doc.includes('제10-2026-0017835호');
         return r;
     });
     results['탭1 .fin Cross-reference 삽입'] = (finXrefRes.ok && finXrefRes.inputPos && finXrefRes.inputBody &&
         finXrefRes.outputPos && finXrefRes.analysis &&
-        finXrefRes.paraShown === String(finXrefRes.paraRopks) && Number(finXrefRes.paraShown) === 7)
+        finXrefRes.paraShown === String(finXrefRes.paraRopks) && Number(finXrefRes.paraShown) === 7 &&
+        finXrefRes.xrefStored && finXrefRes.docxXref && finXrefRes.docxXrefBody)
         ? 'PASS' : 'FAIL ' + JSON.stringify(finXrefRes);
 
     // 후처리/US서식 HTML표 → OOXML: 가로+세로 병합 그리드 정합성 (fin 미리보기와 docx 일치)
