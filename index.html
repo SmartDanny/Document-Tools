@@ -72,21 +72,12 @@
                 <div class="section hidden" id="finOutputSection" style="margin-top:15px;padding:15px;background:#f0f7ff;border-radius:8px;">
                     <div class="section-title" style="margin-bottom:10px;">📄 .fin 변환 결과물 생성</div>
                     <div class="fin-drawings-info" id="finDrawingsInfo" style="margin-bottom:12px;color:#555;font-size:14px;"></div>
-                    <div class="file-select-row" style="margin-bottom:12px;align-items:center;gap:8px;">
-                        <label for="finMgmtNo1" style="font-size:14px;font-weight:600;white-space:nowrap;">해외관리번호</label>
-                        <input type="text" id="finMgmtNo1" placeholder="OPP20******US" style="flex:1;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
-                    </div>
-                    <div class="note" style="margin-bottom:12px;">
-                        <span class="note-icon">💡</span>
-                        <span>해외관리번호(예: <strong>OPP20******US</strong>)를 입력하면 국가코드 <strong>US</strong>를 떼고 ROPKS 파일명이 <strong>OPP20******ROPKS_(오늘날짜6자리)</strong>로 지정됩니다. 미입력 시 <strong>ROPKS_(오늘날짜6자리)</strong>로 저장됩니다.</span>
-                    </div>
                     <div class="btn-group">
                         <button class="btn btn-primary" onclick="downloadFinKipoDocx()">📥 KIPO 출원서식 DOCX</button>
-                        <button class="btn btn-success" onclick="downloadFinRopksDocx()">📥 해외출원용 국문(ROPKS) DOCX</button>
                     </div>
                     <div class="note" style="margin-top:12px;">
                         <span class="note-icon">💡</span>
-                        <span>1단계 창에는 <strong>.fin 원본(국문 부제)</strong>이, 아래 6단계 <strong>변환 결과</strong>에는 <strong>해외출원용 국문(ROPKS)</strong> 변환 텍스트가 표시됩니다. (KIPO 출원서식/ROPKS DOCX는 위 버튼으로 생성)</span>
+                        <span>1단계 창에는 <strong>.fin 원본(국문 부제)</strong>이, 아래 6단계 <strong>변환 결과</strong>에는 <strong>해외출원용 국문(ROPKS)</strong> 변환 텍스트가 표시됩니다. KIPO 출원서식 DOCX는 위 버튼으로, <strong>해외출원용 국문(ROPKS) DOCX는 2단계(Cross-reference 삽입 단계)</strong>에서 생성합니다.</span>
                     </div>
                     <div id="finOutputMessage" class="message hidden"></div>
                 </div>
@@ -119,6 +110,25 @@
                     <span>우선권출원 정보 추가 후 버튼을 클릭하면 BACKGROUND(국문은 【기술분야】) 단락 앞에 Cross-reference가 삽입됩니다. .fin 변환 시 변환 결과에도 함께 삽입됩니다.</span>
                 </div>
                 <div id="crossRefMessage" class="message hidden"></div>
+                <div class="hidden" id="finRopksSection" style="margin-top:15px;padding:15px;background:#f0f7ff;border-radius:8px;">
+                    <div class="section-title" style="margin-bottom:10px;">📄 해외출원용 국문(ROPKS) DOCX 생성</div>
+                    <div class="file-select-row" style="margin-bottom:12px;align-items:center;gap:8px;">
+                        <label for="finMgmtNo1" style="font-size:14px;font-weight:600;white-space:nowrap;">해외관리번호</label>
+                        <input type="text" id="finMgmtNo1" placeholder="OPP20******US" style="flex:1;padding:6px 10px;border:1px solid #ccc;border-radius:6px;font-size:14px;">
+                    </div>
+                    <div class="note" style="margin-bottom:12px;">
+                        <span class="note-icon">💡</span>
+                        <span>해외관리번호(예: <strong>OPP20******US</strong>)를 입력하면 국가코드 <strong>US</strong>를 떼고 ROPKS 파일명이 <strong>OPP20******ROPKS_(오늘날짜6자리)</strong>로 지정됩니다. 미입력 시 <strong>ROPKS_(오늘날짜6자리)</strong>로 저장됩니다.</span>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-success" onclick="downloadFinRopksDocx()">📥 해외출원용 국문(ROPKS) DOCX</button>
+                    </div>
+                    <div class="note" style="margin-top:12px;">
+                        <span class="note-icon">💡</span>
+                        <span>위에서 <strong>Cross-reference를 삽입한 후</strong> 버튼을 클릭하면 삽입된 Cross-reference가 <strong>포함된</strong> ROPKS DOCX가 생성됩니다. 삽입하지 않으면 .fin 원본 그대로 생성됩니다.</span>
+                    </div>
+                    <div id="finRopksMessage" class="message hidden"></div>
+                </div>
             </div>
             <div class="section">
                 <div class="toggle-section" onclick="toggleSection1('Step3')" style="cursor:pointer;margin-bottom:0;">

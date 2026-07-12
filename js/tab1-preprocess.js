@@ -7,6 +7,13 @@
 
         // 탭1 - .fin 파싱 결과(IR) 보관용 (docx 산출물 버튼에서 사용)
         let finParsedIR1 = null;
+        // 탭1 - 2단계에서 삽입된 Cross-reference 보관용 (ROPKS DOCX 생성 시 포함)
+        let finCrossRef1 = null;
+
+        // 탭1 - .fin ROPKS 산출물 섹션(2단계) 표시/숨김
+        function setFinRopksSectionVisible(visible) {
+            document.getElementById('finRopksSection').classList.toggle('hidden', !visible);
+        }
 
         // 탭1 - 파일 처리 공통 함수 (.docx / .fin 확장자 분기)
         async function handleFile1(file) {
@@ -17,7 +24,9 @@
             }
             // 기존 .docx 경로
             finParsedIR1 = null;
+            finCrossRef1 = null;
             document.getElementById('finOutputSection').classList.add('hidden');
+            setFinRopksSectionVisible(false);
             await handleDocxUpload(file, 'fileName1', async (file) => {
                 const result = await processDocx1(file);
                 document.getElementById('textInput1').value = result.text;
@@ -30,8 +39,11 @@
         // 탭1 - .fin 파일 처리: 파싱 → KIPO 라인텍스트(HTML 변환) + 산출물 버튼 활성화
         async function handleFinFile(file) {
             document.getElementById('fileName1').textContent = file.name;
+            finCrossRef1 = null;
             const msg = document.getElementById('finOutputMessage');
             if (msg) msg.classList.add('hidden');
+            const ropksMsg = document.getElementById('finRopksMessage');
+            if (ropksMsg) ropksMsg.classList.add('hidden');
             try {
                 const ir = await parseFinFile(file);
                 finParsedIR1 = ir;
@@ -50,14 +62,16 @@
                 fileAnalysisResult.suspicious = { mode: 'para', items: findSuspiciousInParas(ir.rawParas) };
                 displayResult1({ text: kipoText, outputText: ropksText, subscriptCount, superscriptCount });
 
-                // .fin 산출물 섹션 표시
+                // .fin 산출물 섹션 표시 (KIPO: 1단계, ROPKS: 2단계 Cross-reference 삽입 단계)
                 document.getElementById('finOutputSection').classList.remove('hidden');
+                setFinRopksSectionVisible(true);
                 const drawn = ir.drawings.filter(d => d.base64).length;
                 document.getElementById('finDrawingsInfo').textContent =
                     `분석 완료 — 도면 ${ir.drawings.length}개(이미지 ${drawn}개 임베드) · 청구항 ${ir.claims.length}개 · 표 ${ir.embodiments.filter(e => e.kind === 'table').length}개`;
             } catch (e) {
                 finParsedIR1 = null;
                 document.getElementById('finOutputSection').classList.add('hidden');
+                setFinRopksSectionVisible(false);
                 alert('오류: ' + e.message);
             }
         }
@@ -77,11 +91,14 @@
         }
 
         async function downloadFinDocx(format) {
-            const msg = document.getElementById('finOutputMessage');
+            // 메시지는 각 버튼이 있는 위치에 표시 (KIPO: 1단계, ROPKS: 2단계)
+            const msg = document.getElementById(format === 'ropks' ? 'finRopksMessage' : 'finOutputMessage');
             if (!finParsedIR1) { showMessage(msg, '❌ 먼저 .fin 파일을 업로드해주세요.', 'error'); return; }
             const label = format === 'ropks' ? '해외출원용 국문(ROPKS)' : 'KIPO 출원서식';
             try {
-                const blob = await buildFinDocxBlob(finParsedIR1, format);
+                // ROPKS: 2단계에서 삽입된 Cross-reference가 있으면 DOCX에도 포함
+                const opts = format === 'ropks' && finCrossRef1 ? { crossRef: finCrossRef1 } : undefined;
+                const blob = await buildFinDocxBlob(finParsedIR1, format, opts);
                 let fileName;
                 if (format === 'ropks') {
                     const mgmtNo = (document.getElementById('finMgmtNo1') || {}).value || '';
@@ -91,7 +108,8 @@
                     fileName = base + '_출원명세서';
                 }
                 saveAs(blob, fileName + '.docx');
-                showMessage(msg, `✅ ${label} DOCX가 생성되었습니다! (${fileName}.docx)`, 'success');
+                const included = opts ? ' Cross-reference가 포함되었습니다.' : '';
+                showMessage(msg, `✅ ${label} DOCX가 생성되었습니다! (${fileName}.docx)${included}`, 'success');
                 setTimeout(() => msg.classList.add('hidden'), 4000);
             } catch (e) {
                 showMessage(msg, `❌ ${label} DOCX 생성 실패: ` + e.message, 'error');
@@ -428,6 +446,8 @@
                     showMessage(msg, '❌ 변환결과에서 BACKGROUND 단락을 찾을 수 없습니다.', 'error');
                     return;
                 }
+                // ROPKS DOCX 생성 시 같은 내용이 포함되도록 보관
+                finCrossRef1 = { title: 'CROSS-REFERENCE TO RELATED APPLICATIONS', text: priorityText1 };
                 document.getElementById('textInput1').value = newInput;
                 displayResult1({
                     text: newInput,
@@ -436,27 +456,21 @@
                     superscriptCount: (newOutput.match(/<sup>/gi) || []).length
                 });
             } else {
-                rawOutput1 = newInput;
-                document.getElementById('textInput1').value = rawOutput1;
-
-                // 분석 결과 업데이트
-                fileAnalysisResult.hasCrossRef = true;
-                updateFileAnalysisDisplay();
-
-                // 화면 업데이트
-                document.getElementById('output1').innerHTML = rawOutput1.replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                    .replace(/&lt;sub&gt;/g,'<span class="sub-tag">&lt;sub&gt;</span>')
-                    .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
-                    .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
-                    .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>')
-                    .replace(/__([^_]+)__/g,'<span class="warn-mark">$1</span>');
-                document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>').replace(/__([^_]+)__/g,'<strong>$1</strong>');
+                // .docx 업로드(처음부터 ROPKS 등 US 서식) 흐름: fin 흐름과 동일하게 재렌더링해
+                // 5단계 분석 결과(단락 개수 등)와 파일 분석 배지를 함께 갱신
+                document.getElementById('textInput1').value = newInput;
+                displayResult1({
+                    text: newInput,
+                    subscriptCount: (newInput.match(/<sub>/gi) || []).length,
+                    superscriptCount: (newInput.match(/<sup>/gi) || []).length
+                });
             }
 
-            showMessage(msg, '✅ Cross-reference가 삽입되었습니다!', 'success');
+            const finNote = finCrossRef1 ? ' 이제 ROPKS DOCX에 Cross-reference가 포함되어 출력됩니다.' : '';
+            showMessage(msg, `✅ Cross-reference가 삽입되었습니다!${finNote}`, 'success');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
-        
+
         // 부제표준화 함수
         function standardizeSubtitles() {
             const msg = document.getElementById('subtitleMessage');
@@ -1024,8 +1038,11 @@
             document.getElementById('fileName1').textContent = '또는 아래에 .docx / .fin 파일을 드래그하세요';
             document.getElementById('fileInput1').value = '';
             finParsedIR1 = null;
+            finCrossRef1 = null;
             document.getElementById('finOutputSection').classList.add('hidden');
             document.getElementById('finOutputMessage').classList.add('hidden');
+            setFinRopksSectionVisible(false);
+            document.getElementById('finRopksMessage').classList.add('hidden');
             document.getElementById('finMgmtNo1').value = '';
             priorityList1 = [];
             renderPriorityList1();
