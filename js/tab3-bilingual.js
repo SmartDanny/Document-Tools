@@ -1371,36 +1371,17 @@
             }
 
             // === SEQ 필드 단락번호 XML 생성 ===
-            // { SEQ ParagraphNum \# "0000" } → 4자리 고정 (0001~0999)
+            // { SEQ ParagraphNum \# "0000" } → 4자리 고정 (0001~0999) — 공통 부품(utils.js)
             let seqCounter = 1;
             function makeSeqFieldXml() {
-                const cacheVal = String(seqCounter).padStart(4, '0');
-                seqCounter++;
-                const seqRPr = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr>';
-                return '' +
-                    // [
-                    `<w:r>${seqRPr}<w:t>[</w:t></w:r>` +
-                    // SEQ begin
-                    `<w:r>${seqRPr}<w:fldChar w:fldCharType="begin"/></w:r>` +
-                    // instrText
-                    `<w:r>${seqRPr}<w:instrText xml:space="preserve"> SEQ ParagraphNum \\# "0000" </w:instrText></w:r>` +
-                    // separate
-                    `<w:r>${seqRPr}<w:fldChar w:fldCharType="separate"/></w:r>` +
-                    // cache value
-                    `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:color w:val="000000"/><w:sz w:val="24"/><w:noProof/></w:rPr><w:t>${cacheVal}</w:t></w:r>` +
-                    // end
-                    `<w:r>${seqRPr}<w:fldChar w:fldCharType="end"/></w:r>` +
-                    // ]
-                    `<w:r>${seqRPr}<w:t>]</w:t></w:r>` +
-                    // 공백 2개
-                    `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="24"/></w:rPr><w:t xml:space="preserve">  </w:t></w:r>`;
+                return makeUSSeqFieldRunsXml(String(seqCounter++).padStart(4, '0'), false);
             }
 
             // === pPr/rPr 공통 XML 조각 ===
             const rPrBody = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr>';
             const rPrHeading = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:szCs w:val="24"/></w:rPr>';
-            // 25라인/페이지: 본문영역(16838-1440-1701=13697) / 25 = 548 DXA
-            const pPrSpacing = '<w:spacing w:after="0" w:line="548" w:lineRule="exact"/>';
+            // 25라인/페이지: 본문영역(16838-1440-1701=13697) / 25 = 548 DXA (utils.js)
+            const pPrSpacing = makeUSDocxSpacingXml();
 
             // === 본문 생성 ===
             let bodyContent = '';
@@ -1505,218 +1486,19 @@
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
             xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
 <w:body>${bodyContent}
-<w:sectPr>
-<w:headerReference w:type="even" r:id="rId10"/>
-<w:headerReference w:type="default" r:id="rId11"/>
-<w:footerReference w:type="even" r:id="rId12"/>
-<w:footerReference w:type="default" r:id="rId13"/>
-<w:headerReference w:type="first" r:id="rId14"/>
-<w:footerReference w:type="first" r:id="rId15"/>
-<w:pgSz w:w="11906" w:h="16838"/>
-<w:pgMar w:top="1440" w:right="1701" w:bottom="1701" w:left="1701" w:header="1134" w:footer="1134" w:gutter="0"/>
-<w:lnNumType w:countBy="5"/>
-<w:cols w:space="720"/>
-<w:docGrid w:type="lines" w:linePitch="548"/>
-</w:sectPr>
+${makeUSDocxSectPrXml({
+    headerEven: 'rId10', headerDefault: 'rId11', headerFirst: 'rId14',
+    footerEven: 'rId12', footerDefault: 'rId13', footerFirst: 'rId15'
+})}
 </w:body></w:document>`;
 
-            // === numbering.xml (호환성 유지, 본문 번호는 SEQ 필드 사용) ===
-            const numberingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-             xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="w15">
-<w:abstractNum w:abstractNumId="0" w15:restartNumberingAfterBreak="0">
-<w:nsid w:val="639059B6"/>
-<w:multiLevelType w:val="hybridMultilevel"/>
-<w:tmpl w:val="DD9A07EC"/>
-<w:lvl w:ilvl="0" w:tplc="A6E64738">
-<w:start w:val="1"/>
-<w:numFmt w:val="decimalZero"/>
-<w:lvlRestart w:val="0"/>
-<w:lvlText w:val="[00%1]"/>
-<w:lvlJc w:val="left"/>
-<w:pPr><w:ind w:left="0" w:firstLine="0"/></w:pPr>
-<w:rPr>
-<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>
-<w:b/>
-<w:i w:val="0"/>
-<w:caps w:val="0"/>
-<w:strike w:val="0"/>
-<w:dstrike w:val="0"/>
-<w:outline w:val="0"/>
-<w:shadow w:val="0"/>
-<w:emboss w:val="0"/>
-<w:imprint w:val="0"/>
-<w:vanish w:val="0"/>
-<w:color w:val="000000"/>
-<w:sz w:val="24"/>
-<w:u w:val="none"/>
-<w:effect w:val="none"/>
-<w:vertAlign w:val="baseline"/>
-</w:rPr>
-</w:lvl>
-<w:lvl w:ilvl="1" w:tplc="ADA413E2">
-<w:start w:val="1"/>
-<w:numFmt w:val="decimal"/>
-<w:lvlText w:val="%2."/>
-<w:lvlJc w:val="left"/>
-<w:pPr><w:ind w:left="1160" w:hanging="360"/></w:pPr>
-<w:rPr><w:rFonts w:hint="default"/></w:rPr>
-</w:lvl>
-<w:lvl w:ilvl="2" w:tplc="0409001B" w:tentative="1">
-<w:start w:val="1"/><w:numFmt w:val="lowerRoman"/>
-<w:lvlText w:val="%3."/><w:lvlJc w:val="right"/>
-<w:pPr><w:ind w:left="1600" w:hanging="400"/></w:pPr>
-</w:lvl>
-<w:lvl w:ilvl="3" w:tplc="0409000F" w:tentative="1">
-<w:start w:val="1"/><w:numFmt w:val="decimal"/>
-<w:lvlText w:val="%4."/><w:lvlJc w:val="left"/>
-<w:pPr><w:ind w:left="2000" w:hanging="400"/></w:pPr>
-</w:lvl>
-<w:lvl w:ilvl="4" w:tplc="04090019" w:tentative="1">
-<w:start w:val="1"/><w:numFmt w:val="upperLetter"/>
-<w:lvlText w:val="%5."/><w:lvlJc w:val="left"/>
-<w:pPr><w:ind w:left="2400" w:hanging="400"/></w:pPr>
-</w:lvl>
-<w:lvl w:ilvl="5" w:tplc="0409001B" w:tentative="1">
-<w:start w:val="1"/><w:numFmt w:val="lowerRoman"/>
-<w:lvlText w:val="%6."/><w:lvlJc w:val="right"/>
-<w:pPr><w:ind w:left="2800" w:hanging="400"/></w:pPr>
-</w:lvl>
-<w:lvl w:ilvl="6" w:tplc="0409000F" w:tentative="1">
-<w:start w:val="1"/><w:numFmt w:val="decimal"/>
-<w:lvlText w:val="%7."/><w:lvlJc w:val="left"/>
-<w:pPr><w:ind w:left="3200" w:hanging="400"/></w:pPr>
-</w:lvl>
-<w:lvl w:ilvl="7" w:tplc="04090019" w:tentative="1">
-<w:start w:val="1"/><w:numFmt w:val="upperLetter"/>
-<w:lvlText w:val="%8."/><w:lvlJc w:val="left"/>
-<w:pPr><w:ind w:left="3600" w:hanging="400"/></w:pPr>
-</w:lvl>
-<w:lvl w:ilvl="8" w:tplc="0409001B" w:tentative="1">
-<w:start w:val="1"/><w:numFmt w:val="lowerRoman"/>
-<w:lvlText w:val="%9."/><w:lvlJc w:val="right"/>
-<w:pPr><w:ind w:left="4000" w:hanging="400"/></w:pPr>
-</w:lvl>
-</w:abstractNum>
-<w:num w:numId="1">
-<w:abstractNumId w:val="0"/>
-</w:num>
-</w:numbering>`;
-
-            // === styles.xml ===
-            const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:docDefaults>
-<w:rPrDefault><w:rPr>
-<w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi" w:cstheme="minorBidi"/>
-<w:kern w:val="2"/>
-<w:szCs w:val="22"/>
-<w:lang w:val="en-US" w:eastAsia="ko-KR" w:bidi="ar-SA"/>
-</w:rPr></w:rPrDefault>
-<w:pPrDefault><w:pPr>
-<w:spacing w:after="0" w:line="259" w:lineRule="auto"/>
-<w:jc w:val="both"/>
-</w:pPr></w:pPrDefault>
-</w:docDefaults>
-<w:style w:type="paragraph" w:default="1" w:styleId="a">
-<w:name w:val="Normal"/>
-<w:pPr>
-<w:widowControl w:val="0"/>
-<w:wordWrap w:val="0"/>
-<w:autoSpaceDE w:val="0"/>
-<w:autoSpaceDN w:val="0"/>
-</w:pPr>
-<w:rPr>
-<w:rFonts w:ascii="바탕체" w:eastAsia="바탕체" w:hAnsi="바탕체"/>
-<w:sz w:val="24"/>
-</w:rPr>
-</w:style>
-<w:style w:type="character" w:default="1" w:styleId="a0">
-<w:name w:val="Default Paragraph Font"/>
-</w:style>
-<w:style w:type="table" w:default="1" w:styleId="a1">
-<w:name w:val="Normal Table"/>
-</w:style>
-<w:style w:type="numbering" w:default="1" w:styleId="a2">
-<w:name w:val="No List"/>
-</w:style>
-<w:style w:type="paragraph" w:styleId="a3">
-<w:name w:val="header"/>
-<w:basedOn w:val="a"/>
-<w:pPr>
-<w:tabs/>
-<w:snapToGrid w:val="0"/>
-</w:pPr>
-</w:style>
-<w:style w:type="paragraph" w:styleId="a4">
-<w:name w:val="footer"/>
-<w:basedOn w:val="a"/>
-<w:pPr>
-<w:tabs/>
-<w:snapToGrid w:val="0"/>
-</w:pPr>
-</w:style>
-<w:style w:type="character" w:styleId="a5">
-<w:name w:val="line number"/>
-<w:basedOn w:val="a0"/>
-</w:style>
-<w:style w:type="character" w:styleId="a6">
-<w:name w:val="page number"/>
-<w:basedOn w:val="a0"/>
-</w:style>
-<w:style w:type="paragraph" w:styleId="a7">
-<w:name w:val="List Paragraph"/>
-<w:basedOn w:val="a"/>
-<w:pPr>
-<w:ind w:leftChars="400" w:left="800"/>
-</w:pPr>
-</w:style>
-</w:styles>`;
-
-            // === settings.xml ===
-            const settingsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-            xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
-            xmlns:o="urn:schemas-microsoft-com:office:office">
-<w:zoom w:percent="100"/>
-<w:bordersDoNotSurroundHeader/>
-<w:bordersDoNotSurroundFooter/>
-<w:defaultTabStop w:val="800"/>
-<w:characterSpacingControl w:val="doNotCompress"/>
-<w:themeFontLang w:val="en-US" w:eastAsia="ko-KR"/>
-<w:decimalSymbol w:val="."/>
-<w:listSeparator w:val=","/>
-</w:settings>`;
-
-            // === 헤더 (빈 내용) ===
-            const headerXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:p><w:pPr><w:pStyle w:val="a3"/></w:pPr></w:p>
-</w:hdr>`;
-
-            // === 푸터 (footer1/footer2 — PAGE 필드 + 빈 단락) ===
-            const footerWithPageXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:p>
-<w:pPr>
-<w:pStyle w:val="a4"/>
-<w:framePr w:wrap="around" w:vAnchor="text" w:hAnchor="margin" w:xAlign="center" w:y="1"/>
-<w:rPr><w:rStyle w:val="a6"/></w:rPr>
-</w:pPr>
-<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>
-<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
-<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>
-</w:p>
-<w:p><w:pPr><w:pStyle w:val="a4"/></w:pPr></w:p>
-</w:ftr>`;
-
-            // === 푸터 (footer3 — 첫 페이지, 빈 단락만) ===
-            const footerFirstPageXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
-<w:p><w:pPr><w:pStyle w:val="a4"/></w:pPr></w:p>
-</w:ftr>`;
+            // === 패키지 부품 (US양식 공통 부품, utils.js) ===
+            const numberingXml = makeUSDocxNumberingXml();
+            const stylesXml = makeUSDocxStylesXml();
+            const settingsXml = makeUSDocxSettingsXml();
+            const headerXml = makeUSDocxHeaderXml();
+            const footerWithPageXml = makeUSDocxFooterPageXml();
+            const footerFirstPageXml = makeUSDocxFooterFirstXml();
 
             // === [Content_Types].xml ===
             zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

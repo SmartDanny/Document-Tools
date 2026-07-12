@@ -1427,3 +1427,304 @@ function setupDropZone(el, onFile, options = {}) {
         el.addEventListener('click', () => document.getElementById(options.clickOpensInput).click());
     }
 }
+
+// ============================================
+// US 특허출원 양식 DOCX 공통 부품
+// (탭2·탭3 'US양식 다운로드'와 탭4 '비교 및 US양식 다운로드'가 공유)
+// - A4, 여백(top=1440, bottom/left/right=1701), 고정 행 높이 548(25행/페이지)
+// - Arial 12pt, SEQ 필드 단락번호, 5행마다 줄번호, 페이지번호 푸터, docGrid
+// ============================================
+
+const US_DOCX_LINE = 548; // 본문영역(16838-1440-1701=13697) / 25행
+
+/**
+ * US양식 단락 공통 spacing (고정 행 높이, 단락 뒤 0pt)
+ * @returns {string}
+ */
+function makeUSDocxSpacingXml() {
+    return `<w:spacing w:after="0" w:line="${US_DOCX_LINE}" w:lineRule="exact"/>`;
+}
+
+/**
+ * US양식 sectPr — 헤더/푸터 관계 ID는 호출자가 지정
+ * (탭3 신규 패키지: rId10~15, 탭4 비교 결과: 기존 관계와 충돌하지 않는 전용 ID)
+ * @param {Object} ids - {headerEven, headerDefault, headerFirst, footerEven, footerDefault, footerFirst}
+ * @returns {string}
+ */
+function makeUSDocxSectPrXml(ids) {
+    return `<w:sectPr>
+<w:headerReference w:type="even" r:id="${ids.headerEven}"/>
+<w:headerReference w:type="default" r:id="${ids.headerDefault}"/>
+<w:footerReference w:type="even" r:id="${ids.footerEven}"/>
+<w:footerReference w:type="default" r:id="${ids.footerDefault}"/>
+<w:headerReference w:type="first" r:id="${ids.headerFirst}"/>
+<w:footerReference w:type="first" r:id="${ids.footerFirst}"/>
+<w:pgSz w:w="11906" w:h="16838"/>
+<w:pgMar w:top="1440" w:right="1701" w:bottom="1701" w:left="1701" w:header="1134" w:footer="1134" w:gutter="0"/>
+<w:lnNumType w:countBy="5"/>
+<w:cols w:space="720"/>
+<w:docGrid w:type="lines" w:linePitch="${US_DOCX_LINE}"/>
+</w:sectPr>`;
+}
+
+/**
+ * SEQ 필드 단락번호 런 XML ({ SEQ ParagraphNum \# "0000" } → [0001] + 공백 2개)
+ * 삭제 개정 표시용은 delText/delInstrText 사용 (w:del/w:ins 래퍼는 호출자가 감쌈)
+ * @param {string} cachedVal - 필드 캐시 표시값 (예: '0001')
+ * @param {boolean} [del] - 삭제 개정용(delText/delInstrText) 여부
+ * @returns {string}
+ */
+function makeUSSeqFieldRunsXml(cachedVal, del) {
+    const tag = del ? 'w:delText' : 'w:t';
+    const instr = del ? 'w:delInstrText' : 'w:instrText';
+    const seqRPr = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr>';
+    return '' +
+        // [
+        `<w:r>${seqRPr}<${tag} xml:space="preserve">[</${tag}></w:r>` +
+        // SEQ begin
+        `<w:r>${seqRPr}<w:fldChar w:fldCharType="begin"/></w:r>` +
+        // instrText
+        `<w:r>${seqRPr}<${instr} xml:space="preserve"> SEQ ParagraphNum \\# "0000" </${instr}></w:r>` +
+        // separate
+        `<w:r>${seqRPr}<w:fldChar w:fldCharType="separate"/></w:r>` +
+        // cache value
+        `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:b/><w:color w:val="000000"/><w:sz w:val="24"/><w:noProof/></w:rPr><${tag} xml:space="preserve">${cachedVal}</${tag}></w:r>` +
+        // end
+        `<w:r>${seqRPr}<w:fldChar w:fldCharType="end"/></w:r>` +
+        // ]
+        `<w:r>${seqRPr}<${tag} xml:space="preserve">]</${tag}></w:r>` +
+        // 공백 2개
+        `<w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="24"/></w:rPr><${tag} xml:space="preserve">  </${tag}></w:r>`;
+}
+
+/**
+ * US양식 numbering.xml (호환성 유지용 — 본문 단락번호는 SEQ 필드 사용)
+ * @returns {string}
+ */
+function makeUSDocxNumberingXml() {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+             xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="w15">
+<w:abstractNum w:abstractNumId="0" w15:restartNumberingAfterBreak="0">
+<w:nsid w:val="639059B6"/>
+<w:multiLevelType w:val="hybridMultilevel"/>
+<w:tmpl w:val="DD9A07EC"/>
+<w:lvl w:ilvl="0" w:tplc="A6E64738">
+<w:start w:val="1"/>
+<w:numFmt w:val="decimalZero"/>
+<w:lvlRestart w:val="0"/>
+<w:lvlText w:val="[00%1]"/>
+<w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="0" w:firstLine="0"/></w:pPr>
+<w:rPr>
+<w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/>
+<w:b/>
+<w:i w:val="0"/>
+<w:caps w:val="0"/>
+<w:strike w:val="0"/>
+<w:dstrike w:val="0"/>
+<w:outline w:val="0"/>
+<w:shadow w:val="0"/>
+<w:emboss w:val="0"/>
+<w:imprint w:val="0"/>
+<w:vanish w:val="0"/>
+<w:color w:val="000000"/>
+<w:sz w:val="24"/>
+<w:u w:val="none"/>
+<w:effect w:val="none"/>
+<w:vertAlign w:val="baseline"/>
+</w:rPr>
+</w:lvl>
+<w:lvl w:ilvl="1" w:tplc="ADA413E2">
+<w:start w:val="1"/>
+<w:numFmt w:val="decimal"/>
+<w:lvlText w:val="%2."/>
+<w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="1160" w:hanging="360"/></w:pPr>
+<w:rPr><w:rFonts w:hint="default"/></w:rPr>
+</w:lvl>
+<w:lvl w:ilvl="2" w:tplc="0409001B" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="lowerRoman"/>
+<w:lvlText w:val="%3."/><w:lvlJc w:val="right"/>
+<w:pPr><w:ind w:left="1600" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="3" w:tplc="0409000F" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="decimal"/>
+<w:lvlText w:val="%4."/><w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="2000" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="4" w:tplc="04090019" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="upperLetter"/>
+<w:lvlText w:val="%5."/><w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="2400" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="5" w:tplc="0409001B" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="lowerRoman"/>
+<w:lvlText w:val="%6."/><w:lvlJc w:val="right"/>
+<w:pPr><w:ind w:left="2800" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="6" w:tplc="0409000F" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="decimal"/>
+<w:lvlText w:val="%7."/><w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="3200" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="7" w:tplc="04090019" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="upperLetter"/>
+<w:lvlText w:val="%8."/><w:lvlJc w:val="left"/>
+<w:pPr><w:ind w:left="3600" w:hanging="400"/></w:pPr>
+</w:lvl>
+<w:lvl w:ilvl="8" w:tplc="0409001B" w:tentative="1">
+<w:start w:val="1"/><w:numFmt w:val="lowerRoman"/>
+<w:lvlText w:val="%9."/><w:lvlJc w:val="right"/>
+<w:pPr><w:ind w:left="4000" w:hanging="400"/></w:pPr>
+</w:lvl>
+</w:abstractNum>
+<w:num w:numId="1">
+<w:abstractNumId w:val="0"/>
+</w:num>
+</w:numbering>`;
+}
+
+/**
+ * US양식 styles.xml
+ * @returns {string}
+ */
+function makeUSDocxStylesXml() {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults>
+<w:rPrDefault><w:rPr>
+<w:rFonts w:asciiTheme="minorHAnsi" w:eastAsiaTheme="minorEastAsia" w:hAnsiTheme="minorHAnsi" w:cstheme="minorBidi"/>
+<w:kern w:val="2"/>
+<w:szCs w:val="22"/>
+<w:lang w:val="en-US" w:eastAsia="ko-KR" w:bidi="ar-SA"/>
+</w:rPr></w:rPrDefault>
+<w:pPrDefault><w:pPr>
+<w:spacing w:after="0" w:line="259" w:lineRule="auto"/>
+<w:jc w:val="both"/>
+</w:pPr></w:pPrDefault>
+</w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="a">
+<w:name w:val="Normal"/>
+<w:pPr>
+<w:widowControl w:val="0"/>
+<w:wordWrap w:val="0"/>
+<w:autoSpaceDE w:val="0"/>
+<w:autoSpaceDN w:val="0"/>
+</w:pPr>
+<w:rPr>
+<w:rFonts w:ascii="바탕체" w:eastAsia="바탕체" w:hAnsi="바탕체"/>
+<w:sz w:val="24"/>
+</w:rPr>
+</w:style>
+<w:style w:type="character" w:default="1" w:styleId="a0">
+<w:name w:val="Default Paragraph Font"/>
+</w:style>
+<w:style w:type="table" w:default="1" w:styleId="a1">
+<w:name w:val="Normal Table"/>
+</w:style>
+<w:style w:type="numbering" w:default="1" w:styleId="a2">
+<w:name w:val="No List"/>
+</w:style>
+<w:style w:type="paragraph" w:styleId="a3">
+<w:name w:val="header"/>
+<w:basedOn w:val="a"/>
+<w:pPr>
+<w:tabs/>
+<w:snapToGrid w:val="0"/>
+</w:pPr>
+</w:style>
+<w:style w:type="paragraph" w:styleId="a4">
+<w:name w:val="footer"/>
+<w:basedOn w:val="a"/>
+<w:pPr>
+<w:tabs/>
+<w:snapToGrid w:val="0"/>
+</w:pPr>
+</w:style>
+<w:style w:type="character" w:styleId="a5">
+<w:name w:val="line number"/>
+<w:basedOn w:val="a0"/>
+</w:style>
+<w:style w:type="character" w:styleId="a6">
+<w:name w:val="page number"/>
+<w:basedOn w:val="a0"/>
+</w:style>
+<w:style w:type="paragraph" w:styleId="a7">
+<w:name w:val="List Paragraph"/>
+<w:basedOn w:val="a"/>
+<w:pPr>
+<w:ind w:leftChars="400" w:left="800"/>
+</w:pPr>
+</w:style>
+</w:styles>`;
+}
+
+/**
+ * US양식 settings.xml
+ * @param {Object} [opts]
+ * @param {boolean} [opts.trackRevisions] - 변경추적 활성화 (탭4 비교 US양식)
+ * @returns {string}
+ */
+function makeUSDocxSettingsXml(opts) {
+    const track = (opts && opts.trackRevisions)
+        ? '\n<w:trackRevisions/>\n<w:revisionView w:formatting="0"/>' : '';
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+            xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+            xmlns:o="urn:schemas-microsoft-com:office:office">
+<w:zoom w:percent="100"/>${track}
+<w:bordersDoNotSurroundHeader/>
+<w:bordersDoNotSurroundFooter/>
+<w:defaultTabStop w:val="800"/>
+<w:characterSpacingControl w:val="doNotCompress"/>
+<w:themeFontLang w:val="en-US" w:eastAsia="ko-KR"/>
+<w:decimalSymbol w:val="."/>
+<w:listSeparator w:val=","/>
+</w:settings>`;
+}
+
+/**
+ * US양식 헤더 (빈 내용)
+ * @returns {string}
+ */
+function makeUSDocxHeaderXml() {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:p><w:pPr><w:pStyle w:val="a3"/></w:pPr></w:p>
+</w:hdr>`;
+}
+
+/**
+ * US양식 푸터 (PAGE 필드 페이지번호 + 빈 단락)
+ * @returns {string}
+ */
+function makeUSDocxFooterPageXml() {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:p>
+<w:pPr>
+<w:pStyle w:val="a4"/>
+<w:framePr w:wrap="around" w:vAnchor="text" w:hAnchor="margin" w:xAlign="center" w:y="1"/>
+<w:rPr><w:rStyle w:val="a6"/></w:rPr>
+</w:pPr>
+<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>
+<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
+<w:r><w:rPr><w:rStyle w:val="a6"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>
+</w:p>
+<w:p><w:pPr><w:pStyle w:val="a4"/></w:pPr></w:p>
+</w:ftr>`;
+}
+
+/**
+ * US양식 첫 페이지 푸터 (빈 단락만)
+ * @returns {string}
+ */
+function makeUSDocxFooterFirstXml() {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:p><w:pPr><w:pStyle w:val="a4"/></w:pPr></w:p>
+</w:ftr>`;
+}

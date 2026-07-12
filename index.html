@@ -683,6 +683,11 @@
                     <div class="btn-group">
                         <button class="btn btn-primary" onclick="standardizeFormat4Docx()">📐 양식표준화</button>
                         <button class="btn btn-primary" onclick="compareDocxFiles()">🔍 DOCX 비교 및 다운로드</button>
+                        <button class="btn btn-primary" style="background:#1565c0;" onclick="compareDocxFilesUS()">🇺🇸 비교 및 US양식 다운로드</button>
+                    </div>
+                    <div class="note" style="margin-top:12px;">
+                        <span class="note-icon">💡</span>
+                        <span><strong>비교 및 US양식 다운로드:</strong> 변경 내용(Track Changes)을 유지한 채 후처리 탭의 <strong>US 특허출원 양식</strong>(A4, Arial 12pt, 25행/페이지, 5행마다 줄번호, 페이지번호)을 적용합니다. 양식표준화가 자동 적용되며(이미 표준화된 문서에는 중복 적용되지 않음), 기존 <strong>[0001] 텍스트 단락번호는 SEQ 필드 번호로 대체</strong>됩니다(변경 수락/거부 후 Ctrl+A → F9로 번호 재계산).</span>
                     </div>
                     <div id="docxCompareMessage" class="message hidden"></div>
                 </div>

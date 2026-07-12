@@ -557,3 +557,52 @@ describe('.fin 변환 순수 헬퍼', () => {
         assert.equal(m[imgIdx + 1].text, '[도 1]');
     });
 });
+
+describe('US양식 DOCX 공통 부품', () => {
+    test('makeUSSeqFieldRunsXml: 일반 모드 (instrText/w:t)', () => {
+        const n = u.makeUSSeqFieldRunsXml('0003', false);
+        assert.ok(n.includes(' SEQ ParagraphNum \\# "0000" '));
+        assert.ok(n.includes('<w:instrText'));
+        assert.ok(n.includes('>0003<'));
+        assert.ok(n.includes('<w:noProof/>'));
+        assert.ok(!n.includes('delText') && !n.includes('delInstrText'));
+        // [ ... ] + 공백 2개 구조
+        assert.ok(n.includes('>[<') && n.includes('>]<') && n.includes('>  <'));
+    });
+
+    test('makeUSSeqFieldRunsXml: 삭제 개정 모드 (delInstrText/delText)', () => {
+        const d = u.makeUSSeqFieldRunsXml('0004', true);
+        assert.ok(d.includes('<w:delInstrText'));
+        assert.ok(d.includes('<w:delText xml:space="preserve">0004</w:delText>'));
+        assert.ok(!d.includes('<w:instrText ') && !d.includes('<w:t '));
+    });
+
+    test('makeUSDocxSectPrXml: 헤더/푸터 ID 주입 + 줄번호/docGrid/A4', () => {
+        const s = u.makeUSDocxSectPrXml({
+            headerEven: 'h1', headerDefault: 'h2', headerFirst: 'h3',
+            footerEven: 'f1', footerDefault: 'f2', footerFirst: 'f3'
+        });
+        assert.ok(s.includes('w:type="even" r:id="h1"') && s.includes('w:type="default" r:id="h2"'));
+        assert.ok(s.includes('w:type="first" r:id="f3"'));
+        assert.ok(s.includes('<w:lnNumType w:countBy="5"/>')); // 5행마다 줄번호
+        assert.ok(s.includes('w:linePitch="548"'));            // 25행/페이지 docGrid
+        assert.ok(s.includes('<w:pgSz w:w="11906" w:h="16838"/>')); // A4
+        assert.ok(s.includes('w:top="1440" w:right="1701" w:bottom="1701" w:left="1701"'));
+    });
+
+    test('makeUSDocxSettingsXml: trackRevisions 옵션', () => {
+        assert.ok(!u.makeUSDocxSettingsXml().includes('trackRevisions'));
+        const t = u.makeUSDocxSettingsXml({ trackRevisions: true });
+        assert.ok(t.includes('<w:trackRevisions/>'));
+        assert.ok(t.includes('<w:revisionView w:formatting="0"/>'));
+    });
+
+    test('US양식 부품 기본 구조', () => {
+        assert.equal(u.makeUSDocxSpacingXml(), '<w:spacing w:after="0" w:line="548" w:lineRule="exact"/>');
+        assert.ok(u.makeUSDocxStylesXml().includes('page number') && u.makeUSDocxStylesXml().includes('w:after="0"'));
+        assert.ok(u.makeUSDocxFooterPageXml().includes(' PAGE '));
+        assert.ok(u.makeUSDocxFooterFirstXml().includes('<w:ftr'));
+        assert.ok(u.makeUSDocxHeaderXml().includes('<w:hdr'));
+        assert.ok(u.makeUSDocxNumberingXml().includes('[00%1]'));
+    });
+});

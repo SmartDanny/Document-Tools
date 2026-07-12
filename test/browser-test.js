@@ -382,6 +382,14 @@ const server = http.createServer((req, res) => {
             assert('탭4 DOCX 양식표준화', JSON.stringify(stdBlocks) === JSON.stringify(
                 ['Intro line.', '', 'BACKGROUND', '\n', 'WHAT IS CLAIMED IS:', '', '1.\tA sensor device.']), stdBlocks);
 
+            // 양식표준화 멱등성: 이미 표준화된 문서에 재실행해도 변경 0건
+            // (US양식 비교의 자동 표준화가 중복 적용되지 않는 근거)
+            const secondCount = applyFormatStandardizationToDoc(docxDataA.doc);
+            docxDataA.blocks = getBodyBlocks(docxDataA.doc);
+            const stdBlocks2 = docxDataA.blocks.map(b => b.text);
+            assert('탭4 DOCX 양식표준화 멱등성', secondCount === 0 &&
+                JSON.stringify(stdBlocks2) === JSON.stringify(stdBlocks), { secondCount, stdBlocks2 });
+
             // 텍스트 비교 내보내기 결과 검증
             if (captured[4]) {
                 const zt = await JSZip.loadAsync(captured[4].blob);
@@ -390,6 +398,129 @@ const server = http.createServer((req, res) => {
                     txtXml.includes('Old') && txtXml.includes('New') &&
                     txtXml.includes('Totally fresh addition'), txtXml);
                 assert('텍스트 내보내기: 날짜 형식', /w:date="\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z"/.test(txtXml));
+            }
+
+            // 탭4 비교 및 US양식 다운로드: 변경추적 유지 + US 특허출원 양식 적용
+            const fileUsA = await makeComparePkg(
+                '<w:p><w:r><w:t>CROSS-REFERENCE TO RELATED APPLICATIONS</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>This application claims priority to KR application.</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>BACKGROUND OF THE INVENTION</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t xml:space="preserve">[0001] Body paragraph stays mostly old.</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t xml:space="preserve">[0002] Alpha beta gamma delta.</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>WHAT IS CLAIMED IS:</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>1. A device.</w:t></w:r></w:p>');
+            const fileUsB = await makeComparePkg(
+                '<w:p><w:r><w:t>CROSS-REFERENCE TO RELATED APPLICATIONS</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>This application claims priority to KR application.</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>BACKGROUND OF THE INVENTION</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t xml:space="preserve">[0001] Body paragraph stays mostly new.</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t xml:space="preserve">[0002] Zulu yankee xray whiskey victor.</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>WHAT IS CLAIMED IS:</w:t></w:r></w:p>' +
+                '<w:p><w:r><w:t>1. A device.</w:t></w:r></w:p>');
+            docxDataA = await loadDocxForCompare(fileUsA);
+            docxDataB = await loadDocxForCompare(fileUsB);
+            // 사용자가 '양식표준화' 버튼을 미리 실행한 상황 — US 흐름의 자동 표준화가 중복 적용되지 않아야 함
+            standardizeFormat4Docx();
+            document.getElementById('outputFileNameDocx4').value = '';
+            const usCapIdx = captured.length;
+            await compareDocxFilesUS();
+            assert('US비교: 다운로드 캡처(기본 파일명)', captured.length === usCapIdx + 1 &&
+                captured[usCapIdx].name === '비교결과_US.docx', captured.map(c => c.name));
+
+            if (captured[usCapIdx]) {
+                const zu = await JSZip.loadAsync(captured[usCapIdx].blob);
+                const usXml = await zu.file('word/document.xml').async('string');
+
+                // 변경추적 유지 (수정 단락 단어 단위 + 삭제/추가 단락)
+                assert('US비교: 변경추적 유지', usXml.includes('<w:ins ') && usXml.includes('<w:del ') &&
+                    /<w:delText[^>]*>old\.<\/w:delText>/.test(usXml) &&
+                    usXml.includes('Zulu yankee xray whiskey victor.') &&
+                    /<w:delText[^>]*>Alpha beta gamma delta\.[\s\S]*?<\/w:delText>/.test(usXml), usXml.slice(0, 1500));
+
+                // US양식: 고정 행 높이(25행/페이지) + Arial 12pt + US sectPr(줄번호/docGrid/A4)
+                assert('US비교: 고정 행 높이', usXml.includes('w:line="548" w:lineRule="exact"'));
+                assert('US비교: Arial 12pt', usXml.includes('w:ascii="Arial"') && usXml.includes('w:val="24"'));
+                assert('US비교: US sectPr', usXml.includes('<w:lnNumType w:countBy="5"/>') &&
+                    usXml.includes('w:linePitch="548"') && usXml.includes('<w:pgSz w:w="11906" w:h="16838"/>') &&
+                    usXml.includes('r:id="rIdUSHdr"') && usXml.includes('r:id="rIdUSFtrFirst"'));
+
+                // 텍스트 단락번호 제거 + SEQ 필드 대체
+                assert('US비교: 텍스트 단락번호 제거', !usXml.includes('[0001]') && !usXml.includes('[0002]'));
+                assert('US비교: SEQ 단락번호', usXml.includes(' SEQ ParagraphNum ') && usXml.includes('<w:instrText'));
+
+                // 삽입 단락 SEQ는 w:ins, 삭제 단락 SEQ는 w:del(delInstrText)로 감싸 수락/거부와 연동
+                const usDoc = new DOMParser().parseFromString(usXml, 'application/xml');
+                const wrappedIn = (el, name) => {
+                    for (let a = el.parentNode; a; a = a.parentNode) if (a.nodeName === name) return true;
+                    return false;
+                };
+                let insSeq = false, delSeq = false, plainSeq = false;
+                for (const el of usDoc.getElementsByTagName('w:instrText')) {
+                    if (!el.textContent.includes('SEQ ParagraphNum')) continue;
+                    if (wrappedIn(el, 'w:ins')) insSeq = true; else plainSeq = true;
+                }
+                for (const el of usDoc.getElementsByTagName('w:delInstrText')) {
+                    if (el.textContent.includes('SEQ ParagraphNum') && wrappedIn(el, 'w:del')) delSeq = true;
+                }
+                assert('US비교: SEQ 개정 래핑(ins/del/일반)', insSeq && delSeq && plainSeq,
+                    { insSeq, delSeq, plainSeq });
+
+                // 패키지: trackRevisions 설정 + 헤더/푸터 부품 + 관계/콘텐츠타입 등록
+                const usSettings = await zu.file('word/settings.xml').async('string');
+                assert('US비교: trackRevisions 설정', usSettings.includes('<w:trackRevisions/>'));
+                assert('US비교: 헤더/푸터 부품', !!zu.file('word/usHeader1.xml') &&
+                    !!zu.file('word/usFooter1.xml') && !!zu.file('word/usFooter2.xml'));
+                const usCt = await zu.file('[Content_Types].xml').async('string');
+                const usRels = await zu.file('word/_rels/document.xml.rels').async('string');
+                assert('US비교: 부품 등록', usCt.includes('/word/usHeader1.xml') && usCt.includes('/word/settings.xml') &&
+                    usRels.includes('Id="rIdUSHdr"') && usRels.includes('Id="rIdUSFtrFirst"') &&
+                    usRels.includes('Target="settings.xml"'));
+
+                // 양식표준화 선실행에도 페이지 나누기 중복 없음 (WHAT IS CLAIMED IS: 앞 1개만)
+                assert('US비교: 양식표준화 중복 미적용',
+                    (usXml.match(/w:type="page"/g) || []).length === 1, usXml.match(/w:type="page"/g));
+
+                // 업로드 상태 비오염: 원본 업로드 zip에는 US 부품이 추가되지 않음 (일반 비교 재실행 대비)
+                assert('US비교: 업로드 zip 비오염', !docxDataB.zip.file('word/usHeader1.xml') &&
+                    !(await docxDataB.zip.file('word/styles.xml').async('string')).includes('page number'));
+            }
+
+            // 일반 비교: 수정본 styles의 기본 단락 뒤 간격(Word 기본 8pt) 제거 — 제목 스타일 간격은 유지
+            const spacedStyles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="160"/></w:pPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:after="240"/></w:pPr></w:style>
+</w:styles>`;
+            // 단락 직접 서식(pPr>spacing w:after)이 있는 same/modified/added 단락 — Word가
+            // 단락마다 직접 넣은 8pt는 스타일보다 우선하므로 body 레벨에서도 0으로 통일되어야 함
+            const fileSpA = await makeComparePkg(
+                '<w:p><w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:t>Same spacing line.</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:spacing w:after="160"/></w:pPr><w:r><w:t>Spacing test line.</w:t></w:r></w:p>');
+            const fileSpB = await makeComparePkg(
+                '<w:p><w:pPr><w:spacing w:after="160" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:t>Same spacing line.</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:spacing w:after="160"/></w:pPr><w:r><w:t>Spacing test line changed.</w:t></w:r></w:p>' +
+                '<w:p><w:pPr><w:spacing w:after="160" w:afterAutospacing="1"/></w:pPr><w:r><w:t>Added spacing paragraph fresh.</w:t></w:r></w:p>');
+            docxDataA = await loadDocxForCompare(fileSpA);
+            docxDataB = await loadDocxForCompare(fileSpB);
+            docxDataB.zip.file('word/styles.xml', spacedStyles);
+            document.getElementById('outputFileNameDocx4').value = '';
+            const spCapIdx = captured.length;
+            await compareDocxFiles();
+            assert('비교: 단락뒤 0pt 다운로드 캡처', captured.length === spCapIdx + 1, captured.map(c => c.name));
+            if (captured[spCapIdx]) {
+                const zsp = await JSZip.loadAsync(captured[spCapIdx].blob);
+                const spStyles = await zsp.file('word/styles.xml').async('string');
+                assert('비교: 기본 단락 뒤 간격 0pt 패치', !spStyles.includes('w:after="160"') &&
+                    /w:pPrDefault[\s\S]*?w:after="0"/.test(spStyles) &&
+                    spStyles.includes('w:after="240"') && spStyles.includes('w:line="259"'), spStyles);
+                // 단락 직접 서식: same/modified/added 모두 w:after=0, 줄간격(w:line)은 유지
+                const spXml = await zsp.file('word/document.xml').async('string');
+                assert('비교: 단락 직접 서식 뒤 간격 0pt', !spXml.includes('w:after="160"') &&
+                    !spXml.includes('afterAutospacing') &&
+                    (spXml.match(/w:after="0"/g) || []).length >= 3 &&
+                    spXml.includes('w:line="276"') &&
+                    spXml.includes('<w:ins ') && spXml.includes('<w:del '), spXml.slice(0, 1500));
             }
         }
 
