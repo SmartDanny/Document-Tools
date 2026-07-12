@@ -655,6 +655,35 @@ const server = http.createServer((req, res) => {
         finXrefRes.xrefStored && finXrefRes.docxXref && finXrefRes.docxXrefBody)
         ? 'PASS' : 'FAIL ' + JSON.stringify(finXrefRes);
 
+    // .docx 흐름(처음부터 해외출원용 ROPKS/US 서식): Cross-reference 삽입 시 5단계 분석 결과 갱신
+    const docxXrefRes = await page.evaluate(() => {
+        const r = {};
+        // .docx 업로드 흐름 시뮬레이션 — fin 상태 해제 + US 서식 텍스트 표시
+        finParsedIR1 = null;
+        finCrossRef1 = null;
+        fileAnalysisResult.suspicious = null;
+        const text = 'TITLE OF THE INVENTION\n연마 장치\nBACKGROUND OF THE INVENTION\n배경 설명 단락이다.\n추가 본문 단락이다.\nWHAT IS CLAIMED IS:\n【청구항 1】\n장치.';
+        document.getElementById('textInput1').value = text;
+        displayResult1({ text, subscriptCount: 0, superscriptCount: 0 });
+        r.paraBefore = document.getElementById('paragraphCount1').textContent;
+        r.crossBefore = fileAnalysisResult.hasCrossRef === false;
+        priorityList1.length = 0;
+        priorityList1.push({ year: '2026', month: '03', day: '15', appNum: '10-2026-0033333' });
+        insertCrossReference();
+        r.msg = document.getElementById('crossRefMessage').textContent;
+        r.ok = r.msg.includes('삽입되었습니다');
+        // 5단계 분석 결과: 단락 개수 = 본문 2 + Cross-reference 본문 1 = 3
+        r.paraAfter = document.getElementById('paragraphCount1').textContent;
+        r.paraExpected = countParagraphsInText(rawOutput1);
+        r.crossAfter = fileAnalysisResult.hasCrossRef === true;
+        r.outputHasXref = document.getElementById('output1').textContent.includes('CROSS-REFERENCE TO RELATED APPLICATIONS');
+        return r;
+    });
+    results['탭1 .docx Cross-reference 삽입 분석갱신'] = (docxXrefRes.ok && docxXrefRes.crossBefore && docxXrefRes.crossAfter &&
+        docxXrefRes.paraBefore === '2' && docxXrefRes.paraAfter === '3' &&
+        docxXrefRes.paraAfter === String(docxXrefRes.paraExpected) && docxXrefRes.outputHasXref)
+        ? 'PASS' : 'FAIL ' + JSON.stringify(docxXrefRes);
+
     // 후처리/US서식 HTML표 → OOXML: 가로+세로 병합 그리드 정합성 (fin 미리보기와 docx 일치)
     const tblRes = await page.evaluate(() => {
         const html = '<table>'

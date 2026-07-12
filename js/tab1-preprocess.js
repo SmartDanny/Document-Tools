@@ -456,21 +456,14 @@
                     superscriptCount: (newOutput.match(/<sup>/gi) || []).length
                 });
             } else {
-                rawOutput1 = newInput;
-                document.getElementById('textInput1').value = rawOutput1;
-
-                // 분석 결과 업데이트
-                fileAnalysisResult.hasCrossRef = true;
-                updateFileAnalysisDisplay();
-
-                // 화면 업데이트
-                document.getElementById('output1').innerHTML = rawOutput1.replace(/</g,'&lt;').replace(/>/g,'&gt;')
-                    .replace(/&lt;sub&gt;/g,'<span class="sub-tag">&lt;sub&gt;</span>')
-                    .replace(/&lt;\/sub&gt;/g,'<span class="sub-tag">&lt;/sub&gt;</span>')
-                    .replace(/&lt;sup&gt;/g,'<span class="sup-tag">&lt;sup&gt;</span>')
-                    .replace(/&lt;\/sup&gt;/g,'<span class="sup-tag">&lt;/sup&gt;</span>')
-                    .replace(/__([^_]+)__/g,'<span class="warn-mark">$1</span>');
-                document.getElementById('preview1').innerHTML = rawOutput1.replace(/\n/g,'<br>').replace(/__([^_]+)__/g,'<strong>$1</strong>');
+                // .docx 업로드(처음부터 ROPKS 등 US 서식) 흐름: fin 흐름과 동일하게 재렌더링해
+                // 5단계 분석 결과(단락 개수 등)와 파일 분석 배지를 함께 갱신
+                document.getElementById('textInput1').value = newInput;
+                displayResult1({
+                    text: newInput,
+                    subscriptCount: (newInput.match(/<sub>/gi) || []).length,
+                    superscriptCount: (newInput.match(/<sup>/gi) || []).length
+                });
             }
 
             const finNote = finCrossRef1 ? ' 이제 ROPKS DOCX에 Cross-reference가 포함되어 출력됩니다.' : '';
