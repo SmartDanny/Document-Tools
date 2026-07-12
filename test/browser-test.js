@@ -382,6 +382,14 @@ const server = http.createServer((req, res) => {
             assert('탭4 DOCX 양식표준화', JSON.stringify(stdBlocks) === JSON.stringify(
                 ['Intro line.', '', 'BACKGROUND', '\n', 'WHAT IS CLAIMED IS:', '', '1.\tA sensor device.']), stdBlocks);
 
+            // 양식표준화 멱등성: 이미 표준화된 문서에 재실행해도 변경 0건
+            // (US양식 비교의 자동 표준화가 중복 적용되지 않는 근거)
+            const secondCount = applyFormatStandardizationToDoc(docxDataA.doc);
+            docxDataA.blocks = getBodyBlocks(docxDataA.doc);
+            const stdBlocks2 = docxDataA.blocks.map(b => b.text);
+            assert('탭4 DOCX 양식표준화 멱등성', secondCount === 0 &&
+                JSON.stringify(stdBlocks2) === JSON.stringify(stdBlocks), { secondCount, stdBlocks2 });
+
             // 텍스트 비교 내보내기 결과 검증
             if (captured[4]) {
                 const zt = await JSZip.loadAsync(captured[4].blob);
@@ -411,6 +419,8 @@ const server = http.createServer((req, res) => {
                 '<w:p><w:r><w:t>1. A device.</w:t></w:r></w:p>');
             docxDataA = await loadDocxForCompare(fileUsA);
             docxDataB = await loadDocxForCompare(fileUsB);
+            // 사용자가 '양식표준화' 버튼을 미리 실행한 상황 — US 흐름의 자동 표준화가 중복 적용되지 않아야 함
+            standardizeFormat4Docx();
             document.getElementById('outputFileNameDocx4').value = '';
             const usCapIdx = captured.length;
             await compareDocxFilesUS();
@@ -466,9 +476,37 @@ const server = http.createServer((req, res) => {
                     usRels.includes('Id="rIdUSHdr"') && usRels.includes('Id="rIdUSFtrFirst"') &&
                     usRels.includes('Target="settings.xml"'));
 
+                // 양식표준화 선실행에도 페이지 나누기 중복 없음 (WHAT IS CLAIMED IS: 앞 1개만)
+                assert('US비교: 양식표준화 중복 미적용',
+                    (usXml.match(/w:type="page"/g) || []).length === 1, usXml.match(/w:type="page"/g));
+
                 // 업로드 상태 비오염: 원본 업로드 zip에는 US 부품이 추가되지 않음 (일반 비교 재실행 대비)
                 assert('US비교: 업로드 zip 비오염', !docxDataB.zip.file('word/usHeader1.xml') &&
                     !(await docxDataB.zip.file('word/styles.xml').async('string')).includes('page number'));
+            }
+
+            // 일반 비교: 수정본 styles의 기본 단락 뒤 간격(Word 기본 8pt) 제거 — 제목 스타일 간격은 유지
+            const spacedStyles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:docDefaults><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="160"/></w:pPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:pPr><w:spacing w:after="240"/></w:pPr></w:style>
+</w:styles>`;
+            const fileSpA = await makeComparePkg('<w:p><w:r><w:t>Spacing test line.</w:t></w:r></w:p>');
+            const fileSpB = await makeComparePkg('<w:p><w:r><w:t>Spacing test line changed.</w:t></w:r></w:p>');
+            docxDataA = await loadDocxForCompare(fileSpA);
+            docxDataB = await loadDocxForCompare(fileSpB);
+            docxDataB.zip.file('word/styles.xml', spacedStyles);
+            document.getElementById('outputFileNameDocx4').value = '';
+            const spCapIdx = captured.length;
+            await compareDocxFiles();
+            assert('비교: 단락뒤 0pt 다운로드 캡처', captured.length === spCapIdx + 1, captured.map(c => c.name));
+            if (captured[spCapIdx]) {
+                const zsp = await JSZip.loadAsync(captured[spCapIdx].blob);
+                const spStyles = await zsp.file('word/styles.xml').async('string');
+                assert('비교: 기본 단락 뒤 간격 0pt 패치', !spStyles.includes('w:after="160"') &&
+                    /w:pPrDefault[\s\S]*?w:after="0"/.test(spStyles) &&
+                    spStyles.includes('w:after="240"') && spStyles.includes('w:line="259"'), spStyles);
             }
         }
 

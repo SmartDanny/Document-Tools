@@ -762,6 +762,15 @@ ${bodyContent}
             return p;
         }
 
+        // 페이지 나누기 단락 여부 (양식표준화 멱등 처리용)
+        function isPageBreakParagraph(node) {
+            if (!node || node.nodeName !== 'w:p') return false;
+            for (const br of node.getElementsByTagName('w:br')) {
+                if (br.getAttribute('w:type') === 'page') return true;
+            }
+            return false;
+        }
+
         // 단락 끝 공백 제거 (w:t 텍스트를 뒤에서부터 정리)
         function stripParagraphTrailingSpaces(p) {
             const texts = Array.from(p.getElementsByTagName('w:t'));
@@ -800,6 +809,8 @@ ${bodyContent}
         }
 
         // DOCX 문서에 양식표준화 규칙 적용 (텍스트 양식표준화와 동일 규칙/순서)
+        // 멱등: 이미 표준화된 문서(버튼 선실행 또는 표준화된 파일 업로드)에는 변경 0건 —
+        // US양식 비교가 표준화를 자동 적용해도 중복 삽입되지 않는다
         function applyFormatStandardizationToDoc(doc) {
             const body = doc.getElementsByTagName('w:body')[0];
             if (!body) return 0;
@@ -838,19 +849,27 @@ ${bodyContent}
                 }
 
                 // WHAT IS CLAIMED IS: 앞에 페이지 나누기, 다음에 빈 단락 추가
+                // (이미 적용된 문서에는 다시 삽입하지 않음 — 멱등)
                 if (upper === 'WHAT IS CLAIMED IS:' || upper === 'WHAT IS CLAIMED IS') {
-                    body.insertBefore(makePageBreakParagraph(doc), node);
-                    body.insertBefore(makeEmptyParagraph(doc), node.nextSibling);
+                    if (!(i > 0 && isPageBreakParagraph(blocks[i - 1]))) {
+                        body.insertBefore(makePageBreakParagraph(doc), node);
+                        changeCount++;
+                    }
+                    if (i + 1 >= blocks.length || isNonEmpty(blocks[i + 1])) {
+                        body.insertBefore(makeEmptyParagraph(doc), node.nextSibling);
+                        changeCount++;
+                    }
                     inClaims = true;
-                    changeCount++;
                     continue;
                 }
 
-                // ABSTRACT 앞에 페이지 나누기
+                // ABSTRACT 앞에 페이지 나누기 (이미 있으면 다시 삽입하지 않음 — 멱등)
                 if (upper === 'ABSTRACT' || upper === 'ABSTRACT OF DISCLOSURE') {
-                    body.insertBefore(makePageBreakParagraph(doc), node);
+                    if (!(i > 0 && isPageBreakParagraph(blocks[i - 1]))) {
+                        body.insertBefore(makePageBreakParagraph(doc), node);
+                        changeCount++;
+                    }
                     inClaims = false;
-                    changeCount++;
                     continue;
                 }
 
@@ -1471,6 +1490,55 @@ ${bodyContent}
             zip.file('word/_rels/document.xml.rels', rels);
         }
 
+        // 수정본 styles.xml의 기본 단락 뒤 간격을 0pt로 패치
+        // (Word 기본 서식은 단락 뒤 8pt(w:after="160") — 탭2 '워드파일 다운로드'의
+        //  makeDocxStylesXml과 동일한 '단락 뒤 여백 없음' 규칙을 문서 기본값에만 적용.
+        //  제목 등 개별 스타일의 의도된 간격은 유지)
+        function stripStylesSpacingAfter(stylesXml) {
+            const dom = new DOMParser().parseFromString(stylesXml, 'application/xml');
+            if (dom.getElementsByTagName('parsererror').length) return stylesXml;
+
+            const zeroSpacingIn = (parent, createIfMissing) => {
+                let pPr = null;
+                for (const c of parent.childNodes) if (c.nodeName === 'w:pPr') { pPr = c; break; }
+                if (!pPr) {
+                    if (!createIfMissing) return;
+                    pPr = dom.createElementNS(DOCX_W_NS, 'w:pPr');
+                    parent.insertBefore(pPr, parent.firstChild);
+                }
+                let spacing = null;
+                for (const c of pPr.childNodes) if (c.nodeName === 'w:spacing') { spacing = c; break; }
+                if (!spacing) {
+                    spacing = dom.createElementNS(DOCX_W_NS, 'w:spacing');
+                    pPr.appendChild(spacing);
+                }
+                spacing.setAttributeNS(DOCX_W_NS, 'w:after', '0');
+                spacing.removeAttribute('w:afterLines');
+                spacing.removeAttribute('w:afterAutospacing');
+            };
+
+            // 1) 문서 기본값 (docDefaults > pPrDefault)
+            const docDefaults = dom.getElementsByTagName('w:docDefaults')[0];
+            if (docDefaults) {
+                let pPrDefault = null;
+                for (const c of docDefaults.childNodes) if (c.nodeName === 'w:pPrDefault') { pPrDefault = c; break; }
+                if (!pPrDefault) {
+                    pPrDefault = dom.createElementNS(DOCX_W_NS, 'w:pPrDefault');
+                    docDefaults.appendChild(pPrDefault);
+                }
+                zeroSpacingIn(pPrDefault, true);
+            }
+
+            // 2) 기본 단락 스타일(Normal 등 w:default="1") — 기존 spacing이 있을 때만 0으로
+            for (const style of dom.getElementsByTagName('w:style')) {
+                if (style.getAttribute('w:type') === 'paragraph' && style.getAttribute('w:default') === '1') {
+                    zeroSpacingIn(style, false);
+                }
+            }
+
+            return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + serializeXmlNode(dom.documentElement);
+        }
+
         // Track Changes가 적용된 DOCX 파일 생성
         // 수정본(B)의 패키지(스타일/글꼴/머리글/섹션 설정)를 기반으로 결과를 생성하여
         // 첨자·표·빈줄·단락 나누기 등 원본 서식을 유지한다 (MS Word 검토>비교와 동일한 방식)
@@ -1530,6 +1598,12 @@ ${bodyContent}
                     const bodyB = dataB.doc.getElementsByTagName('w:body')[0];
                     for (const c of bodyB.childNodes) {
                         if (c.nodeName === 'w:sectPr') tailSect = serializeXmlNode(c);
+                    }
+                    // 단락 뒤 여백 0pt: 수정본 styles의 기본 단락 뒤 간격(Word 기본 8pt) 제거
+                    // (탭2 '워드파일 다운로드'와 동일한 규칙)
+                    const stylesFile = dataB.zip.file('word/styles.xml');
+                    if (stylesFile) {
+                        dataB.zip.file('word/styles.xml', stripStylesSpacingAfter(await stylesFile.async('string')));
                     }
                 }
 
