@@ -942,16 +942,22 @@ ${bodyContent}
                 return simCache[key];
             };
             const matchable = (i, j) => eq(blocksA[i], blocksB[j]) || getSim(i, j) >= 0.15;
+            // 매칭 가중치: 완전 일치는 유사 매칭보다 항상 우선한다.
+            // (모든 매칭을 +1로 동일 취급하면, 이동·재구성된 단락이 인접한
+            //  유사 단락에 흡수되어 정렬이 한 칸씩 밀리고 이후 단락이 연쇄적으로
+            //  '수정'으로 잡힌다. 완전 일치에 더 큰 가중치를 주면 동일한 단락끼리
+            //  우선 정렬되어 MS Word 비교와 동일한 결과를 낸다.)
+            const matchWeight = (i, j) => eq(blocksA[i], blocksB[j]) ? 2 : 1;
 
-            // DP 테이블 (블록 단위 LCS) - 유사도 15% 이상이면 매칭 가능
+            // DP 테이블 (블록 단위 가중 LCS) - 유사도 15% 이상이면 매칭 가능
             const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
             for (let i = 1; i <= m; i++) {
                 for (let j = 1; j <= n; j++) {
+                    let best = Math.max(dp[i-1][j], dp[i][j-1]);
                     if (matchable(i - 1, j - 1)) {
-                        dp[i][j] = dp[i-1][j-1] + 1;
-                    } else {
-                        dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+                        best = Math.max(best, dp[i-1][j-1] + matchWeight(i - 1, j - 1));
                     }
+                    dp[i][j] = best;
                 }
             }
 
@@ -959,7 +965,7 @@ ${bodyContent}
             const matches = [];
             let i = m, j = n;
             while (i > 0 && j > 0) {
-                if (matchable(i - 1, j - 1) && dp[i][j] === dp[i-1][j-1] + 1) {
+                if (matchable(i - 1, j - 1) && dp[i][j] === dp[i-1][j-1] + matchWeight(i - 1, j - 1)) {
                     matches.unshift({ idxA: i - 1, idxB: j - 1 });
                     i--; j--;
                 } else if (dp[i-1][j] >= dp[i][j-1]) {
