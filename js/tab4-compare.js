@@ -942,16 +942,27 @@ ${bodyContent}
                 return simCache[key];
             };
             const matchable = (i, j) => eq(blocksA[i], blocksB[j]) || getSim(i, j) >= 0.15;
+            // 매칭 가중치: 완전 일치(2)는 어떤 유사 매칭보다 항상 우선하고,
+            // 유사 매칭끼리는 실제 유사도가 높은 짝을 우선한다.
+            // (모든 매칭을 +1로 동일 취급하면 ① 이동·재구성된 단락이 인접한
+            //  유사 단락에 흡수되어 정렬이 한 칸씩 밀리고, ② 한 B 단락에 두 A
+            //  단락이 모두 '유사'하면 LCS가 둘을 구분하지 못해 덜 유사한 짝을
+            //  고르는 문제가 생긴다. 예: 결론 단락 "Although embodiments ...
+            //  invention → disclosure"가 인접한 "<Description of symbols>"에
+            //  잘못 매칭되어 결론 단락 전체가 삭제+삽입으로 쪼개짐.
+            //  유사도를 가중치로 쓰면 가장 유사한 단락끼리 정렬되어 MS Word
+            //  '검토>비교'와 동일한 결과를 낸다.)
+            const matchWeight = (i, j) => eq(blocksA[i], blocksB[j]) ? 2 : getSim(i, j);
 
-            // DP 테이블 (블록 단위 LCS) - 유사도 15% 이상이면 매칭 가능
+            // DP 테이블 (블록 단위 가중 LCS) - 유사도 15% 이상이면 매칭 가능
             const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0));
             for (let i = 1; i <= m; i++) {
                 for (let j = 1; j <= n; j++) {
+                    let best = Math.max(dp[i-1][j], dp[i][j-1]);
                     if (matchable(i - 1, j - 1)) {
-                        dp[i][j] = dp[i-1][j-1] + 1;
-                    } else {
-                        dp[i][j] = Math.max(dp[i-1][j], dp[i][j-1]);
+                        best = Math.max(best, dp[i-1][j-1] + matchWeight(i - 1, j - 1));
                     }
+                    dp[i][j] = best;
                 }
             }
 
@@ -959,7 +970,7 @@ ${bodyContent}
             const matches = [];
             let i = m, j = n;
             while (i > 0 && j > 0) {
-                if (matchable(i - 1, j - 1) && dp[i][j] === dp[i-1][j-1] + 1) {
+                if (matchable(i - 1, j - 1) && dp[i][j] === dp[i-1][j-1] + matchWeight(i - 1, j - 1)) {
                     matches.unshift({ idxA: i - 1, idxB: j - 1 });
                     i--; j--;
                 } else if (dp[i-1][j] >= dp[i][j-1]) {
