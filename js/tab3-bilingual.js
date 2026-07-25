@@ -782,22 +782,23 @@
         function addParagraphNumbersColor3() {
             const msg = document.getElementById('colorMessage3');
             msg.classList.add('hidden');
-            
+            renderMissingPeriodPanel3('color', []); // 이전 실행의 안내 초기화
+
             if (!window.colorLines3 || !window.originalText3) {
                 showMessage(msg, '❌ 먼저 국문 색변환을 실행해주세요.', 'error');
                 return;
             }
-            
+
             // 이미 단락번호가 있는지 확인 (국문단락 중에서)
             // 단락번호 형식: [0001] 또는 [00001] - 0으로 시작하고 뒤에 공백이 있음
-            const hasExistingNumbers = window.colorLines3.some(l => 
+            const hasExistingNumbers = window.colorLines3.some(l =>
                 l.type === 'korean' && /^\[0\d{3,4}\]\s/.test(l.text.trim())
             );
             if (hasExistingNumbers) {
-                showMessage(msg, '❌ 이미 단락번호가 있습니다.', 'error');
+                showMessage(msg, `❌ 이미 단락번호가 있습니다.${missingPeriodHint3('color', window.originalText3)}`, 'error');
                 return;
             }
-            
+
             // 국문단락에만 단락번호 추가
             let paragraphNum = 1;
             let insideTable = false;
@@ -859,15 +860,15 @@
             
             // 미리보기 갱신
             updateColorPreview3();
-            
-            showMessage(msg, `✅ 국문단락에 단락번호가 추가되었습니다. (${addedCount}개)`, 'success');
-            setTimeout(() => msg.classList.add('hidden'), 3000);
+
+            reportMissingPeriod3('color', msg, `✅ 국문단락에 단락번호가 추가되었습니다. (${addedCount}개)`, window.originalText3);
         }
         
         // 색변환용 단락번호 제거
         function removeParagraphNumbersColor3() {
             const msg = document.getElementById('colorMessage3');
             msg.classList.add('hidden');
+            renderMissingPeriodPanel3('color', []); // 번호 제거 시 마침표 누락 안내도 초기화
             
             if (!window.colorLines3 || !window.originalText3) {
                 showMessage(msg, '❌ 먼저 국문 색변환을 실행해주세요.', 'error');
@@ -1071,31 +1072,32 @@
         function addParagraphNumbersEng3() {
             const msg = document.getElementById('engParagraphNumMessage3');
             msg.classList.add('hidden');
-            
+            renderMissingPeriodPanel3('eng', []); // 이전 실행의 안내 초기화
+
             let text = window.englishRawText3 || '';
             if (!text || text.includes('없습니다')) {
                 showMessage(msg, '❌ 영문본이 없습니다.', 'error');
                 return;
             }
-            
+
             // 이미 단락번호가 있는지 확인 (0으로 시작하는 4~5자리, 뒤에 공백)
             if (/^\[0\d{3,4}\]\s/m.test(text)) {
-                showMessage(msg, '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.', 'error');
+                showMessage(msg, `⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.${missingPeriodHint3('eng', text)}`, 'error');
                 return;
             }
-            
+
             const result = addParagraphNumbersToText(text);
             window.englishRawText3 = result.text;
             updateEnglishDisplay3();
-            
-            showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${result.count}개 단락)`, 'success');
-            setTimeout(() => msg.classList.add('hidden'), 3000);
+
+            reportMissingPeriod3('eng', msg, `✅ 단락번호가 추가되었습니다! (총 ${result.count}개 단락)`, window.englishRawText3);
         }
         
         // 영문본 단락번호 제거
         function removeParagraphNumbersEng3() {
             const msg = document.getElementById('engParagraphNumMessage3');
             msg.classList.add('hidden');
+            renderMissingPeriodPanel3('eng', []); // 번호 제거 시 마침표 누락 안내도 초기화
 
             let text = window.englishRawText3 || '';
             if (!text || text.includes('없습니다')) {
@@ -1130,31 +1132,32 @@
         function addParagraphNumbersKor3() {
             const msg = document.getElementById('korParagraphNumMessage3');
             msg.classList.add('hidden');
-            
+            renderMissingPeriodPanel3('kor', []); // 이전 실행의 안내 초기화
+
             let text = window.koreanRawText3 || '';
             if (!text || text.includes('없습니다')) {
                 showMessage(msg, '❌ 국문본이 없습니다.', 'error');
                 return;
             }
-            
+
             // 이미 단락번호가 있는지 확인 (0으로 시작하는 4~5자리, 뒤에 공백)
             if (/^\[0\d{3,4}\]\s/m.test(text)) {
-                showMessage(msg, '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.', 'error');
+                showMessage(msg, `⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.${missingPeriodHint3('kor', text)}`, 'error');
                 return;
             }
-            
+
             const result = addParagraphNumbersToText(text);
             window.koreanRawText3 = result.text;
             updateKoreanDisplay3();
-            
-            showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${result.count}개 단락)`, 'success');
-            setTimeout(() => msg.classList.add('hidden'), 3000);
+
+            reportMissingPeriod3('kor', msg, `✅ 단락번호가 추가되었습니다! (총 ${result.count}개 단락)`, window.koreanRawText3);
         }
         
         // 국문본 단락번호 제거
         function removeParagraphNumbersKor3() {
             const msg = document.getElementById('korParagraphNumMessage3');
             msg.classList.add('hidden');
+            renderMissingPeriodPanel3('kor', []); // 번호 제거 시 마침표 누락 안내도 초기화
 
             let text = window.koreanRawText3 || '';
             if (!text || text.includes('없습니다')) {
@@ -1185,6 +1188,64 @@
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
+        // ── 마침표 누락 의심 단락 안내 (영문본/국문본/한영혼합본 공통) ──────────────
+        // 마침표로 끝나지 않아 번호가 부여되지 않은 단락 중 '완성된 문장'으로 보이는 것을
+        // 안내한다. 검출 조건은 각 단락번호 부여 로직과 동일하게 맞춘다.
+        // (영문본·국문본: isGenericSubtitle 기준 / 한영혼합본: 국문 라인만 번호 부여)
+        const MISSING_PERIOD_PANEL3 = {
+            eng: 'missingPeriodDetailEng3',
+            kor: 'missingPeriodDetailKor3',
+            color: 'missingPeriodDetailColor3'
+        };
+
+        // 검출 옵션 (단락번호 부여 로직의 제외 규칙과 일치)
+        function missingPeriodOpts3(which) {
+            if (which === 'color') {
+                return {
+                    // 색변환 단락번호는 국문 라인에만 부여된다
+                    isTargetLine: (t, i) => {
+                        const l = (window.colorLines3 || [])[i];
+                        return !!l && l.type === 'korean';
+                    },
+                    // 색변환 로직은 '특허청구범위'/'청구범위' 단독 라인도 청구항 시작으로 본다
+                    isClaimsStart: (line) => {
+                        const t = String(line).trim();
+                        return isClaimsStartLine(t) || t === '특허청구범위' || t === '청구범위';
+                    }
+                };
+            }
+            return { isSubtitle: isGenericSubtitle };
+        }
+
+        function renderMissingPeriodPanel3(which, items) {
+            // 탭3은 결과가 읽기 전용 표시 영역이라 행 이동 없이 위치·사유만 안내한다
+            renderMissingPeriodPanel(MISSING_PERIOD_PANEL3[which], items, {
+                fixHint: which === 'color'
+                    ? '마침표 누락이면 국문본에서 마침표를 보완한 뒤 색변환·단락번호 추가를 다시 실행해주세요.'
+                    : '마침표 누락이면 원본에서 마침표를 보완한 뒤 <strong>단락번호 제거 → 단락번호 추가</strong>를 다시 실행해주세요.'
+            });
+        }
+
+        // '이미 번호 존재' 등 번호를 부여하지 않는 경로에서 쓰는 참고 문구 (패널도 함께 표시)
+        function missingPeriodHint3(which, text) {
+            const items = findMissingPeriodParas(text, missingPeriodOpts3(which));
+            renderMissingPeriodPanel3(which, items);
+            return items.length ? ` (참고: ${formatMissingPeriodSummary(items)} — 아래 목록 확인)` : '';
+        }
+
+        // 번호 부여 후 결과 메시지 + 패널 표시
+        function reportMissingPeriod3(which, msgEl, baseMsg, text) {
+            const items = findMissingPeriodParas(text, missingPeriodOpts3(which));
+            renderMissingPeriodPanel3(which, items);
+            if (items.length) {
+                // 확인이 필요한 안내이므로 메시지를 자동으로 숨기지 않는다
+                showMessage(msgEl, `${baseMsg} — ⚠️ ${formatMissingPeriodSummary(items)}. 아래 목록을 확인해주세요.`, 'warn');
+            } else {
+                showMessage(msgEl, `${baseMsg} · 마침표 누락 의심 단락 없음`, 'success');
+                setTimeout(() => msgEl.classList.add('hidden'), 3000);
+            }
+        }
+
         // 텍스트에 단락번호 추가 (공통 함수)
         // 부제목/청구항/CROSS-REFERENCE 판별 함수는 utils.js에서 로드됨
         function addParagraphNumbersToText(text) {

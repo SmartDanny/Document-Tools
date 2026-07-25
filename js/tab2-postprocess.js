@@ -598,23 +598,38 @@
             setTimeout(() => msg.classList.add('hidden'), 5000);
         }
         
+        // 탭2 마침표 누락 의심 단락 안내 (부제목 판별은 단락번호 부여와 동일한 기준 사용)
+        const MISSING_PERIOD_OPTS2 = { isSubtitle: (l) => isGenericSubtitle(l, { checkSymbols: true }) };
+
+        function renderMissingPeriodPanel2(items) {
+            renderMissingPeriodPanel('missingPeriodDetail2', items, {
+                textareaId: 'htmlInput2',
+                fixHint: '마침표 누락이면 입력창에서 마침표를 보완한 뒤 <strong>단락번호 제거 → 단락번호 추가</strong>를 다시 실행해주세요.'
+            });
+        }
+
         // 탭2 단락번호 추가
         function addParagraphNumbers2() {
             const msg = document.getElementById('paragraphNumMessage2');
             msg.classList.add('hidden');
-            
+            renderMissingPeriodPanel2([]); // 이전 실행의 안내 초기화
+
             const text = inp2.value;
             if (!text.trim()) {
                 showMessage(msg, '❌ 먼저 텍스트를 입력해주세요.', 'error');
                 return;
             }
-            
+
             // 이미 단락번호가 있는지 확인 (0으로 시작하는 4~5자리, 뒤에 공백)
             if (/^\[0\d{3,4}\]\s/m.test(text)) {
-                showMessage(msg, '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.', 'error');
+                // 번호를 새로 부여하지는 않지만, 번호가 빠진 문장형 단락은 안내한다
+                const existing = findMissingPeriodParas(text, MISSING_PERIOD_OPTS2);
+                renderMissingPeriodPanel2(existing);
+                const hint = existing.length ? ` (참고: ${formatMissingPeriodSummary(existing)} — 아래 목록 확인)` : '';
+                showMessage(msg, `⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.${hint}`, 'error');
                 return;
             }
-            
+
             // 부제목/청구항/CROSS-REFERENCE 판별 함수는 utils.js에서 로드됨
             const lines = text.split('\n');
 
@@ -661,15 +676,25 @@
             
             inp2.value = resultLines.join('\n');
             updatePreview2();
-            
-            showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${counter - 1}개 단락)`, 'success');
-            setTimeout(() => msg.classList.add('hidden'), 3000);
+
+            // 마침표 누락으로 번호가 부여되지 않은 문장형 단락 검출
+            const missing = findMissingPeriodParas(inp2.value, MISSING_PERIOD_OPTS2);
+            renderMissingPeriodPanel2(missing);
+
+            if (missing.length) {
+                showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${counter - 1}개 단락) — ⚠️ ${formatMissingPeriodSummary(missing)}. 아래 목록을 확인해주세요.`, 'warn');
+                // 확인이 필요한 안내이므로 메시지를 자동으로 숨기지 않는다
+            } else {
+                showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${counter - 1}개 단락) · 마침표 누락 의심 단락 없음`, 'success');
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+            }
         }
-        
+
         // 탭2 단락번호 제거
         function removeParagraphNumbers2() {
             const msg = document.getElementById('paragraphNumMessage2');
             msg.classList.add('hidden');
+            renderMissingPeriodPanel2([]); // 번호 제거 시 마침표 누락 안내도 초기화
 
             const text = inp2.value;
             if (!text.trim()) {

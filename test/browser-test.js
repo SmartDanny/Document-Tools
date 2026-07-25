@@ -864,6 +864,110 @@ const server = http.createServer((req, res) => {
         missingPeriodRes.selected === '상기 화소는 발광층과 전극을 포함하여 구성된다' &&
         missingPeriodRes.panelHiddenAfter) ? 'PASS' : 'FAIL ' + JSON.stringify(missingPeriodRes);
 
+    // 탭2 4단계: 단락번호 추가 시 마침표 누락 의심 단락 안내 (입력창 행 이동 포함)
+    await page.click(`.tab-btn[onclick*="'tab2'"]`);
+    const missingPeriod2Res = await page.evaluate(() => {
+        const r = {};
+        const text = [
+            'BACKGROUND',                                  // 1 부제목
+            '표시 장치는 기판 상의 화소를 포함한다.',        // 2 정상
+            '상기 화소는 발광층과 전극을 포함하여 구성된다', // 3 ← 마침표 누락
+            '<table><tr><td>표 안의 문장이 마침표 없이 끝난다</td></tr></table>', // 4 표 → 제외
+            'WHAT IS CLAIMED IS:',
+            '표시 장치.'
+        ].join('\n');
+        document.getElementById('htmlInput2').value = text;
+        addParagraphNumbers2();
+        const msgEl = document.getElementById('paragraphNumMessage2');
+        const panel = document.getElementById('missingPeriodDetail2');
+        r.msgWarn = msgEl.className === 'message warn';
+        r.msg = msgEl.textContent;
+        r.numbered = /^\[0001\] 표시 장치는/m.test(document.getElementById('htmlInput2').value);
+        r.itemCount = panel.querySelectorAll('li.missing-period-item').length;
+        const item = panel.querySelector('li.missing-period-item');
+        r.itemText = item ? item.textContent : '';
+        if (item) item.click();
+        const ta = document.getElementById('htmlInput2');
+        r.selected = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+        removeParagraphNumbers2();
+        r.panelHiddenAfter = panel.classList.contains('hidden');
+        return r;
+    });
+    results['탭2 마침표 누락 의심 단락 안내'] = (missingPeriod2Res.msgWarn && missingPeriod2Res.numbered &&
+        missingPeriod2Res.msg.includes('마침표 누락 의심 단락 1건') && missingPeriod2Res.itemCount === 1 &&
+        missingPeriod2Res.itemText.includes('3행') &&
+        missingPeriod2Res.selected === '상기 화소는 발광층과 전극을 포함하여 구성된다' &&
+        missingPeriod2Res.panelHiddenAfter) ? 'PASS' : 'FAIL ' + JSON.stringify(missingPeriod2Res);
+
+    // 탭3 영문본/국문본/한영혼합본: 단락번호 추가 시 마침표 누락 의심 단락 안내
+    await page.click(`.tab-btn[onclick*="'tab3'"]`);
+    const missingPeriod3Res = await page.evaluate(() => {
+        const r = {};
+        const read = (panelId, msgId) => ({
+            msgWarn: document.getElementById(msgId).className.includes('warn'),
+            msg: document.getElementById(msgId).textContent,
+            shown: !document.getElementById(panelId).classList.contains('hidden'),
+            items: [...document.getElementById(panelId).querySelectorAll('li')].map(li => li.textContent),
+            clickable: document.getElementById(panelId).querySelectorAll('li.missing-period-item').length
+        });
+
+        // 영문본
+        window.englishRawText3 = [
+            'BACKGROUND OF THE INVENTION',
+            'The display device includes a pixel disposed on the substrate.',
+            'The pixel may include a light emitting layer and an electrode layer',  // 3 ← 누락
+            'WHAT IS CLAIMED IS:',
+            '1. A display device.'
+        ].join('\n');
+        addParagraphNumbersEng3();
+        r.eng = read('missingPeriodDetailEng3', 'engParagraphNumMessage3');
+        r.engNumbered = /^\[0001\] The display device/m.test(window.englishRawText3);
+
+        // 국문본
+        window.koreanRawText3 = [
+            '【배경기술】',
+            '표시 장치는 기판 상의 화소를 포함한다.',
+            '상기 화소는 발광층과 전극을 포함하여 구성된다',   // 3 ← 누락
+            '【청구범위】',
+            '표시 장치'
+        ].join('\n');
+        addParagraphNumbersKor3();
+        r.kor = read('missingPeriodDetailKor3', 'korParagraphNumMessage3');
+        r.korNumbered = /^\[0001\] 표시 장치는/m.test(window.koreanRawText3);
+
+        // 한영혼합본 (국문 라인에만 번호 부여 → 영문 라인은 의심 대상 아님)
+        document.getElementById('inputText3').value = [
+            'BACKGROUND OF THE INVENTION',
+            'The display device includes a pixel.',
+            '표시 장치는 화소를 포함한다.',
+            '상기 화소는 발광층과 전극을 포함하여 구성된다',                        // 4 ← 누락(국문)
+            'The pixel may include a light emitting layer and an electrode layer', // 5 영문 → 제외
+            'WHAT IS CLAIMED IS:',
+            '표시 장치'
+        ].join('\n');
+        convertKoreanColor3();
+        addParagraphNumbersColor3();
+        r.color = read('missingPeriodDetailColor3', 'colorMessage3');
+        r.colorNumbered = /^\[0001\] 표시 장치는/m.test(window.originalText3);
+
+        // 번호 제거 시 안내 초기화
+        removeParagraphNumbersEng3();
+        removeParagraphNumbersKor3();
+        removeParagraphNumbersColor3();
+        r.hiddenAfter = ['missingPeriodDetailEng3', 'missingPeriodDetailKor3', 'missingPeriodDetailColor3']
+            .every(id => document.getElementById(id).classList.contains('hidden'));
+        return r;
+    });
+    {
+        const R = missingPeriod3Res;
+        const one = (g, loc) => g.msgWarn && g.shown && g.items.length === 1 && g.items[0].includes(loc) &&
+            g.msg.includes('마침표 누락 의심 단락 1건') && g.clickable === 0; // 탭3은 읽기 전용 → 클릭 이동 없음
+        results['탭3 마침표 누락 의심 단락 안내'] = (R.engNumbered && R.korNumbered && R.colorNumbered &&
+            one(R.eng, '3행') && one(R.kor, '3행') && one(R.color, '4행') && R.hiddenAfter)
+            ? 'PASS' : 'FAIL ' + JSON.stringify(R);
+    }
+    await page.click(`.tab-btn[onclick*="'tab1'"]`);
+
     // 후처리/US서식 HTML표 → OOXML: 가로+세로 병합 그리드 정합성 (fin 미리보기와 docx 일치)
     const tblRes = await page.evaluate(() => {
         const html = '<table>'

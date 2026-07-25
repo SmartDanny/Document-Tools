@@ -210,6 +210,49 @@ describe('마침표 누락 단락 검출', () => {
         assert.equal(found[0].line, 3);
     });
 
+    test('findMissingPeriodParas: isSubtitle 주입 (탭2·3 = isGenericSubtitle 기준)', () => {
+        const text = [
+            'DETAILED DESCRIPTION OF THE EMBODIMENTS',                       // 1 대문자 부제
+            '[Symbols]',                                                     // 2 [] 부제
+            'Description of Symbols',                                        // 3 checkSymbols 옵션 대상
+            'The substrate may be formed of glass or plastic material'       // 4 ← 의심
+        ].join('\n');
+
+        const found = u.findMissingPeriodParas(text, {
+            isSubtitle: (l) => u.isGenericSubtitle(l, { checkSymbols: true })
+        });
+        assert.equal(found.length, 1);
+        assert.equal(found[0].line, 4);
+        assert.equal(found[0].level, 'high');
+
+        // checkSymbols 없이 판별하면 'Description of Symbols'는 부제로 걸러지지 않지만
+        // 문장 형태가 아니므로(4단어) 여전히 의심 대상이 아니다
+        assert.equal(u.findMissingPeriodParas(text, { isSubtitle: u.isGenericSubtitle }).length, 1);
+    });
+
+    test('findMissingPeriodParas: isTargetLine·isClaimsStart 주입 (한영혼합본)', () => {
+        const lines = [
+            '상기 화소는 발광층을 포함하여 구성된다',      // 1 국문 → 의심
+            'The pixel includes a light emitting layer',  // 2 영문 라인 → 번호 대상 아님
+            '청구범위',                                   // 3 색변환 로직의 청구항 시작
+            '기판을 포함하는 표시 장치는 다음과 같다'      // 4 청구항 이후 → 제외
+        ];
+        const found = u.findMissingPeriodParas(lines.join('\n'), {
+            isTargetLine: (t) => /[가-힣]/.test(t),
+            isClaimsStart: (l) => u.isClaimsStartLine(l) || l.trim() === '청구범위'
+        });
+        assert.equal(found.length, 1);
+        assert.equal(found[0].line, 1);
+    });
+
+    test('formatMissingPeriodSummary', () => {
+        assert.equal(u.formatMissingPeriodSummary([]), '');
+        assert.equal(u.formatMissingPeriodSummary(null), '');
+        assert.equal(u.formatMissingPeriodSummary([{ level: 'low' }]), '마침표 누락 의심 단락 1건');
+        assert.equal(u.formatMissingPeriodSummary([{ level: 'high' }, { level: 'low' }]),
+            '마침표 누락 의심 단락 2건(누락 가능성 높음 1건 포함)');
+    });
+
     test('findMissingPeriodParas: 빈 입력/정상 문서는 0건', () => {
         assert.equal(u.findMissingPeriodParas('').length, 0);
         assert.equal(u.findMissingPeriodParas(null).length, 0);
