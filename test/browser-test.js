@@ -568,10 +568,25 @@ const server = http.createServer((req, res) => {
     });
 
     // 탭 전환 스모크 테스트 (분할된 파일들이 함께 동작하는지)
+    // + 상단 탭 바 / 플로팅 탭 바 선택 표시 동기화 (어느 쪽을 눌러도 양쪽이 일치해야 함)
+    const activeTabState = (tab) => page.evaluate(t => ({
+        content: document.getElementById(t).classList.contains('active'),
+        top: [...document.querySelectorAll('.tab-btn')].filter(b => b.classList.contains('active')).map(b => b.dataset.tab),
+        floating: [...document.querySelectorAll('.floating-tab-btn')].filter(b => b.classList.contains('active')).map(b => b.dataset.tab)
+    }), tab);
+    const syncOk = (s, tab) => s.content &&
+        s.top.length === 1 && s.top[0] === tab && s.floating.length === 1 && s.floating[0] === tab;
+
     for (const tab of ['tab2', 'tab3', 'tab4', 'tab5', 'tab1']) {
         await page.click(`.tab-btn[onclick*="'${tab}'"]`);
-        const active = await page.evaluate(t => document.getElementById(t).classList.contains('active'), tab);
-        results[`탭 전환 ${tab}`] = active ? 'PASS' : 'FAIL';
+        const s = await activeTabState(tab);
+        results[`탭 전환 ${tab}`] = syncOk(s, tab) ? 'PASS' : 'FAIL ' + JSON.stringify(s);
+    }
+    // 플로팅 탭 바 클릭 → 상단 탭 바에도 선택 표시가 반영되어야 한다
+    for (const tab of ['tab3', 'tab1']) {
+        await page.evaluate(t => document.querySelector(`.floating-tab-btn[data-tab="${t}"]`).click(), tab);
+        const s = await activeTabState(tab);
+        results[`플로팅 탭 → 상단 탭 동기화 ${tab}`] = syncOk(s, tab) ? 'PASS' : 'FAIL ' + JSON.stringify(s);
     }
     // 탭2 입력 → 미리보기 갱신 (app-core의 inp2 리스너 + stat-nav의 resetStatNavState 연동)
     await page.click(`.tab-btn[onclick*="'tab2'"]`);
