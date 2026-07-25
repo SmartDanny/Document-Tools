@@ -298,6 +298,7 @@
         
         function displayResult1(r) {
             resetStatNavState('tab1');
+            renderMissingPeriodPanel1([]); // 새 파일/재렌더링 시 마침표 누락 안내 초기화
             // 출력 박스/미리보기(변환결과)는 outputText가 있으면 그것을, 없으면 r.text를 사용한다.
             // (fin 업로드 시: 1단계 창/분석 = r.text(국문 원본), 변환결과 = outputText(ROPKS))
             const outText = (r.outputText != null) ? r.outputText : r.text;
@@ -759,19 +760,25 @@
             
             const textInput1El = document.getElementById('textInput1');
             const currentText = textInput1El.value;
-            
+
+            renderMissingPeriodPanel1([]); // 이전 실행의 안내 초기화
+
             // 텍스트 입력 확인
             if (!currentText.trim()) {
                 showMessage(msg, '❌ 먼저 텍스트를 입력하거나 워드 파일을 업로드해주세요.', 'error');
                 return;
             }
-            
+
             // 이미 단락번호가 존재하는지 확인 (0으로 시작하는 4~5자리, 뒤에 공백)
             if (/^\[0\d{3,4}\]\s/m.test(currentText)) {
-                showMessage(msg, '⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.', 'error');
+                // 번호를 새로 부여하지는 않지만, 기존 문서에서 번호가 빠진 문장형 단락은 안내한다
+                const missing = findMissingPeriodParas(currentText);
+                renderMissingPeriodPanel1(missing);
+                const tail = missing.length ? ` (참고: 마침표 누락 의심 단락 ${missing.length}건 — 아래 목록 확인)` : '';
+                showMessage(msg, `⚠️ 이미 단락번호가 존재합니다. 단락번호를 제거한 후 다시 시도해주세요.${tail}`, 'error');
                 return;
             }
-            
+
             // 바로 단락번호 추가 진행
             executeAddParagraphNumbers();
         }
@@ -826,6 +833,18 @@
             return { text: resultLines.join('\n'), count: counter - 1 };
         }
 
+        // ── 마침표 누락 의심 단락 안내 (단락번호 추가 시) ──────────────────────────
+        // 마침표로 끝나지 않아 번호가 부여되지 않은 단락 중 '완성된 문장'으로 보이는 것을
+        // 목록으로 안내한다. 검출·렌더링은 utils.js의 findMissingPeriodParas /
+        // renderMissingPeriodPanel이 담당하며, 위치는 1단계 입력창(textInput1) 기준 행 번호다.
+        // (탭1의 부제목 판별은 단락번호 부여와 동일한 isPatentSectionSubtitle = 기본값)
+        function renderMissingPeriodPanel1(items) {
+            renderMissingPeriodPanel('missingPeriodDetail1', items, {
+                textareaId: 'textInput1',
+                fixHint: '마침표 누락이면 입력창에서 마침표를 보완한 뒤 <strong>단락번호 제거 → 단락번호 추가</strong>를 다시 실행해주세요.'
+            });
+        }
+
         function executeAddParagraphNumbers() {
             const msg = document.getElementById('paragraphNumMessage');
             const textInput1El = document.getElementById('textInput1');
@@ -865,14 +884,24 @@
                 document.getElementById('paragraphCount1').textContent = count;
             }
 
-            showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${count}개 단락)`, 'success');
-            setTimeout(() => msg.classList.add('hidden'), 3000);
+            // 마침표 누락으로 번호가 부여되지 않은 문장형 단락 검출 (입력창 텍스트 기준)
+            const missing = findMissingPeriodParas(numberedInput.text);
+            renderMissingPeriodPanel1(missing);
+
+            if (missing.length) {
+                showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${count}개 단락) — ⚠️ ${formatMissingPeriodSummary(missing)}. 아래 목록을 확인해주세요.`, 'warn');
+                // 확인이 필요한 안내이므로 메시지를 자동으로 숨기지 않는다
+            } else {
+                showMessage(msg, `✅ 단락번호가 추가되었습니다! (총 ${count}개 단락) · 마침표 누락 의심 단락 없음`, 'success');
+                setTimeout(() => msg.classList.add('hidden'), 3000);
+            }
         }
-        
+
         function removeParagraphNumbers() {
             const msg = document.getElementById('paragraphNumMessage');
             msg.classList.add('hidden');
-            
+            renderMissingPeriodPanel1([]); // 번호 제거 시 마침표 누락 안내도 초기화
+
             const textInput1El = document.getElementById('textInput1');
             const currentText = textInput1El.value;
             

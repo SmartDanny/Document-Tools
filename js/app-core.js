@@ -101,14 +101,16 @@
         }
         
         function switchMainTab(tabId, btn) {
-            document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');
-            btn.classList.add('active');
-            // 플로팅 탭 바 active 상태 동기화
-            document.querySelectorAll('.floating-tab-btn').forEach(t => {
+
+            // 상단 탭 바와 플로팅 탭 바를 모두 tabId 기준으로 동기화 —
+            // 클릭된 버튼(btn)이 어느 바에 있든 양쪽 선택 표시가 일치한다.
+            // (data-tab이 없는 버튼이 있을 경우를 위해 클릭된 버튼은 직접 표시)
+            document.querySelectorAll('.tab-btn, .floating-tab-btn').forEach(t => {
                 t.classList.toggle('active', t.dataset.tab === tabId);
             });
+            if (btn) btn.classList.add('active');
         }
 
         // 탭 바가 뷰포트 밖으로 나가면 플로팅 바 표시

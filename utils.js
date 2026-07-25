@@ -402,6 +402,231 @@ function isPatentSectionSubtitle(line) {
     return false;
 }
 
+// ============================================
+// 마침표 누락 단락 검출 (단락번호 부여 누락 의심)
+// ============================================
+
+// 단락번호 부여 규칙(마침표로 끝나는 단락만) — 이 정규식과 일치하면 번호 부여 대상이다.
+const PARA_NUM_END_RE = /[.。]["']?$/;
+
+// 라인 끝의 닫는 괄호·따옴표 (판별 시 제거 대상)
+const CLOSING_MARKS = `)\\]}>"'’”》』」`;
+
+/**
+ * 마침표 누락 의심 단락 판별
+ *
+ * 단락번호는 '마침표(.)로 끝나는 단락'에만 부여되므로(부제목·표·수학식 제외 목적),
+ * 작성자가 마침표를 누락한 완성 문장은 번호를 받지 못한다. 이 함수는 번호 부여 대상에서
+ * 빠진 라인이 '완성된 문장'으로 보이는지 판별해 의심 사유와 확신도를 돌려준다.
+ *
+ * 확신도(level): 'high' = 문장이 거의 확실(마침표만 누락으로 보임),
+ *                'low'  = 참고용(짧은 문장·명사형 종결 등 오검출 가능)
+ *
+ * @param {string} line - 검사할 라인 ([NNNN] 단락번호는 제거된 상태)
+ * @returns {{level:'high'|'low', label:string}|null} 의심되지 않으면 null
+ */
+function classifyMissingPeriodPara(line) {
+    const t = String(line == null ? '' : line).trim();
+    if (!t) return null;
+
+    // 이미 번호 부여 규칙을 충족하는 라인은 대상이 아님
+    if (PARA_NUM_END_RE.test(t)) return null;
+
+    // (1) 마침표는 있으나 규칙이 인식하지 못하는 형태 — 전각 마침표
+    if (/[．｡]$/.test(t)) return {
+        level: 'high',
+        label: '전각 마침표(．)로 끝남 — 반각 마침표(.)가 아니어서 번호 부여 대상에서 제외됨'
+    };
+
+    // (2) 마침표 뒤에 닫는 괄호·따옴표가 붙어 규칙(마침표 + ["']?)에 맞지 않는 형태
+    if (new RegExp(`[.。][${CLOSING_MARKS}]{1,3}$`).test(t)) return {
+        level: 'high',
+        label: '마침표 뒤 괄호·따옴표로 끝남 — 규칙이 인식하지 못해 번호 부여 대상에서 제외됨'
+    };
+
+    // 이하 판별은 끝의 닫는 괄호·따옴표를 뗀 상태로 수행 ("…한다)" 를 "…한다" 와 동일 취급)
+    const tail = t.replace(new RegExp(`[${CLOSING_MARKS}]+$`), '').trim();
+    if (!tail) return null;
+
+    // 제외: HTML 마크업 라인(표·페이지 나누기 등)
+    if (/^<\/?[a-zA-Z]/.test(tail)) return null;
+    // 제외: 나열·도입부(콜론/쉼표/세미콜론)와 수식 연산자로 끝나는 조각
+    if (/[:;,、·]$/.test(tail)) return null;
+    if (/[=＝+\-*/×÷≤≥<>±∑∫]$/.test(tail)) return null;
+
+    const compact = tail.replace(/\s+/g, ''); // 길이 판정용 (공백 제외)
+
+    // (3) 국문 문장: 종결어미로 끝남 (특허명세서 본문은 대부분 '…한다/…있다/…것이다')
+    if (/[가-힣]/.test(tail)) {
+        if (/[다까요]$/.test(tail)) {
+            if (compact.length >= 12) return { level: 'high', label: '국문 문장 종결어미로 끝남 (마침표 누락 의심)' };
+            if (compact.length >= 6) return { level: 'low', label: '국문 문장 종결어미로 끝남 (짧은 문장)' };
+            return null;
+        }
+        // 명사형 종결(음슴체) — 일반 명사로 끝나는 제목과 구분이 어려워 참고용으로만 보고
+        if (/[음함됨임]$/.test(tail) && compact.length >= 20) {
+            return { level: 'low', label: '명사형 종결(…음/…함)로 끝남' };
+        }
+    }
+
+    // (4) 영문 문장: 소문자를 포함하고 단어 수가 충분한 라인 (대문자 제목은 제외됨)
+    if (!/[가-힣]/.test(tail) && /[a-z]/.test(tail) && /[a-zA-Z]$/.test(tail)) {
+        if (/[=＝≤≥]/.test(tail)) return null; // 수식(y = ax + b 등)
+        const words = tail.split(/\s+/);
+        // 2자 이상 알파벳 단어가 충분해야 문장으로 본다 (기호·부호 나열 배제)
+        const alphaWords = words.filter(w => /^[A-Za-z][A-Za-z'’-]+$/.test(w)).length;
+        if (alphaWords < 4) return null;
+        if (words.length >= 8) return { level: 'high', label: '영문 문장 형태 (마침표 누락 의심)' };
+        if (words.length >= 5) return { level: 'low', label: '영문 문장 형태 (짧은 문장)' };
+        return null;
+    }
+
+    // (5) 마침표 외 문장부호(물음표·느낌표)로 끝나는 문장
+    if (/[?!？！]$/.test(tail) && compact.length >= 6) {
+        return { level: 'low', label: '물음표·느낌표로 끝남 (마침표 규칙 미해당)' };
+    }
+
+    return null;
+}
+
+/**
+ * 라인 텍스트에서 마침표 누락으로 단락번호가 부여되지 않은 단락 검출
+ *
+ * 단락번호 부여와 동일한 범위·제외 규칙(CROSS-REFERENCE 이전 / 청구항 이후 / 표 내부 /
+ * 부제목 제외)을 적용한 뒤, 남은 라인 중 문장으로 보이는 것만 보고한다.
+ * 부제목 판별 함수는 탭별로 다르므로(탭1: isPatentSectionSubtitle, 탭2·3: isGenericSubtitle)
+ * options로 주입한다.
+ *
+ * @param {string} text - 라인 텍스트 (단락번호 부여 전/후 모두 가능)
+ * @param {Object} [options]
+ * @param {Function} [options.isSubtitle] - 부제목 판별 (기본: isPatentSectionSubtitle)
+ * @param {Function} [options.isClaimsStart] - 청구항 시작 판별 (기본: isClaimsStartLine)
+ * @param {Function} [options.isTargetLine] - 추가 대상 조건 (trimmed, index) => boolean
+ *                                            (예: 한영혼합본은 국문 라인만 번호 부여)
+ * @returns {Array<{line:number, level:'high'|'low', label:string, text:string}>} 행 번호 오름차순
+ */
+function findMissingPeriodParas(text, options = {}) {
+    const isSubtitle = options.isSubtitle || isPatentSectionSubtitle;
+    const isClaimsStart = options.isClaimsStart || isClaimsStartLine;
+    const isTargetLine = options.isTargetLine || null;
+
+    const lines = String(text == null ? '' : text).split('\n');
+    const stopIdx = lines.findIndex(isClaimsStart);
+    const crossIdx = lines.findIndex(isCrossRefLine);
+
+    const out = [];
+    let inTable = false;
+    for (let i = 0; i < lines.length; i++) {
+        const t = lines[i].trim();
+
+        // 표 시작/종료 감지 (단락번호 부여 로직과 동일)
+        if (/^<table/i.test(t)) inTable = true;
+        if (/<\/table>$/i.test(t)) { inTable = false; continue; }
+        if (inTable) continue;
+
+        // 번호 부여 범위 밖 (CROSS-REFERENCE 이전 / 청구항 이후)
+        if ((stopIdx >= 0 && i >= stopIdx) || (crossIdx >= 0 && i < crossIdx)) continue;
+
+        if (!t) continue;
+        if (/^\[\d{4,5}\]\s/.test(t)) continue;         // 이미 번호가 부여된 단락
+        if (isSubtitle(t)) continue;                    // 부제목·표/수학식 타이틀 등 의도적 제외 대상
+        if (isTargetLine && !isTargetLine(t, i)) continue; // 탭별 추가 대상 조건
+
+        const v = classifyMissingPeriodPara(t);
+        if (v) out.push({ line: i + 1, level: v.level, label: v.label, text: t });
+    }
+    return out;
+}
+
+/**
+ * 마침표 누락 의심 건수 요약 문구 (메시지용)
+ * @param {Array} items - findMissingPeriodParas 결과
+ * @returns {string} 예: '마침표 누락 의심 단락 3건(누락 가능성 높음 2건 포함)' (0건이면 빈 문자열)
+ */
+function formatMissingPeriodSummary(items) {
+    const list = items || [];
+    if (!list.length) return '';
+    const high = list.filter(it => it.level === 'high').length;
+    return `마침표 누락 의심 단락 ${list.length}건` + (high ? `(누락 가능성 높음 ${high}건 포함)` : '');
+}
+
+/**
+ * 마침표 누락 의심 단락 안내 패널 렌더링 (탭 공통)
+ *
+ * items가 비어 있으면 패널을 숨긴다. textareaId를 주면 항목 클릭 시 해당 입력창의
+ * 행으로 이동·선택되고, 없으면 위치(행 번호)만 표시한다.
+ *
+ * @param {string} panelId - 패널 요소 id
+ * @param {Array} items - findMissingPeriodParas 결과
+ * @param {Object} [options]
+ * @param {string} [options.textareaId] - 클릭 시 이동할 textarea id (편집 가능한 탭)
+ * @param {string} [options.fixHint] - 수정 방법 안내 문구 (기본: 단락번호 제거 → 추가 재실행)
+ */
+function renderMissingPeriodPanel(panelId, items, options = {}) {
+    const el = document.getElementById(panelId);
+    if (!el) return;
+    const list = items || [];
+    if (!list.length) {
+        el.className = 'suspicious-detail hidden';
+        el.innerHTML = '';
+        return;
+    }
+
+    // 긴 라인은 앞부분 + 끝부분(마침표 누락 위치)만 발췌
+    const excerpt = (t) => {
+        const s = String(t).replace(/\s+/g, ' ').trim();
+        return s.length <= 70 ? s : s.slice(0, 40) + ' … ' + s.slice(-25);
+    };
+
+    const MAX_SHOWN = 10; // 그룹당 표시 상한
+    const clickable = !!options.textareaId;
+    const groupHtml = (title, rows) => {
+        if (!rows.length) return '';
+        let html = `<div class="suspicious-group"><strong>${title}</strong> ${rows.length}건<ul>`;
+        for (const it of rows.slice(0, MAX_SHOWN)) {
+            const attrs = clickable
+                ? ` class="missing-period-item" onclick="focusTextareaLine('${options.textareaId}', ${it.line})"`
+                    + ' title="클릭하면 입력창의 해당 행으로 이동합니다"'
+                : '';
+            html += `<li${attrs}><span class="suspicious-loc">${it.line}행</span>`
+                + `${escapeHtml(excerpt(it.text))}<span class="missing-period-reason">— ${escapeHtml(it.label)}</span></li>`;
+        }
+        if (rows.length > MAX_SHOWN) html += `<li>외 ${rows.length - MAX_SHOWN}건</li>`;
+        return html + '</ul></div>';
+    };
+
+    const fixHint = options.fixHint
+        || '마침표 누락이면 마침표를 보완한 뒤 <strong>단락번호 제거 → 단락번호 추가</strong>를 다시 실행해주세요.';
+    let html = '<div class="suspicious-title">⚠️ 마침표(.)가 없어 단락번호가 부여되지 않았으나, 문장으로 보이는 단락이 있습니다.</div>'
+        + `<div class="suspicious-notice">${fixHint}`
+        + ' 부제목·표·수학식처럼 번호가 필요 없는 단락이면 그대로 두면 됩니다.</div>';
+    html += groupHtml('🔴 마침표 누락 가능성 높음', list.filter(it => it.level === 'high'));
+    html += groupHtml('🟡 확인 권장', list.filter(it => it.level === 'low'));
+
+    el.innerHTML = html;
+    el.className = 'suspicious-detail';
+}
+
+/**
+ * textarea의 특정 행으로 이동 + 해당 행 선택
+ * @param {string} textareaId
+ * @param {number} lineNo - 1부터 시작하는 행 번호
+ */
+function focusTextareaLine(textareaId, lineNo) {
+    const ta = document.getElementById(textareaId);
+    if (!ta) return;
+    const lines = ta.value.split('\n');
+    if (lineNo < 1 || lineNo > lines.length) return;
+    let start = 0;
+    for (let i = 0; i < lineNo - 1; i++) start += lines[i].length + 1;
+    ta.focus();
+    ta.setSelectionRange(start, start + lines[lineNo - 1].length);
+    // 선택 행이 화면 중앙에 오도록 스크롤 (행 높이 추정 — 줄바꿈 시 오차 있음)
+    const lineHeight = parseFloat(getComputedStyle(ta).lineHeight) || 20;
+    ta.scrollTop = Math.max(0, (lineNo - 1) * lineHeight - ta.clientHeight / 2);
+    ta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 /**
  * 일반 부제목 휴리스틱 판별 (괄호 묶음/대문자 제목 기준)
  * @param {string} line - 검사할 라인
