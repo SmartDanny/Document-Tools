@@ -141,6 +141,82 @@ describe('특허 문서 판별', () => {
     });
 });
 
+describe('마침표 누락 단락 검출', () => {
+    const level = (line) => {
+        const r = u.classifyMissingPeriodPara(line);
+        return r ? r.level : null;
+    };
+
+    test('국문 문장 종결어미 → 마침표 누락 의심', () => {
+        assert.equal(level('본 발명의 일 실시예에 따른 표시장치는 기판 상에 배치된 화소를 포함한다'), 'high');
+        assert.equal(level('이때 제1 전극과 제2 전극은 서로 이격되어 배치될 수 있다'), 'high');
+        assert.equal(level('도 1은 본 발명의 일 실시예에 따른 표시장치의 평면도이다'), 'high');
+        assert.equal(level('상기 구조로 인해 효율이 향상된다)'), 'high'); // 끝 괄호는 무시
+        assert.equal(level('그러하다'), null); // 너무 짧음
+    });
+
+    test('마침표가 있으나 규칙이 인식하지 못하는 형태', () => {
+        assert.equal(level('상기 화소는 발광층을 포함한다．'), 'high');   // 전각 마침표
+        assert.equal(level('상기 화소는 발광층을 포함한다.)'), 'high');   // 마침표 + 닫는 괄호
+        assert.equal(level('상기 화소는 발광층을 포함한다.”'), 'high');   // 마침표 + 둥근 따옴표
+        assert.equal(level('상기 화소는 발광층을 포함한다.'), null);      // 규칙 충족 → 대상 아님
+        assert.equal(level('상기 화소는 발광층을 포함한다."'), null);     // 규칙 충족(마침표 + ")
+    });
+
+    test('영문 문장 / 짧은 문장', () => {
+        assert.equal(level('The display device includes a pixel disposed on the substrate'), 'high');
+        assert.equal(level('The pixel may include a layer'), 'low');
+        assert.equal(level('BRIEF DESCRIPTION'), null); // 대문자 제목
+        assert.equal(level('10 substrate 20 pixel'), null); // 도면부호 나열
+    });
+
+    test('부제목·표·수식·나열은 의심 대상 아님', () => {
+        assert.equal(level('【발명의 상세한 설명】'), null);
+        assert.equal(level('<table border="1"><tr><td>A</td></tr></table>'), null);
+        assert.equal(level('y = ax + b'), null);
+        assert.equal(level('10: 기판, 20: 화소'), null);
+        assert.equal(level('상기 표시장치는 다음의 구성을 포함한다:'), null); // 콜론 도입부
+        assert.equal(level('제1 전극 및'), null); // 이어지는 조각
+    });
+
+    test('findMissingPeriodParas: 범위·제외 규칙 적용 + 행 번호 보고', () => {
+        const text = [
+            'CROSS-REFERENCE TO RELATED APPLICATIONS',                    // 1 (이 줄부터 대상)
+            'This application claims priority to KR 10-2026-0000001.',    // 2 마침표 있음
+            'BACKGROUND',                                                 // 3 부제목
+            '반도체 장치의 집적도가 지속적으로 증가하고 있다',              // 4 ← 의심 (high)
+            '[0001] 이미 번호가 부여된 단락이다',                          // 5 번호 있음 → 제외
+            '<table><tr><td>표 안의 문장이 마침표 없이 끝난다</td></tr></table>', // 6 표 → 제외
+            'WHAT IS CLAIMED IS:',                                        // 7 이후 제외
+            '1. 기판을 포함하는 반도체 장치',                              // 8 청구항 → 제외
+        ].join('\n');
+
+        const found = u.findMissingPeriodParas(text);
+        assert.equal(found.length, 1);
+        assert.equal(found[0].line, 4);
+        assert.equal(found[0].level, 'high');
+        assert.ok(found[0].label.includes('종결어미'));
+    });
+
+    test('findMissingPeriodParas: CROSS-REFERENCE 이전 단락은 제외', () => {
+        const text = [
+            '표시장치의 제조 방법이 개시되어 있다',                         // 1 (CROSS-REF 이전 → 제외)
+            'CROSS-REFERENCE TO RELATED APPLICATIONS',                    // 2
+            '상기 방법은 기판을 준비하는 단계를 포함한다',                  // 3 ← 의심
+        ].join('\n');
+
+        const found = u.findMissingPeriodParas(text);
+        assert.equal(found.length, 1);
+        assert.equal(found[0].line, 3);
+    });
+
+    test('findMissingPeriodParas: 빈 입력/정상 문서는 0건', () => {
+        assert.equal(u.findMissingPeriodParas('').length, 0);
+        assert.equal(u.findMissingPeriodParas(null).length, 0);
+        assert.equal(u.findMissingPeriodParas('BACKGROUND\n정상적으로 마침표로 끝나는 단락이다.').length, 0);
+    });
+});
+
 describe('DOCX 생성 헬퍼', () => {
     test('makeDocxStylesXml: 단락 뒤 간격 0pt 명시', () => {
         const xml = u.makeDocxStylesXml();

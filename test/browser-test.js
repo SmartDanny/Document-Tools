@@ -815,6 +815,55 @@ const server = http.createServer((req, res) => {
         docxXrefRes.paraAfter === String(docxXrefRes.paraExpected) && docxXrefRes.outputHasXref)
         ? 'PASS' : 'FAIL ' + JSON.stringify(docxXrefRes);
 
+    // 탭1 4단계: 단락번호 추가 시 마침표 누락 의심 단락 안내 (경고 메시지 + 상세 패널 + 행 이동)
+    const missingPeriodRes = await page.evaluate(() => {
+        const r = {};
+        finParsedIR1 = null;
+        finCrossRef1 = null;
+        fileAnalysisResult.suspicious = null;
+        const text = [
+            'TITLE OF THE INVENTION',
+            '표시 장치',
+            'BACKGROUND OF THE INVENTION',
+            '표시 장치는 기판 상에 배치된 화소를 포함한다.',   // 4 정상
+            '상기 화소는 발광층과 전극을 포함하여 구성된다',    // 5 ← 마침표 누락 (high)
+            '【표 1】',                                        // 6 부제 → 제외
+            '<table><tr><td>표 안의 문장이 마침표 없이 끝난다</td></tr></table>', // 7 표 → 제외
+            'WHAT IS CLAIMED IS:',
+            '【청구항 1】',
+            '표시 장치.'
+        ].join('\n');
+        document.getElementById('textInput1').value = text;
+        displayResult1({ text, subscriptCount: 0, superscriptCount: 0 });
+        r.panelHiddenBefore = document.getElementById('missingPeriodDetail1').classList.contains('hidden');
+
+        addParagraphNumbers();
+        const msgEl = document.getElementById('paragraphNumMessage');
+        const panel = document.getElementById('missingPeriodDetail1');
+        r.msg = msgEl.textContent;
+        r.msgWarn = msgEl.className === 'message warn';
+        r.numbered = /^\[0001\] 표시 장치는/m.test(document.getElementById('textInput1').value);
+        r.panelShown = !panel.classList.contains('hidden');
+        r.itemCount = panel.querySelectorAll('li.missing-period-item').length;
+        r.itemText = (panel.querySelector('li.missing-period-item') || {}).textContent || '';
+        // 항목 클릭 → 입력창의 해당 행 선택
+        const item = panel.querySelector('li.missing-period-item');
+        if (item) item.click();
+        const ta = document.getElementById('textInput1');
+        r.selected = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+
+        // 번호 제거 시 안내 초기화
+        removeParagraphNumbers();
+        r.panelHiddenAfter = document.getElementById('missingPeriodDetail1').classList.contains('hidden');
+        return r;
+    });
+    results['탭1 마침표 누락 의심 단락 안내'] = (missingPeriodRes.panelHiddenBefore && missingPeriodRes.numbered &&
+        missingPeriodRes.msgWarn && missingPeriodRes.msg.includes('마침표 누락 의심 단락 1건') &&
+        missingPeriodRes.panelShown && missingPeriodRes.itemCount === 1 &&
+        missingPeriodRes.itemText.includes('5행') &&
+        missingPeriodRes.selected === '상기 화소는 발광층과 전극을 포함하여 구성된다' &&
+        missingPeriodRes.panelHiddenAfter) ? 'PASS' : 'FAIL ' + JSON.stringify(missingPeriodRes);
+
     // 후처리/US서식 HTML표 → OOXML: 가로+세로 병합 그리드 정합성 (fin 미리보기와 docx 일치)
     const tblRes = await page.evaluate(() => {
         const html = '<table>'

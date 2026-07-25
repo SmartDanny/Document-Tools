@@ -402,6 +402,130 @@ function isPatentSectionSubtitle(line) {
     return false;
 }
 
+// ============================================
+// 마침표 누락 단락 검출 (단락번호 부여 누락 의심)
+// ============================================
+
+// 단락번호 부여 규칙(마침표로 끝나는 단락만) — 이 정규식과 일치하면 번호 부여 대상이다.
+const PARA_NUM_END_RE = /[.。]["']?$/;
+
+// 라인 끝의 닫는 괄호·따옴표 (판별 시 제거 대상)
+const CLOSING_MARKS = `)\\]}>"'’”》』」`;
+
+/**
+ * 마침표 누락 의심 단락 판별
+ *
+ * 단락번호는 '마침표(.)로 끝나는 단락'에만 부여되므로(부제목·표·수학식 제외 목적),
+ * 작성자가 마침표를 누락한 완성 문장은 번호를 받지 못한다. 이 함수는 번호 부여 대상에서
+ * 빠진 라인이 '완성된 문장'으로 보이는지 판별해 의심 사유와 확신도를 돌려준다.
+ *
+ * 확신도(level): 'high' = 문장이 거의 확실(마침표만 누락으로 보임),
+ *                'low'  = 참고용(짧은 문장·명사형 종결 등 오검출 가능)
+ *
+ * @param {string} line - 검사할 라인 ([NNNN] 단락번호는 제거된 상태)
+ * @returns {{level:'high'|'low', label:string}|null} 의심되지 않으면 null
+ */
+function classifyMissingPeriodPara(line) {
+    const t = String(line == null ? '' : line).trim();
+    if (!t) return null;
+
+    // 이미 번호 부여 규칙을 충족하는 라인은 대상이 아님
+    if (PARA_NUM_END_RE.test(t)) return null;
+
+    // (1) 마침표는 있으나 규칙이 인식하지 못하는 형태 — 전각 마침표
+    if (/[．｡]$/.test(t)) return {
+        level: 'high',
+        label: '전각 마침표(．)로 끝남 — 반각 마침표(.)가 아니어서 번호 부여 대상에서 제외됨'
+    };
+
+    // (2) 마침표 뒤에 닫는 괄호·따옴표가 붙어 규칙(마침표 + ["']?)에 맞지 않는 형태
+    if (new RegExp(`[.。][${CLOSING_MARKS}]{1,3}$`).test(t)) return {
+        level: 'high',
+        label: '마침표 뒤 괄호·따옴표로 끝남 — 규칙이 인식하지 못해 번호 부여 대상에서 제외됨'
+    };
+
+    // 이하 판별은 끝의 닫는 괄호·따옴표를 뗀 상태로 수행 ("…한다)" 를 "…한다" 와 동일 취급)
+    const tail = t.replace(new RegExp(`[${CLOSING_MARKS}]+$`), '').trim();
+    if (!tail) return null;
+
+    // 제외: HTML 마크업 라인(표·페이지 나누기 등)
+    if (/^<\/?[a-zA-Z]/.test(tail)) return null;
+    // 제외: 나열·도입부(콜론/쉼표/세미콜론)와 수식 연산자로 끝나는 조각
+    if (/[:;,、·]$/.test(tail)) return null;
+    if (/[=＝+\-*/×÷≤≥<>±∑∫]$/.test(tail)) return null;
+
+    const compact = tail.replace(/\s+/g, ''); // 길이 판정용 (공백 제외)
+
+    // (3) 국문 문장: 종결어미로 끝남 (특허명세서 본문은 대부분 '…한다/…있다/…것이다')
+    if (/[가-힣]/.test(tail)) {
+        if (/[다까요]$/.test(tail)) {
+            if (compact.length >= 12) return { level: 'high', label: '국문 문장 종결어미로 끝남 (마침표 누락 의심)' };
+            if (compact.length >= 6) return { level: 'low', label: '국문 문장 종결어미로 끝남 (짧은 문장)' };
+            return null;
+        }
+        // 명사형 종결(음슴체) — 일반 명사로 끝나는 제목과 구분이 어려워 참고용으로만 보고
+        if (/[음함됨임]$/.test(tail) && compact.length >= 20) {
+            return { level: 'low', label: '명사형 종결(…음/…함)로 끝남' };
+        }
+    }
+
+    // (4) 영문 문장: 소문자를 포함하고 단어 수가 충분한 라인 (대문자 제목은 제외됨)
+    if (!/[가-힣]/.test(tail) && /[a-z]/.test(tail) && /[a-zA-Z]$/.test(tail)) {
+        if (/[=＝≤≥]/.test(tail)) return null; // 수식(y = ax + b 등)
+        const words = tail.split(/\s+/);
+        // 2자 이상 알파벳 단어가 충분해야 문장으로 본다 (기호·부호 나열 배제)
+        const alphaWords = words.filter(w => /^[A-Za-z][A-Za-z'’-]+$/.test(w)).length;
+        if (alphaWords < 4) return null;
+        if (words.length >= 8) return { level: 'high', label: '영문 문장 형태 (마침표 누락 의심)' };
+        if (words.length >= 5) return { level: 'low', label: '영문 문장 형태 (짧은 문장)' };
+        return null;
+    }
+
+    // (5) 마침표 외 문장부호(물음표·느낌표)로 끝나는 문장
+    if (/[?!？！]$/.test(tail) && compact.length >= 6) {
+        return { level: 'low', label: '물음표·느낌표로 끝남 (마침표 규칙 미해당)' };
+    }
+
+    return null;
+}
+
+/**
+ * 라인 텍스트에서 마침표 누락으로 단락번호가 부여되지 않은 단락 검출
+ *
+ * 단락번호 부여와 동일한 범위·제외 규칙(CROSS-REFERENCE 이전 / 청구항 이후 / 표 내부 /
+ * 부제목 제외)을 적용한 뒤, 남은 라인 중 문장으로 보이는 것만 보고한다.
+ *
+ * @param {string} text - 라인 텍스트 (단락번호 부여 전/후 모두 가능)
+ * @returns {Array<{line:number, level:'high'|'low', label:string, text:string}>} 행 번호 오름차순
+ */
+function findMissingPeriodParas(text) {
+    const lines = String(text == null ? '' : text).split('\n');
+    const stopIdx = lines.findIndex(isClaimsStartLine);
+    const crossIdx = lines.findIndex(isCrossRefLine);
+
+    const out = [];
+    let inTable = false;
+    for (let i = 0; i < lines.length; i++) {
+        const t = lines[i].trim();
+
+        // 표 시작/종료 감지 (단락번호 부여 로직과 동일)
+        if (t.startsWith('<table')) inTable = true;
+        if (t.endsWith('</table>')) { inTable = false; continue; }
+        if (inTable) continue;
+
+        // 번호 부여 범위 밖 (CROSS-REFERENCE 이전 / 청구항 이후)
+        if ((stopIdx >= 0 && i >= stopIdx) || (crossIdx >= 0 && i < crossIdx)) continue;
+
+        if (!t) continue;
+        if (/^\[\d{4,5}\]\s/.test(t)) continue;   // 이미 번호가 부여된 단락
+        if (isPatentSectionSubtitle(t)) continue; // 부제목·표/수학식 타이틀 등 의도적 제외 대상
+
+        const v = classifyMissingPeriodPara(t);
+        if (v) out.push({ line: i + 1, level: v.level, label: v.label, text: t });
+    }
+    return out;
+}
+
 /**
  * 일반 부제목 휴리스틱 판별 (괄호 묶음/대문자 제목 기준)
  * @param {string} line - 검사할 라인
