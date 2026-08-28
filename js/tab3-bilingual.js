@@ -565,6 +565,9 @@
             });
             previewEl.innerHTML = previewHtml;
 
+            // 원본 텍스트 창 갱신 (HTML 태그가 있는 경우에만 표시)
+            updateColorRawPanel3();
+
             // 단락 개수, 첨자, 표 통계 계산 (한글/영어 분리)
             let krParagraphCount = 0, krSubCount = 0, krSupCount = 0, krTableCount = 0;
             let enParagraphCount = 0, enSubCount = 0, enSupCount = 0, enTableCount = 0;
@@ -904,6 +907,39 @@
             setTimeout(() => msg.classList.add('hidden'), 3000);
         }
         
+        // 색변환 결과의 원본 텍스트 창 갱신
+        // 영문/국문 추출 결과와 마찬가지로 <sub>/<sup>/<table> 태그가 있는 경우에만 표시한다.
+        function updateColorRawPanel3() {
+            const panel = document.getElementById('colorRawPanel3');
+            const box = document.getElementById('colorRawResult3');
+            if (!panel || !box) return;
+
+            const text = window.originalText3 || '';
+            if (!/<sub>|<sup>|<table/i.test(text)) {
+                panel.style.display = 'none';
+                box.innerHTML = '';
+                return;
+            }
+
+            // 줄 타입을 함께 표기하여 통계 카드 내비게이션에서 한글/영어 구분이 가능하도록 함
+            const lines = window.colorLines3 || text.split('\n').map((x, i) => ({ id: i, text: x, type: 'other' }));
+            panel.style.display = 'block';
+            box.innerHTML = lines.map(l => {
+                if (l.type === 'empty') return '<div data-line-type="empty">&nbsp;</div>';
+                return `<div data-line-type="${l.type}">${highlightHtmlTags(l.text)}</div>`;
+            }).join('');
+        }
+
+        function copyColorRaw3() {
+            const t = window.originalText3 || '';
+            const msg = document.getElementById('colorMessage3');
+            if (!t.trim()) {
+                showMessage(msg, '❌ 복사할 내용이 없습니다.', 'error');
+                return;
+            }
+            copyToClipboard(t, msg, '✅ 원본 텍스트가 클립보드에 복사되었습니다!');
+        }
+
         // 색변환 미리보기 갱신
         function updateColorPreview3() {
             const previewEl = document.getElementById('colorPreview3');
@@ -938,6 +974,9 @@
                 }
             });
             previewEl.innerHTML = previewHtml;
+
+            // 원본 텍스트 창 갱신 (HTML 태그가 있는 경우에만 표시)
+            updateColorRawPanel3();
 
             // 통계 갱신
             document.getElementById('colorTotalCount3').textContent = window.colorLines3.filter(l => l.type !== 'empty' && l.type !== 'pagebreak').length;
@@ -1741,6 +1780,16 @@ ${makeUSDocxSectPrXml({
         }
         function clearAll3() {
             if (!confirm('모든 내용을 지우시겠습니까?')) return;
+            resetAll3();
+        }
+
+        // 분할 입력 모드의 '전체 지우기'도 전체 입력(전체/분할 공통)을 삭제한다.
+        function clearAllSplit3() {
+            if (!confirm('모든 내용을 지우시겠습니까?')) return;
+            resetAll3();
+        }
+
+        function resetAll3() {
             document.getElementById('inputText3').value = '';
             document.getElementById('fileName3').textContent = '또는 아래에 .docx 파일을 드래그하세요';
             lines3 = []; afterClaims = false; afterTitle = false; beforeCross = true;
@@ -1793,10 +1842,23 @@ ${makeUSDocxSectPrXml({
             document.getElementById('koreanRender3').innerHTML = '';
             document.getElementById('englishRenderPanel3').style.display = 'none';
             document.getElementById('englishRender3').innerHTML = '';
+            document.getElementById('colorRawPanel3').style.display = 'none';
+            document.getElementById('colorRawResult3').innerHTML = '';
+            resetStatNavState('tab3_eng');
+            resetStatNavState('tab3_kor');
+            resetStatNavState('tab3_color');
             // 분할 입력 초기화
+            // 슬롯 DOM을 먼저 비워야 id가 재사용될 때 이전 내용이 되살아나지 않는다.
+            document.getElementById('splitSlotList3').innerHTML = '';
+            const splitWarn = document.getElementById('splitMergeWarning3');
+            if (splitWarn) splitWarn.remove();
             splitSlots3 = [];
             splitSlotIdCounter3 = 0;
-            renderSplitSlots3();
+            if (document.getElementById('splitInputArea3').style.display === 'none') {
+                renderSplitSlots3();
+            } else {
+                addSplitSlot3(); addSplitSlot3();
+            }
         }
 
         // ── 분할 입력 (탭3) ──────────────────────────────────────────
@@ -1825,13 +1887,6 @@ ${makeUSDocxSectPrXml({
         function removeSplitSlot3(id) {
             splitSlots3 = splitSlots3.filter(s => s.id !== id);
             renderSplitSlots3();
-        }
-
-        function clearAllSplit3() {
-            if (!confirm('모든 분할 입력을 지우시겠습니까?')) return;
-            splitSlots3 = [];
-            splitSlotIdCounter3 = 0;
-            addSplitSlot3(); addSplitSlot3();
         }
 
         function renderSplitSlots3() {

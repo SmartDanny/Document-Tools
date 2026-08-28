@@ -350,10 +350,13 @@
                     </div>
                     <!-- 분할 입력 모드 -->
                     <div id="splitInputArea3" style="display:none;">
+                        <div class="split-input-header">
+                            <span class="split-input-hint">📎 파트별로 나누어 입력하면 하나로 통합됩니다</span>
+                            <button class="btn btn-danger btn-sm" onclick="clearAllSplit3()" style="margin-left:auto;">🗑️ 전체 지우기</button>
+                        </div>
                         <div id="splitSlotList3"></div>
                         <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
                             <button class="btn btn-secondary" onclick="addSplitSlot3()">+ 분할 추가</button>
-                            <button class="btn btn-danger btn-sm" onclick="clearAllSplit3()">🗑️ 전체 지우기</button>
                         </div>
                     </div>
                     <div class="note" style="margin-top:10px;">
@@ -500,7 +503,19 @@
                         </div>
                         <div id="colorMessage3" class="message hidden" style="margin-bottom:10px;"></div>
                         <div id="missingPeriodDetailColor3" class="suspicious-detail hidden" style="margin-bottom:10px;"></div>
-                        <div class="preview-area" id="colorPreview3" style="max-height:400px;overflow-y:auto;margin-bottom:15px;">색변환 미리보기가 여기에 표시됩니다.</div>
+                        <div class="dual-panel-container" style="display:flex;gap:15px;margin-bottom:15px;">
+                            <div id="colorRawPanel3" class="text-panel" style="flex:1;min-width:0;display:none;">
+                                <div class="panel-header" style="font-size:0.85em;color:#666;margin-bottom:8px;">📝 원본 텍스트</div>
+                                <div class="output-container">
+                                    <button class="copy-btn" onclick="copyColorRaw3()">복사</button>
+                                    <div id="colorRawResult3" class="output-box" style="max-height:400px;">원본 텍스트가 여기에 표시됩니다</div>
+                                </div>
+                            </div>
+                            <div class="render-panel" style="flex:1;min-width:0;">
+                                <div class="panel-header" style="font-size:0.85em;color:#666;margin-bottom:8px;">🎨 색변환 미리보기</div>
+                                <div class="preview-area" id="colorPreview3" style="max-height:400px;overflow-y:auto;">색변환 미리보기가 여기에 표시됩니다.</div>
+                            </div>
+                        </div>
                         <div class="note" style="margin-top:10px;">
                             <span class="note-icon">💡</span>
                             <span>국문 단락은 <span style="color:#993300;font-weight:bold;">갈색(RGB 153,51,0)</span>으로 표시됩니다. DOCX 다운로드 시 해당 색상이 적용됩니다.</span>
