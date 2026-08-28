@@ -167,6 +167,18 @@ body {
 .mode-toggle-btn.active { background: var(--color-primary); color: #fff; }
 .mode-toggle-btn:hover:not(.active) { background: #f0f4f8; color: var(--color-primary); }
 
+/* 분할 입력 헤더 (전체 지우기 버튼 위치) */
+.split-input-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+.split-input-hint {
+    font-size: 0.85em;
+    color: var(--color-text-muted);
+}
+
 /* 분할 입력 슬롯 */
 .split-slot {
     border: 1px solid var(--color-border);

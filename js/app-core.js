@@ -100,6 +100,74 @@
             `).join('');
         }
         
+        // ── 우선권 모달 입력칸 이동 (자동 이동 + ←/→ 화살표 이동) ──────────
+        // 연·월·일은 자릿수가 채워지면 다음 칸으로 자동 이동한다.
+        // 월/일은 두 자리가 될 수 없는 첫 숫자(월 2~9, 일 4~9)를 입력한 경우에도 입력 완료로 본다.
+        const priorityFieldComplete = {
+            year: v => v.length === 4,
+            month: v => v.length === 2 || /^[2-9]$/.test(v),
+            day: v => v.length === 2 || /^[4-9]$/.test(v)
+        };
+
+        function setCaretToEnd(input) {
+            const end = input.value.length;
+            try { input.setSelectionRange(end, end); } catch (e) { /* 일부 입력 타입은 미지원 */ }
+        }
+
+        // ids: [연, 월, 일, 출원번호] 순서. 출원번호는 자동 이동 대상이 아니다.
+        function setupPriorityFieldNav(ids) {
+            const kinds = ['year', 'month', 'day'];
+            const inputs = ids.map(id => document.getElementById(id));
+            if (inputs.some(el => !el)) return;
+
+            inputs.forEach((input, idx) => {
+                const prev = inputs[idx - 1];
+                const next = inputs[idx + 1];
+                const isDone = priorityFieldComplete[kinds[idx]];
+
+                // 자릿수가 채워지면 다음 칸으로 이동 (연 → 월 → 일 → 출원번호)
+                if (isDone && next) {
+                    input.addEventListener('input', () => {
+                        const v = input.value.trim();
+                        if (!/^\d+$/.test(v) || !isDone(v)) return;
+                        next.focus();
+                        next.select();
+                    });
+                }
+
+                // 좌우 화살표로 칸 이동 (칸의 끝/처음에서만 이동하여 칸 안의 커서 이동은 유지)
+                input.addEventListener('keydown', e => {
+                    const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
+                    const atEnd = input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+                    if (e.key === 'ArrowRight' && next && atEnd) {
+                        e.preventDefault();
+                        next.focus();
+                        setCaretToEnd(next);
+                    } else if (e.key === 'ArrowLeft' && prev && atStart) {
+                        e.preventDefault();
+                        prev.focus();
+                        setCaretToEnd(prev);
+                    } else if (e.key === 'Backspace' && prev && input.value === '') {
+                        // 빈 칸에서 지우면 이전 칸으로 되돌아간다
+                        e.preventDefault();
+                        prev.focus();
+                        setCaretToEnd(prev);
+                    }
+                });
+            });
+        }
+
+        function initPriorityModalNav() {
+            setupPriorityFieldNav(['modalYear1', 'modalMonth1', 'modalDay1', 'modalNumber1']);
+            setupPriorityFieldNav(['modalYear2', 'modalMonth2', 'modalDay2', 'modalNumber2']);
+        }
+        // 모달 마크업이 스크립트 태그보다 뒤에 있으므로 DOM 로드 후 바인딩한다.
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initPriorityModalNav);
+        } else {
+            initPriorityModalNav();
+        }
+
         function switchMainTab(tabId, btn) {
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             document.getElementById(tabId).classList.add('active');

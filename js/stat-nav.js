@@ -30,12 +30,12 @@
                 indicators: { sub: 'korSubNavIndicator3', sup: 'korSupNavIndicator3', table: 'korTableNavIndicator3' }
             },
             'tab3_color_kr': {
-                textBox: null,
+                textBox: { id: 'colorRawResult3', type: 'div', filterType: 'korean' },
                 preview: { id: 'colorPreview3', type: 'div', filterType: 'korean' },
                 indicators: { sub: 'colorKrSubNavIndicator3', sup: 'colorKrSupNavIndicator3', table: 'colorKrTableNavIndicator3' }
             },
             'tab3_color_en': {
-                textBox: null,
+                textBox: { id: 'colorRawResult3', type: 'div', filterType: 'english' },
                 preview: { id: 'colorPreview3', type: 'div', filterType: 'english' },
                 indicators: { sub: 'colorEnSubNavIndicator3', sup: 'colorEnSupNavIndicator3', table: 'colorEnTableNavIndicator3' }
             }
@@ -62,6 +62,17 @@
                     // 여는 태그 span만 선택 (닫는 태그 /sub /sup /table 제외)
                     textBoxElems = [...textBox.querySelectorAll(tagClass)].filter(el =>
                         !el.textContent.includes('/'));
+                    // 표는 <table> 여는 태그만 대상 (<tr>, <td>, <th>는 제외)
+                    if (elemType === 'table') {
+                        textBoxElems = textBoxElems.filter(el => el.textContent.startsWith('<table'));
+                    }
+                    // filterType이 지정된 경우 해당 줄 타입만 선택
+                    if (config.textBox.filterType) {
+                        textBoxElems = textBoxElems.filter(el => {
+                            const lineDiv = el.closest('[data-line-type]');
+                            return lineDiv && lineDiv.dataset.lineType === config.textBox.filterType;
+                        });
+                    }
                 }
             }
 
