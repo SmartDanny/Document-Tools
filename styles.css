@@ -328,6 +328,32 @@ input[type="file"] { display: none; }
 }
 .note-icon { flex-shrink: 0; }
 
+/* 한영혼합본 - 문장 단위 분해 옵션 박스 */
+.decompose-box {
+    margin-top: 12px;
+    padding: 14px 18px;
+    background: #f4f7fb;
+    border: 1px solid #d6e2f0;
+    border-radius: 8px;
+    font-size: 0.9em;
+    color: #33475b;
+}
+.decompose-title { font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.decompose-badge {
+    font-size: 0.72em;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--color-primary);
+    color: #fff;
+}
+.decompose-desc { line-height: 1.6; margin-bottom: 10px; }
+.decompose-opt { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; margin-bottom: 10px; }
+.decompose-opt input { cursor: pointer; }
+.decompose-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.decompose-box .message { margin-bottom: 0; }
+.decompose-box .suspicious-detail { max-height: 320px; overflow-y: auto; }
+
 /* 통계 박스 */
 .stats-row { display: flex; gap: 15px; flex-wrap: wrap; margin: 20px 0; }
 .stat-card {

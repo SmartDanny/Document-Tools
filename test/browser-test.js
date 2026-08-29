@@ -1013,6 +1013,57 @@ const server = http.createServer((req, res) => {
             ok ? 'PASS' : 'FAIL ' + JSON.stringify(c);
     }
 
+    // 탭3 한영혼합본: 문장 단위 분해 옵션 (분해 → 추출 결과 보존 → 되돌리기)
+    await page.click(`.tab-btn[onclick*="'tab3'"]`);
+    const decomposeRes = await page.evaluate(() => {
+        const ta = document.getElementById('inputText3');
+        const src = [
+            'BACKGROUND OF THE INVENTION',
+            'The first board 110 includes a first side 110a. The second board 120 includes a portion 121.',
+            '제1 기판(110)은 제1 면(110a)을 포함한다. 제2 기판(120)은 수용부(121)를 포함한다.',
+            'A third device 127 is mounted on the first board 110.',
+            '제3 소자(127)가 제1 기판(110)에 실장된다.'
+        ].join('\n');
+        ta.value = src;
+
+        // 분해 전 추출 결과
+        analyzeText3();
+        const before = { kr: window.koreanRawText3, en: window.englishRawText3 };
+
+        decomposeBilingual3();
+        const after = { kr: window.koreanRawText3, en: window.englishRawText3 };
+        const lines = ta.value.split('\n');
+        const msg = document.getElementById('decomposeMessage3');
+
+        const r = {
+            // 문장별 pair로 분해 + 원본 단락 그룹 사이 2행 띄움
+            lines,
+            msgOk: !msg.classList.contains('hidden') && msg.textContent.includes('문장 단위 분해 완료'),
+            undoEnabled: !document.getElementById('decomposeUndoBtn3').disabled,
+            // 추출 결과(국문본/영문본)는 분해 전후가 동일해야 한다
+            krSame: before.kr.replace(/\s+/g, ' ').trim() === after.kr.replace(/\s+/g, ' ').trim(),
+            enSame: before.en.replace(/\s+/g, ' ').trim() === after.en.replace(/\s+/g, ' ').trim()
+        };
+
+        undoDecompose3();
+        r.undone = ta.value === src;
+        r.undoDisabledAfter = document.getElementById('decomposeUndoBtn3').disabled;
+        return r;
+    });
+    const dLines = decomposeRes.lines;
+    results['탭3 한영혼합본 문장 단위 분해'] = (
+        dLines[0] === 'BACKGROUND OF THE INVENTION' &&
+        dLines[1] === 'The first board 110 includes a first side 110a.' &&
+        dLines[2] === '제1 기판(110)은 제1 면(110a)을 포함한다.' &&
+        dLines[3] === 'The second board 120 includes a portion 121.' &&
+        dLines[4] === '제2 기판(120)은 수용부(121)를 포함한다.' &&
+        dLines[5] === '' && dLines[6] === '' &&
+        dLines[7] === 'A third device 127 is mounted on the first board 110.' &&
+        decomposeRes.msgOk && decomposeRes.undoEnabled &&
+        decomposeRes.krSame && decomposeRes.enSame &&
+        decomposeRes.undone && decomposeRes.undoDisabledAfter
+    ) ? 'PASS' : 'FAIL ' + JSON.stringify(decomposeRes);
+
     console.log('=== 테스트 결과 ===');
     for (const [k, v] of Object.entries(results)) console.log(`${v.startsWith('PASS') ? '✅' : '❌'} ${k}: ${v}`);
     console.log('\n=== 콘솔 에러 ===');

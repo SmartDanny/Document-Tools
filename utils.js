@@ -659,6 +659,325 @@ function isGenericSubtitle(line, options = {}) {
     return false;
 }
 
+
+// ============================================
+// 한영혼합본 문장 단위 분해
+// ============================================
+//
+// 한영혼합본은 '원본 단락 1개 = 국문 라인 + 영문 라인(pair)' 구조로 배열된다.
+// 이 섹션의 함수들은 그 구조를
+//   (1) pair 그룹 사이를 빈 줄 2행으로 띄우고
+//   (2) pair 안의 국문/영문 문장을 1:1로 갈라 '문장별 pair'로 분해
+// 한 형태로 재배열한다. 라인의 언어 구성(국문 라인 / 영문 라인 / 영어 부제목)은
+// 그대로 유지되므로 기존 '영문/국문 추출'·'국문 색변환'은 동일하게 동작한다.
+
+/**
+ * 문장 분리 시 마침표를 문장 끝으로 보지 않을 약어 (소문자, 끝 마침표 제외)
+ * 'e.g.' / 'i.e.' / 'U.S.' 처럼 한 글자 토큰으로 끝나는 약어는 별도 규칙으로 처리한다.
+ */
+const SENTENCE_ABBREVIATIONS = new Set([
+    'fig', 'figs', 'no', 'nos', 'etc', 'cf', 'vs', 'dr', 'mr', 'mrs', 'ms', 'prof',
+    'inc', 'ltd', 'co', 'corp', 'ser', 'pat', 'appl', 'pub', 'al', 'approx',
+    'eq', 'eqs', 'ref', 'refs', 'sec', 'art', 'ch', 'chap', 'pp', 'vol', 'vols',
+    'min', 'max', 'wt', 'temp', 'conc', 'ex', 'cont', 'div',
+    'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec'
+]);
+
+// 문장부호 뒤에 이어질 수 있는 닫는 기호
+const SENTENCE_CLOSING_MARKS = `)]}>"'’”》』」`;
+
+/**
+ * 문장부호 뒤 텍스트가 새 문장의 시작처럼 보이는지 판별
+ * (소문자로 이어지면 약어·중간 마침표로 보고 문장을 끊지 않는다)
+ * @param {string} rest - 문장부호 이후의 텍스트 (앞 공백 제거된 상태)
+ * @returns {boolean}
+ */
+function looksLikeSentenceStart(rest) {
+    if (!rest) return true;                       // 라인 끝 = 문장 끝
+    return /^[A-Z0-9가-힣<【\[(“"'‘]/.test(rest);
+}
+
+/**
+ * 마침표 앞 토큰이 문장 종결로 볼 수 있는지 판별
+ * @param {string} text - 전체 텍스트
+ * @param {number} dotIndex - 마침표 위치
+ * @returns {boolean}
+ */
+function looksLikeSentenceEnd(text, dotIndex) {
+    let k = dotIndex - 1;
+    while (k >= 0 && /[A-Za-z0-9가-힣]/.test(text[k])) k--;
+    const token = text.slice(k + 1, dotIndex);
+    if (!token) return true;                                          // 예: "…(underfill)." 처럼 기호 뒤 마침표
+    if (/^\d+$/.test(token)) {
+        // 라인 맨 앞의 숫자는 항목 번호("1. Field …")이므로 문장 끝이 아니다.
+        // 그 외의 숫자는 특허 본문에서 흔한 참조부호("… the first board 110.")이므로 문장 끝으로 본다.
+        return text.slice(0, k + 1).trim() !== '';
+    }
+    if (token.length === 1 && /[A-Za-z]/.test(token)) return false;   // e.g. / i.e. / U.S. 의 마지막 글자
+    if (SENTENCE_ABBREVIATIONS.has(token.toLowerCase())) return false;
+    return true;
+}
+
+/**
+ * 한 라인의 텍스트를 문장 단위로 분리 (국문/영문 공용)
+ *
+ * 문장 경계 조건: [.?!。．] (+ 닫는 기호) 뒤에 공백이 오고, 이어지는 첫 글자가
+ * 새 문장의 시작처럼 보이며, 마침표 앞 토큰이 약어·항목번호가 아닐 것.
+ * 표(<table>)가 포함된 라인은 분해하지 않는다.
+ *
+ * @param {string} text - 분리할 텍스트 (한 줄)
+ * @returns {string[]} 문장 배열 (빈 텍스트면 빈 배열)
+ */
+function splitTextIntoSentences(text) {
+    const s = String(text == null ? '' : text).trim();
+    if (!s) return [];
+    if (/<\/?table/i.test(s)) return [s];            // 표는 통째로 유지
+
+    const out = [];
+    let start = 0;
+    for (let i = 0; i < s.length; i++) {
+        const ch = s[i];
+        if (ch !== '.' && ch !== '?' && ch !== '!' && ch !== '。' && ch !== '．') continue;
+        if (ch === '.' && s[i + 1] === '.') continue;                 // 말줄임표는 마지막 점에서 판단
+
+        let j = i + 1;
+        while (j < s.length && SENTENCE_CLOSING_MARKS.includes(s[j])) j++;
+        if (j < s.length && !/\s/.test(s[j])) continue;               // 문장부호 뒤는 공백이어야 함
+
+        const rest = s.slice(j).replace(/^\s+/, '');
+        if (!looksLikeSentenceStart(rest)) continue;
+        if ((ch === '.' || ch === '．') && !looksLikeSentenceEnd(s, i)) continue;
+
+        const sentence = s.slice(start, j).trim();
+        if (sentence) out.push(sentence);
+        start = j;
+        if (!rest) break;
+    }
+    const tail = s.slice(start).trim();
+    if (tail) out.push(tail);
+    return out.length ? out : [s];
+}
+
+/**
+ * 한영혼합본 라인의 언어 구분
+ * @param {string} line - 검사할 라인
+ * @returns {'empty'|'pagebreak'|'korean'|'english'|'other'}
+ */
+function bilingualLineKind(line) {
+    const t = String(line == null ? '' : line).trim();
+    if (!t) return 'empty';
+    if (t === '<pagebreak/>') return 'pagebreak';
+    if (/[가-힣]/.test(t)) return 'korean';
+    if (/[A-Za-z]/.test(t)) return 'english';
+    return 'other';
+}
+
+/**
+ * pair를 이루지 않고 단독으로 놓이는 제목/부제 라인인지 판별
+ * @param {string} line - 검사할 라인
+ * @returns {boolean}
+ */
+function isBilingualHeaderLine(line) {
+    const t = String(line == null ? '' : line).trim();
+    if (!t) return false;
+    if (t === '<pagebreak/>') return true;
+    if (isClaimsStartLine(t)) return true;
+    if (isPatentSectionSubtitle(t)) return true;
+    return isGenericSubtitle(t, { checkSymbols: true });
+}
+
+/**
+ * 요약서 섹션 시작 라인 판별
+ * @param {string} line - 검사할 라인
+ * @returns {boolean}
+ */
+function isAbstractStartLine(line) {
+    const t = String(line == null ? '' : line).trim();
+    return /^(ABSTRACT(\s+OF\s+(THE\s+)?DISCLOSURE)?|【\s*ABSTRACT\s*】|【\s*요\s*약\s*(서)?\s*】)$/i.test(t);
+}
+
+// 문장 종결부호(+ 닫는 기호)로 끝나는지 검사하는 정규식
+const TERMINAL_MARK_RE = new RegExp('[.?!;:。．][' + SENTENCE_CLOSING_MARKS.replace(/[\]\\^]/g, '\\$&') + ']*$');
+
+/** 라인이 문장 종결부호로 끝나는지 (계속 단락 흡수 판별용) */
+function endsWithTerminalMark(line) {
+    return TERMINAL_MARK_RE.test(String(line == null ? '' : line).trim());
+}
+
+/**
+ * 다음 단락을 이끄는 도입부 라인인지 판별
+ * (부제목, "1.An electronic device module comprising:" 같은 청구항 전제부)
+ * @param {string} line - 검사할 라인
+ * @returns {boolean}
+ */
+function isBilingualLeadInLine(line) {
+    const t = String(line == null ? '' : line).trim();
+    if (!t) return false;
+    if (/[:：]$/.test(t)) return true;
+    return !endsWithTerminalMark(t);
+}
+
+/** 선두 단락번호([0001] 등)를 떼어내 { prefix, body }로 반환 */
+function splitParagraphNumberPrefix(text) {
+    const m = String(text == null ? '' : text).match(/^(\s*\[\d{3,5}\]\s*)([\s\S]*)$/);
+    return m ? { prefix: m[1], body: m[2] } : { prefix: '', body: String(text == null ? '' : text) };
+}
+
+/**
+ * 한영혼합본 텍스트를 '문장별 국문-영문 pair' 구조로 분해
+ *
+ * 처리 규칙
+ *  1. 빈 줄을 제외한 라인을 순서대로 훑어 pair(국문+영문 또는 영문+국문)를 구성한다.
+ *     - 부제목·<pagebreak/>·짝을 찾지 못한 라인은 단독 단위로 둔다.
+ *     - pair 뒤에 이어지는 같은 언어의 라인은, 직전 라인이 문장 종결부호로 끝나지
+ *       않을 때(청구항의 "…접합층" + "을 포함하는 …" 형태) 같은 단위로 흡수한다.
+ *  2. pair의 국문/영문을 각각 문장으로 나눠 **문장 수가 일치할 때만** 문장별 pair로
+ *     분해한다. 수가 다르면 오짝지음을 피하려고 원본 pair를 그대로 둔다(보고 목록에 표시).
+ *     청구항 섹션(WHAT IS CLAIMED IS: ~ ABSTRACT)은 한 청구항이 한 문장이므로 분해하지 않는다.
+ *  3. 그룹(원본 단락) 사이는 빈 줄 blankLines행으로 띄운다. 한 원본 단락에서 나온 문장 pair들은
+ *     같은 그룹에 붙여 둔다(첨부 샘플과 동일한 구조). 그룹 경계는 입력의 빈 줄을 따르되
+ *     — 이미 분해된 문서를 다시 실행해도 결과가 같도록 — 입력에 빈 줄이 전혀 없으면 단위마다
+ *     나눈다. everyPairSeparate=true면 문장 pair 하나하나를 별도 그룹으로 띄운다.
+ *
+ * @param {string} text - 한영혼합본 전체 텍스트
+ * @param {Object} [options]
+ * @param {boolean} [options.everyPairSeparate=false] - 문장 pair마다 그룹 분리(원본 단락 묶음 무시)
+ * @param {number} [options.blankLines=2] - 그룹 사이에 넣을 빈 줄 수
+ * @param {number} [options.maxPairGap=1] - pair로 묶을 때 허용할 두 라인 사이 빈 줄 수
+ * @returns {{text: string, stats: Object}}
+ */
+function decomposeBilingualText(text, options = {}) {
+    const everyPairSeparate = !!options.everyPairSeparate;
+    const blankLines = options.blankLines == null ? 2 : options.blankLines;
+    const maxPairGap = options.maxPairGap == null ? 1 : options.maxPairGap;
+
+    const rawLines = String(text == null ? '' : text).split('\n');
+
+    // ── 1) 빈 줄을 제외한 항목 목록 (앞선 빈 줄 수를 gapBefore로 기록) ──
+    const items = [];
+    let gap = 0;
+    rawLines.forEach((line, idx) => {
+        if (!line.trim()) { gap++; return; }
+        items.push({ text: line, lineNo: idx + 1, kind: bilingualLineKind(line), gapBefore: gap });
+        gap = 0;
+    });
+    if (!items.length) return { text: String(text == null ? '' : text), stats: emptyDecomposeStats() };
+
+    // ── 2) 단위(pair / 단독) 구성 ──
+    const isPairable = (a, b) =>
+        !isBilingualHeaderLine(a.text) && !isBilingualHeaderLine(b.text) &&
+        ((a.kind === 'korean' && b.kind === 'english') || (a.kind === 'english' && b.kind === 'korean'));
+
+    const units = [];
+    let inClaims = false;
+    for (let i = 0; i < items.length;) {
+        const cur = items[i];
+        if (isClaimsStartLine(cur.text)) inClaims = true;
+        else if (isAbstractStartLine(cur.text)) inClaims = false;
+
+        const next = items[i + 1];
+        if (!isBilingualHeaderLine(cur.text) && next && next.gapBefore <= maxPairGap && isPairable(cur, next)) {
+            const unit = { type: 'pair', first: cur, second: next, extra: [], gapBefore: cur.gapBefore, inClaims };
+            i += 2;
+            // 종결부호 없이 끊긴 단락의 나머지 줄을 같은 단위로 흡수
+            let last = next;
+            while (i < items.length && items[i].gapBefore === 0 && items[i].kind === last.kind &&
+                   !endsWithTerminalMark(last.text) && !isBilingualHeaderLine(items[i].text)) {
+                unit.extra.push(items[i]);
+                last = items[i];
+                i++;
+            }
+            units.push(unit);
+        } else {
+            units.push({
+                type: isBilingualHeaderLine(cur.text) ? 'header' : 'single',
+                lines: [cur], gapBefore: cur.gapBefore, inClaims
+            });
+            i++;
+        }
+    }
+
+    // ── 3) 단위별 문장 분해 (outGroups: 한 단위가 만들어내는 출력 그룹들) ──
+    const stats = emptyDecomposeStats();
+    for (const u of units) {
+        if (u.type !== 'pair') {
+            u.outGroups = [u.lines.map(l => l.text)];
+            if (u.type === 'single') stats.unpaired.push({ lineNo: u.lines[0].lineNo, text: u.lines[0].text.trim() });
+            continue;
+        }
+        stats.pairCount++;
+
+        const canSplit = !u.inClaims && u.extra.length === 0;
+        const a = splitParagraphNumberPrefix(u.first.text);
+        const b = splitParagraphNumberPrefix(u.second.text);
+        const aParts = canSplit ? splitTextIntoSentences(a.body) : [];
+        const bParts = canSplit ? splitTextIntoSentences(b.body) : [];
+
+        if (canSplit && aParts.length > 1 && aParts.length === bParts.length) {
+            // everyPairSeparate면 문장 pair마다 그룹을 나누고, 아니면 원본 단락 단위로 묶어 둔다
+            const sentencePairs = [];
+            for (let k = 0; k < aParts.length; k++) {
+                sentencePairs.push([(k === 0 ? a.prefix : '') + aParts[k], (k === 0 ? b.prefix : '') + bParts[k]]);
+            }
+            u.outGroups = everyPairSeparate ? sentencePairs : [sentencePairs.reduce((acc, p) => acc.concat(p), [])];
+            stats.splitPairCount++;
+            stats.sentencePairCount += aParts.length;
+        } else {
+            u.outGroups = [[u.first.text, u.second.text, ...u.extra.map(e => e.text)]];
+            stats.sentencePairCount++;
+            // 한쪽만 여러 문장이면 사용자 확인이 필요하므로 보고 목록에 남긴다
+            if (canSplit && (aParts.length > 1 || bParts.length > 1) && aParts.length !== bParts.length) {
+                const koFirst = u.first.kind === 'korean';
+                stats.mismatched.push({
+                    lineNo: u.first.lineNo,
+                    koCount: koFirst ? aParts.length : bParts.length,
+                    enCount: koFirst ? bParts.length : aParts.length,
+                    ko: (koFirst ? u.first : u.second).text.trim(),
+                    en: (koFirst ? u.second : u.first).text.trim()
+                });
+            }
+        }
+    }
+
+    // ── 4) 그룹 묶기 → 빈 줄 blankLines행으로 연결 ──
+    const hasGapBoundary = units.some((u, idx) => idx > 0 && u.gapBefore > 0);
+    const splitEvery = everyPairSeparate || !hasGapBoundary;
+
+    const groups = [];
+    units.forEach((u, idx) => {
+        u.outGroups.forEach((lines, k) => {
+            if (idx === 0 || k > 0 || splitEvery || u.gapBefore > 0) groups.push({ units: [], lines: [] });
+            const g = groups[groups.length - 1];
+            g.units.push(u);
+            g.lines.push(...lines);
+        });
+    });
+
+    // 단위마다 그룹을 나눈 경우, 뒤 단락을 이끄는 도입부(부제목·청구항 전제부)만 있는
+    // 그룹은 다음 그룹에 붙여 "부제목 다음에 바로 pair가 오는" 형태를 유지한다
+    if (splitEvery) {
+        for (let g = groups.length - 2; g >= 0; g--) {
+            const leadIn = groups[g].units.every(u =>
+                u.type === 'header' ||
+                (u.type === 'single' && isBilingualLeadInLine(u.lines[u.lines.length - 1].text)));
+            if (leadIn) {
+                groups[g].lines.push(...groups[g + 1].lines);
+                groups[g].units.push(...groups[g + 1].units);
+                groups.splice(g + 1, 1);
+            }
+        }
+    }
+
+    stats.groupCount = groups.length;
+    const joiner = '\n' + '\n'.repeat(Math.max(0, blankLines));
+    return { text: groups.map(g => g.lines.join('\n')).join(joiner), stats };
+}
+
+/** decomposeBilingualText 통계 객체 초기값 */
+function emptyDecomposeStats() {
+    return { groupCount: 0, pairCount: 0, splitPairCount: 0, sentencePairCount: 0, mismatched: [], unpaired: [] };
+}
+
 // ============================================
 // DOCX 파싱 함수
 // ============================================

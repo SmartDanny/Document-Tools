@@ -1837,6 +1837,7 @@ ${makeUSDocxSectPrXml({
             document.getElementById('colorEnTableCount3').textContent = '0';
             document.getElementById('colorPreview3').innerHTML = '색변환 미리보기가 여기에 표시됩니다.';
             document.getElementById('colorMessage3').classList.add('hidden');
+            resetDecomposePanel3();
             // 렌더링 패널 초기화
             document.getElementById('koreanRenderPanel3').style.display = 'none';
             document.getElementById('koreanRender3').innerHTML = '';
@@ -2066,6 +2067,107 @@ ${makeUSDocxSectPrXml({
             if (absLines.length) { out.push(''); out.push(...absLines); }
 
             return { text: out.join('\n'), duplicates: dups };
+        }
+
+        // ============================================
+        // 문장 단위 분해 (한영혼합본 선택 옵션)
+        // ============================================
+        // 단락별 국문-영문 pair를 문장별 pair로 분해하고 그룹 사이를 빈 줄 2행으로 띄운다.
+        // 라인의 언어 구성은 그대로이므로 '영문/국문 추출'·'국문 색변환'은 기존과 동일하게 동작한다.
+        // (실제 분해 로직은 utils.js의 decomposeBilingualText)
+
+        let decomposeUndoText3 = null;
+
+        function resetDecomposePanel3() {
+            decomposeUndoText3 = null;
+            document.getElementById('decomposeUndoBtn3').disabled = true;
+            document.getElementById('decomposeMessage3').classList.add('hidden');
+            const detail = document.getElementById('decomposeDetail3');
+            detail.classList.add('hidden');
+            detail.innerHTML = '';
+        }
+
+        function decomposeBilingual3() {
+            const msg = document.getElementById('decomposeMessage3');
+            const detail = document.getElementById('decomposeDetail3');
+            msg.classList.add('hidden');
+            detail.classList.add('hidden');
+            detail.innerHTML = '';
+
+            // 분할 입력 모드면 먼저 통합해 inputText3를 채운다
+            if (document.getElementById('splitInputArea3').style.display !== 'none') {
+                completeSplitInput3();
+            }
+
+            const ta = document.getElementById('inputText3');
+            const src = ta.value;
+            if (!src.trim()) {
+                showMessage(msg, '❌ 분해할 한영혼합본이 없습니다. 먼저 텍스트를 입력하거나 .docx 파일을 올려주세요.', 'error');
+                return;
+            }
+
+            const everyPairSeparate = document.getElementById('decomposeEveryPair3').checked;
+            const { text, stats } = decomposeBilingualText(src, { everyPairSeparate });
+
+            if (stats.pairCount === 0) {
+                showMessage(msg, '❌ 국문-영문 pair로 인식된 단락이 없습니다. 한영혼합본 구조(국문 라인 + 영문 라인)인지 확인해주세요.', 'error');
+                return;
+            }
+
+            decomposeUndoText3 = src;
+            ta.value = text;
+            document.getElementById('decomposeUndoBtn3').disabled = false;
+
+            showMessage(msg,
+                `✅ 문장 단위 분해 완료 — 단락 pair ${stats.pairCount}개 중 ${stats.splitPairCount}개를 문장별로 분해했습니다. ` +
+                `(결과 pair ${stats.sentencePairCount}개 · 그룹 ${stats.groupCount}개, 그룹 사이 2행 띄움)`, 'success');
+            renderDecomposeDetail3(stats);
+
+            analyzeText3();
+        }
+
+        function undoDecompose3() {
+            if (decomposeUndoText3 === null) return;
+            document.getElementById('inputText3').value = decomposeUndoText3;
+            decomposeUndoText3 = null;
+            document.getElementById('decomposeUndoBtn3').disabled = true;
+            const msg = document.getElementById('decomposeMessage3');
+            const detail = document.getElementById('decomposeDetail3');
+            detail.classList.add('hidden');
+            detail.innerHTML = '';
+            showMessage(msg, '↩️ 분해 이전 상태로 되돌렸습니다.', 'success');
+            analyzeText3();
+        }
+
+        // 분해 보류(문장 수 불일치)·짝 없는 라인 안내 패널
+        function renderDecomposeDetail3(stats) {
+            const detail = document.getElementById('decomposeDetail3');
+            const parts = [];
+
+            if (stats.mismatched.length) {
+                parts.push('<div class="suspicious-title">⚠️ 국문/영문 문장 수가 달라 분해하지 않은 단락 ' +
+                    `${stats.mismatched.length}개 (오짝지음을 피해 원본 pair를 유지했습니다)</div><ul>`);
+                stats.mismatched.forEach(m => {
+                    parts.push('<li><span class="suspicious-loc">줄 ' + m.lineNo + '</span>' +
+                        `(국문 ${m.koCount}문장 / 영문 ${m.enCount}문장)<br>` +
+                        '<span style="opacity:.85;">' + escapeHtml(m.ko.slice(0, 90)) + (m.ko.length > 90 ? '…' : '') + '</span></li>');
+                });
+                parts.push('</ul>');
+            }
+
+            if (stats.unpaired.length) {
+                parts.push('<div class="suspicious-group"><div class="suspicious-title">ℹ️ 짝을 찾지 못한 라인 ' +
+                    `${stats.unpaired.length}개 (부제목·청구항 전제부 등은 정상입니다)</div><ul>`);
+                stats.unpaired.forEach(m => {
+                    parts.push('<li><span class="suspicious-loc">줄 ' + m.lineNo + '</span>' +
+                        escapeHtml(m.text.slice(0, 90)) + (m.text.length > 90 ? '…' : '') + '</li>');
+                });
+                parts.push('</ul></div>');
+            }
+
+            if (!parts.length) { detail.classList.add('hidden'); detail.innerHTML = ''; return; }
+            detail.innerHTML = parts.join('');
+            detail.classList.remove('hidden');
         }
 
         // 서브탭 전환 함수 (탭3)

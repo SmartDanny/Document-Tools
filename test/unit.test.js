@@ -725,3 +725,165 @@ describe('US양식 DOCX 공통 부품', () => {
         assert.ok(u.makeUSDocxNumberingXml().includes('[00%1]'));
     });
 });
+
+describe('한영혼합본 문장 단위 분해', () => {
+    describe('splitTextIntoSentences', () => {
+        test('영문 문장 분리 (참조부호로 끝나는 문장 포함)', () => {
+            const s = u.splitTextIntoSentences(
+                'The bonding layer 130 is positioned at a gap between the first board 110 and the second board 120. ' +
+                'That is, the bonding layer 130 includes an underfill 131.');
+            assert.equal(s.length, 2);
+            assert.ok(s[0].endsWith('second board 120.'));
+            assert.ok(s[1].startsWith('That is,'));
+        });
+        test('약어(FIG./No./e.g./U.S.)에서는 끊지 않음', () => {
+            assert.equal(u.splitTextIntoSentences('Referring to FIG. 1 and FIG. 2, the module includes a board.').length, 1);
+            assert.equal(u.splitTextIntoSentences('Korean Patent Application No. 10-2020-0101222 was filed.').length, 1);
+            assert.equal(u.splitTextIntoSentences('The device, e.g. An IC chip, is mounted.').length, 1);
+            assert.equal(u.splitTextIntoSentences('U.S. Patent documents are cited.').length, 1);
+        });
+        test('항목 번호(1.)와 소수점에서는 끊지 않음', () => {
+            assert.equal(u.splitTextIntoSentences('1. Field of the Invention').length, 1);
+            assert.equal(u.splitTextIntoSentences('The thickness is 1.5 mm in this embodiment.').length, 1);
+        });
+        test('국문 문장 분리', () => {
+            const s = u.splitTextIntoSentences(
+                '접합층(130)은 제1 기판(110)과 제2 기판(120)의 사이 간격에 개재된다. ' +
+                '즉, 접합층(130)은 언더필(underfill)(131)을 포함한다.');
+            assert.equal(s.length, 2);
+            assert.ok(s[1].startsWith('즉,'));
+        });
+        test('표(<table>)가 포함된 라인은 분해하지 않음', () => {
+            const t = '<table><tr><td>A. B</td><td>C. D</td></tr></table>';
+            assertSameJson(u.splitTextIntoSentences(t), [t]);
+        });
+        test('빈 텍스트는 빈 배열', () => {
+            assertSameJson(u.splitTextIntoSentences('  '), []);
+        });
+    });
+
+    describe('라인 판별', () => {
+        test('bilingualLineKind', () => {
+            assert.equal(u.bilingualLineKind(''), 'empty');
+            assert.equal(u.bilingualLineKind('<pagebreak/>'), 'pagebreak');
+            assert.equal(u.bilingualLineKind('제1 기판(110)은 …'), 'korean');
+            assert.equal(u.bilingualLineKind('The first board 110 is …'), 'english');
+        });
+        test('isBilingualHeaderLine', () => {
+            assert.ok(u.isBilingualHeaderLine('SUMMARY OF THE INVENTION'));
+            assert.ok(u.isBilingualHeaderLine('WHAT IS CLAIMED IS:'));
+            assert.ok(u.isBilingualHeaderLine('(a) Field of the Invention'));
+            assert.ok(!u.isBilingualHeaderLine('The first board 110 includes a first side.'));
+        });
+        test('isAbstractStartLine', () => {
+            assert.ok(u.isAbstractStartLine('ABSTRACT'));
+            assert.ok(u.isAbstractStartLine('Abstract of the Disclosure'));
+            assert.ok(!u.isAbstractStartLine('ABSTRACT OF THE INVENTION IS SHOWN BELOW.'));
+        });
+    });
+
+    describe('decomposeBilingualText', () => {
+        const EN1 = 'The first board 110 includes a first side 110a. The second board 120 includes a device accommodating portion 121.';
+        const KO1 = '제1 기판(110)은 제1 면(110a)을 포함한다. 제2 기판(120)은 소자 수용부(121)를 포함한다.';
+
+        test('문장 수가 같으면 문장별 pair로 분해하고 그룹 사이를 2행 띄움', () => {
+            const src = ['SUMMARY OF THE INVENTION', EN1, KO1, 'A third device 127 is mounted.', '제3 소자(127)가 실장된다.'].join('\n');
+            const { text, stats } = u.decomposeBilingualText(src);
+            assertSameJson(text.split('\n'), [
+                'SUMMARY OF THE INVENTION',
+                'The first board 110 includes a first side 110a.',
+                '제1 기판(110)은 제1 면(110a)을 포함한다.',
+                'The second board 120 includes a device accommodating portion 121.',
+                '제2 기판(120)은 소자 수용부(121)를 포함한다.',
+                '', '',
+                'A third device 127 is mounted.',
+                '제3 소자(127)가 실장된다.'
+            ]);
+            assert.equal(stats.pairCount, 2);
+            assert.equal(stats.splitPairCount, 1);
+            assert.equal(stats.sentencePairCount, 3);
+            assert.equal(stats.groupCount, 2);
+        });
+
+        test('문장 수가 다르면 분해하지 않고 보고 목록에 남김', () => {
+            const src = [EN1, '제1 기판(110)은 제1 면(110a)을 포함하고, 제2 기판(120)은 소자 수용부(121)를 포함한다.'].join('\n');
+            const { text, stats } = u.decomposeBilingualText(src);
+            assert.equal(text.split('\n').length, 2);
+            assert.equal(stats.splitPairCount, 0);
+            assert.equal(stats.mismatched.length, 1);
+            assert.equal(stats.mismatched[0].enCount, 2);
+            assert.equal(stats.mismatched[0].koCount, 1);
+        });
+
+        test('단락번호는 첫 문장에만 유지', () => {
+            const src = ['[0001] ' + KO1, EN1].join('\n');
+            const lines = u.decomposeBilingualText(src).text.split('\n');
+            assert.ok(lines[0].startsWith('[0001] 제1 기판'));
+            assert.ok(!lines[2].startsWith('['));
+        });
+
+        test('청구항 섹션은 문장 분해하지 않고 간격만 정리', () => {
+            const src = [
+                'WHAT IS CLAIMED IS:',
+                '1.An electronic device module comprising:',
+                'a first board including a first side;',
+                '제1 면을 포함하는 제1 기판;',
+                'a bonding layer bonding the second board to the first board.',
+                '상기 제2 기판을 상기 제1 기판에 접합하는 접합층',
+                '을 포함하는 전자 소자 모듈.'
+            ].join('\n');
+            assertSameJson(u.decomposeBilingualText(src).text.split('\n'), [
+                'WHAT IS CLAIMED IS:',
+                '1.An electronic device module comprising:',
+                'a first board including a first side;',
+                '제1 면을 포함하는 제1 기판;',
+                '', '',
+                'a bonding layer bonding the second board to the first board.',
+                '상기 제2 기판을 상기 제1 기판에 접합하는 접합층',
+                '을 포함하는 전자 소자 모듈.'
+            ]);
+        });
+
+        test('이미 분해된 문서를 다시 실행해도 결과가 같다 (멱등)', () => {
+            const src = ['SUMMARY OF THE INVENTION', EN1, KO1, '', '', 'A third device 127 is mounted.', '제3 소자(127)가 실장된다.'].join('\n');
+            const once = u.decomposeBilingualText(src).text;
+            assert.equal(u.decomposeBilingualText(once).text, once);
+        });
+
+        test('everyPairSeparate 옵션은 입력의 빈 줄을 무시하고 pair마다 분리', () => {
+            const src = ['A first device is mounted. A second device is mounted.',
+                         '제1 소자가 실장된다. 제2 소자가 실장된다.'].join('\n');
+            const lines = u.decomposeBilingualText(src, { everyPairSeparate: true }).text.split('\n');
+            assertSameJson(lines, [
+                'A first device is mounted.',
+                '제1 소자가 실장된다.',
+                '', '',
+                'A second device is mounted.',
+                '제2 소자가 실장된다.'
+            ]);
+        });
+
+        test('추출 결과는 분해 전후가 동일 (국문/영문 라인 구성 보존)', () => {
+            const src = ['SUMMARY OF THE INVENTION', EN1, KO1].join('\n');
+            const pick = (t, ko) => t.split('\n')
+                .filter(l => l.trim() && (u.bilingualLineKind(l) === (ko ? 'korean' : 'english')))
+                .join(' ');
+            const out = u.decomposeBilingualText(src).text;
+            assert.equal(pick(out, true), pick(src, true));
+            assert.equal(pick(out, false), pick(src, false));
+        });
+
+        test('짝 없는 라인은 unpaired로 보고', () => {
+            const src = ['This application claims priority to Korean Patent Application 10-2020-0101222.',
+                         'A device is mounted.', '소자가 실장된다.'].join('\n');
+            const { stats } = u.decomposeBilingualText(src);
+            assert.equal(stats.unpaired.length, 1);
+            assert.equal(stats.unpaired[0].lineNo, 1);
+        });
+
+        test('빈 입력은 원본을 그대로 반환', () => {
+            assert.equal(u.decomposeBilingualText('').text, '');
+            assert.equal(u.decomposeBilingualText('   \n  ').text, '   \n  ');
+        });
+    });
+});
