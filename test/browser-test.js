@@ -614,13 +614,17 @@ const server = http.createServer((req, res) => {
         r.textHasClaim = ta.includes('【청구항 1】');
         // 변환결과(output1) = ROPKS (영문 부제)
         r.resultIsRopks = document.getElementById('output1').innerHTML.includes('TITLE OF THE INVENTION');
-        r.sectionVisible = !document.getElementById('finOutputSection').classList.contains('hidden');
-        // ROPKS DOCX 버튼 섹션은 2단계(Cross-reference 삽입 단계)에 표시
-        const ropksSection = document.getElementById('finRopksSection');
-        r.ropksSectionVisible = !ropksSection.classList.contains('hidden');
-        r.ropksBtnInStep2 = !!(ropksSection.querySelector('button[onclick*="downloadFinRopksDocx"]') &&
-            ropksSection.closest('.section') === document.getElementById('priorityList1').closest('.section') &&
-            !document.getElementById('finOutputSection').querySelector('button[onclick*="downloadFinRopksDocx"]'));
+        const finSection = document.getElementById('finOutputSection');
+        r.sectionVisible = !finSection.classList.contains('hidden');
+        // KIPO/ROPKS DOCX 버튼은 1단계 산출물 섹션에 인접 배치
+        r.ropksBtnInStep1 = !!(finSection.querySelector('button[onclick*="downloadFinKipoDocx"]') &&
+            finSection.querySelector('button[onclick*="downloadFinRopksDocx"]') &&
+            finSection.closest('.section') !== document.getElementById('priorityList1').closest('.section') &&
+            !document.getElementById('priorityList1').closest('.section')
+                .querySelector('button[onclick*="downloadFinRopksDocx"]'));
+        // Cross-reference 포함 옵션: 삽입 전에는 비활성 + 해제 상태
+        const crCb = document.getElementById('finRopksIncludeCrossRef');
+        r.crOptionInitial = !!(crCb && finSection.contains(crCb) && crCb.disabled && !crCb.checked);
         r.irOk = !!(typeof finParsedIR1 === 'object' && finParsedIR1 && finParsedIR1.drawings.length === 1);
         // 의심 문자 경고 (.fin: 정규화 전 원문 + 단락번호 위치) — 샘플의 H₂O₂([0002])가 검출되어야 함
         const susp = fileAnalysisResult.suspicious;
@@ -684,7 +688,7 @@ const server = http.createServer((req, res) => {
     });
     results['탭1 .fin 파싱→텍스트'] = (finRes.textHasTitle && finRes.textHasTable && finRes.textHasClaim &&
         finRes.textTableMerge && finRes.resultIsRopks && finRes.sectionVisible &&
-        finRes.ropksSectionVisible && finRes.ropksBtnInStep2 && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+        finRes.ropksBtnInStep1 && finRes.crOptionInitial && finRes.irOk) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin 특수문자 경고(정규화 전+단락번호)'] = (finRes.suspMode === 'para' &&
         JSON.stringify(finRes.suspItems) === JSON.stringify([
             ['유니코드 첨자', 2, '[0002]'],
@@ -788,6 +792,15 @@ const server = http.createServer((req, res) => {
         r.paraRopks = countParagraphsInText(rawOutput1);
         // 삽입된 Cross-reference 보관 → ROPKS DOCX에 포함 (downloadFinDocx와 동일 경로)
         r.xrefStored = !!(finCrossRef1 && finCrossRef1.text.includes('제10-2026-0017835호'));
+        // 1단계 포함 옵션: 삽입 직후 활성화 + 자동 체크, 해제 시 안내 문구 전환
+        const crCb = document.getElementById('finRopksIncludeCrossRef');
+        const crHint = document.getElementById('finRopksCrossRefHint');
+        r.crEnabled = !crCb.disabled && crCb.checked && crHint.textContent.includes('포함됩니다');
+        crCb.checked = false;
+        updateFinRopksCrossRefOption();
+        r.crOptOut = !crCb.disabled && !crCb.checked && crHint.textContent.includes('원본 그대로');
+        crCb.checked = true;
+        updateFinRopksCrossRefOption();
         const blob = await buildFinDocxBlob(finParsedIR1, 'ropks', finCrossRef1 ? { crossRef: finCrossRef1 } : undefined);
         const z = await JSZip.loadAsync(new Uint8Array(await blob.arrayBuffer()));
         const doc = await z.file('word/document.xml').async('string');
@@ -798,7 +811,8 @@ const server = http.createServer((req, res) => {
     results['탭1 .fin Cross-reference 삽입'] = (finXrefRes.ok && finXrefRes.inputPos && finXrefRes.inputBody &&
         finXrefRes.outputPos && finXrefRes.analysis &&
         finXrefRes.paraShown === String(finXrefRes.paraRopks) && Number(finXrefRes.paraShown) === 7 &&
-        finXrefRes.xrefStored && finXrefRes.docxXref && finXrefRes.docxXrefBody)
+        finXrefRes.xrefStored && finXrefRes.crEnabled && finXrefRes.crOptOut &&
+        finXrefRes.docxXref && finXrefRes.docxXrefBody)
         ? 'PASS' : 'FAIL ' + JSON.stringify(finXrefRes);
 
     // .docx 흐름(처음부터 해외출원용 ROPKS/US 서식): Cross-reference 삽입 시 5단계 분석 결과 갱신
