@@ -1490,7 +1490,7 @@
             // === pPr/rPr 공통 XML 조각 ===
             const rPrBody = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:sz w:val="24"/></w:rPr>';
             const rPrHeading = '<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:color w:val="000000"/><w:szCs w:val="24"/></w:rPr>';
-            // 25라인/페이지: 본문영역(16838-1440-1701=13697) / 25 = 548 DXA (utils.js)
+            // 25라인/페이지: 본문영역(16838-1440-1701=13697) 기준 고정 행 높이 547 DXA (utils.js)
             const pPrSpacing = makeUSDocxSpacingXml();
 
             // === 본문 생성 ===

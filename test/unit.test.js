@@ -704,7 +704,7 @@ describe('US양식 DOCX 공통 부품', () => {
         assert.ok(s.includes('w:type="even" r:id="h1"') && s.includes('w:type="default" r:id="h2"'));
         assert.ok(s.includes('w:type="first" r:id="f3"'));
         assert.ok(s.includes('<w:lnNumType w:countBy="5"/>')); // 5행마다 줄번호
-        assert.ok(s.includes('w:linePitch="548"'));            // 25행/페이지 docGrid
+        assert.ok(s.includes('w:linePitch="547"'));            // 25행/페이지 docGrid
         assert.ok(s.includes('<w:pgSz w:w="11906" w:h="16838"/>')); // A4
         assert.ok(s.includes('w:top="1440" w:right="1701" w:bottom="1701" w:left="1701"'));
     });
@@ -717,7 +717,7 @@ describe('US양식 DOCX 공통 부품', () => {
     });
 
     test('US양식 부품 기본 구조', () => {
-        assert.equal(u.makeUSDocxSpacingXml(), '<w:spacing w:after="0" w:line="548" w:lineRule="exact"/>');
+        assert.equal(u.makeUSDocxSpacingXml(), '<w:spacing w:after="0" w:line="547" w:lineRule="exact"/>');
         assert.ok(u.makeUSDocxStylesXml().includes('page number') && u.makeUSDocxStylesXml().includes('w:after="0"'));
         assert.ok(u.makeUSDocxFooterPageXml().includes(' PAGE '));
         assert.ok(u.makeUSDocxFooterFirstXml().includes('<w:ftr'));
@@ -908,5 +908,42 @@ describe('청구항 들여쓰기 (US_CLAIM_TAB)', () => {
             const idx = order(xml);
             assert.deepEqual(idx, [...idx].sort((a, b) => a - b), xml);
         }
+    });
+});
+
+describe('US양식 페이지 지오메트리 (25행/페이지 · 기밀 머리글 공존)', () => {
+    // sectPr에서 실제 수치를 읽어 계산으로 검증 — 상수를 고쳐도 불변식이 깨지면 실패한다
+    const sect = u.makeUSDocxSectPrXml({
+        headerEven: 'a', headerDefault: 'b', headerFirst: 'c',
+        footerEven: 'd', footerDefault: 'e', footerFirst: 'f'
+    });
+    const num = (re) => Number(sect.match(re)[1]);
+    const pgH = num(/<w:pgSz [^>]*w:h="(\d+)"/);
+    const top = num(/<w:pgMar [^>]*w:top="(\d+)"/);
+    const bottom = num(/<w:pgMar [^>]*w:bottom="(\d+)"/);
+    const headerDist = num(/<w:pgMar [^>]*w:header="(\d+)"/);
+    const line = num(/<w:docGrid [^>]*w:linePitch="(\d+)"/);
+
+    test('본문영역에 25행이 들어간다 (26행은 넘친다)', () => {
+        const bodyHeight = pgH - top - bottom;
+        assert.ok(line * 25 <= bodyHeight, `25행 ${line * 25} > 본문영역 ${bodyHeight}`);
+        assert.ok(line * 26 > bodyHeight, `26행이 들어가면 행 높이가 너무 작다`);
+        assert.equal(Math.floor(bodyHeight / line), 25);
+    });
+
+    test('단락 행 높이와 docGrid linePitch가 일치', () => {
+        assert.ok(u.makeUSDocxSpacingXml().includes(`w:line="${line}"`));
+    });
+
+    test('기밀 머리글을 켜도 본문 시작 위치가 밀리지 않는다', () => {
+        // Word의 본문 시작 = max(위 여백, 머리글 여백 + 머리글 높이)
+        const p = u.makeConfidentialHeaderParagraphXml();
+        const sp = p.match(/<w:spacing [^>]*\/>/)[0];
+        const after = Number(sp.match(/w:after="(\d+)"/)[1]);
+        const lineH = Number(sp.match(/w:line="(\d+)"/)[1]);
+        assert.ok(sp.includes('w:lineRule="exact"'), '머리글 행 높이는 exact로 확정되어야 함');
+        assert.ok(after > 0, '단락 뒤에 공백 추가가 적용되어야 함');
+        assert.ok(headerDist + lineH + after <= top,
+            `머리글(${headerDist}+${lineH}+${after})이 위 여백 ${top}을 넘어 본문을 밀어낸다`);
     });
 });

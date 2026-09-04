@@ -1481,7 +1481,7 @@ ${bodyContent}
             }
         }
 
-        // 단락 pPr에 US양식 고정 행 높이(548 exact) 적용 (기존 spacing 교체)
+        // 단락 pPr에 US양식 고정 행 높이(US_DOCX_LINE exact) 적용 (기존 spacing 교체)
         function usSetParagraphSpacing(p) {
             const doc = p.ownerDocument;
             let pPr = null;

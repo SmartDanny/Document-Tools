@@ -438,10 +438,10 @@ const server = http.createServer((req, res) => {
                     /<w:delText[^>]*>Alpha beta gamma delta\.[\s\S]*?<\/w:delText>/.test(usXml), usXml.slice(0, 1500));
 
                 // US양식: 고정 행 높이(25행/페이지) + Arial 12pt + US sectPr(줄번호/docGrid/A4)
-                assert('US비교: 고정 행 높이', usXml.includes('w:line="548" w:lineRule="exact"'));
+                assert('US비교: 고정 행 높이', usXml.includes('w:line="547" w:lineRule="exact"'));
                 assert('US비교: Arial 12pt', usXml.includes('w:ascii="Arial"') && usXml.includes('w:val="24"'));
                 assert('US비교: US sectPr', usXml.includes('<w:lnNumType w:countBy="5"/>') &&
-                    usXml.includes('w:linePitch="548"') && usXml.includes('<w:pgSz w:w="11906" w:h="16838"/>') &&
+                    usXml.includes('w:linePitch="547"') && usXml.includes('<w:pgSz w:w="11906" w:h="16838"/>') &&
                     usXml.includes('r:id="rIdUSHdr"') && usXml.includes('r:id="rIdUSFtrFirst"'));
 
                 // 텍스트 단락번호 제거 + SEQ 필드 대체
