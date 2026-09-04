@@ -814,7 +814,7 @@
             if (!t) { showMessage(msg, '❌ 텍스트를 입력해주세요.', 'error'); return; }
             const fn = document.getElementById('outputFileName2').value.trim() || 'output';
             try {
-                await generateDocxCommon(t, fn, msg);
+                await generateDocxCommon(t, fn, msg, { confidentialHeader: isConfidentialHeaderOn('confHeader2') });
             } catch (e) { showMessage(msg, '❌ 오류: ' + e.message, 'error'); }
         }
 
@@ -831,7 +831,7 @@
             }
             const fn = document.getElementById('outputFileName2').value.trim() || 'output';
             try {
-                await generateDocxUSPatent(t, fn + '.docx');
+                await generateDocxUSPatent(t, fn + '.docx', { confidentialHeader: isConfidentialHeaderOn('confHeader2') });
                 showMessage(msg, '✅ US 특허출원 양식 DOCX 파일이 생성되었습니다!', 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (e) { showMessage(msg, '❌ 오류: ' + e.message, 'error'); }

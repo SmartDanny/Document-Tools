@@ -116,7 +116,9 @@
                 // ROPKS: 2단계에서 Cross-reference를 삽입했고 1단계 체크박스가 켜져 있으면 DOCX에도 포함
                 const includeCR = format === 'ropks' && !!finCrossRef1 &&
                     !!(document.getElementById('finRopksIncludeCrossRef') || {}).checked;
-                const opts = includeCR ? { crossRef: finCrossRef1 } : undefined;
+                const opts = {};
+                if (includeCR) opts.crossRef = finCrossRef1;
+                if (isConfidentialHeaderOn('confHeaderFin1')) opts.confidentialHeader = true;
                 const blob = await buildFinDocxBlob(finParsedIR1, format, opts);
                 let fileName;
                 if (format === 'ropks') {
@@ -127,7 +129,7 @@
                     fileName = base + '_출원명세서';
                 }
                 saveAs(blob, fileName + '.docx');
-                const included = opts ? ' Cross-reference가 포함되었습니다.' : '';
+                const included = includeCR ? ' Cross-reference가 포함되었습니다.' : '';
                 showMessage(msg, `✅ ${label} DOCX가 생성되었습니다! (${fileName}.docx)${included}`, 'success');
                 setTimeout(() => msg.classList.add('hidden'), 4000);
             } catch (e) {
@@ -1003,7 +1005,8 @@
         }
         
         // DOCX 생성 공통 함수 (후처리 탭에서 사용) - font size 12pt 적용
-        async function generateDocxCommon(text, filename, msgElement) {
+        // opts: { confidentialHeader } — 기밀 표시 머리글 추가 여부
+        async function generateDocxCommon(text, filename, msgElement, opts) {
             let bodyContent = '';
             let insideTable = false;
             let tableBuffer = '';
@@ -1060,6 +1063,8 @@
             zip.folder('word').file('settings.xml', settingsXml);
             zip.folder('word').file('styles.xml', makeDocxStylesXml({ fontSize: 24 })); // 단락 뒤 간격 0pt (utils.js)
             zip.folder('word/_rels').file('document.xml.rels', drXml);
+            // 기밀 표시 머리글 옵션 (utils.js)
+            if (opts && opts.confidentialHeader) await applyConfidentialHeaderToDocxZip(zip);
             saveAs(await zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}), filename+'.docx');
             showMessage(msgElement, '✅ 워드 파일(.docx)이 생성되었습니다!', 'success');
             setTimeout(() => msgElement.classList.add('hidden'), 3000);

@@ -642,7 +642,10 @@ ${bodyContent}
 </w:document>`;
                 
                 zip.file('word/document.xml', documentXml);
-                
+
+                // 기밀 표시 머리글 옵션 (utils.js)
+                if (isConfidentialHeaderOn('confHeaderMerge3')) await applyConfidentialHeaderToDocxZip(zip);
+
                 const fileName = document.getElementById('mergeFileName3').value.trim() || '한영혼합본';
                 const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
                 saveAs(blob, fileName + '.docx');

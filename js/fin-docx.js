@@ -226,7 +226,8 @@ function finSectPr(format) {
  * IR → DOCX Blob (KIPO 출원서식 또는 ROPKS)
  * @param {Object} ir - parseFinFile 결과
  * @param {string} format - 'kipo' | 'ropks'
- * @param {Object} [opts] - ropks 전용 { crossRef: {title, text} } — 삽입된 Cross-reference 포함
+ * @param {Object} [opts] - { crossRef: {title, text} } (ropks 전용, 삽입된 Cross-reference 포함),
+ *                          { confidentialHeader: boolean } 기밀 표시 머리글 추가
  * @returns {Promise<Blob>}
  */
 async function buildFinDocxBlob(ir, format, opts) {
@@ -347,6 +348,9 @@ async function buildFinDocxBlob(ir, format, opts) {
     for (const m of media) {
         zip.file(m.path, m.base64, { base64: true });
     }
+
+    // 기밀 표시 머리글 옵션 (utils.js) — sectPr/관계/Content_Types까지 일괄 주입
+    if (opts && opts.confidentialHeader) await applyConfidentialHeaderToDocxZip(zip);
 
     return zip.generateAsync({
         type: 'blob',

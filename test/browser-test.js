@@ -1027,6 +1027,115 @@ const server = http.createServer((req, res) => {
             ok ? 'PASS' : 'FAIL ' + JSON.stringify(c);
     }
 
+    // 기밀 표시 머리글: 각 DOCX 출력 경로에서 체크 시 적용 / 미체크 시 미적용
+    // (이후 테스트에서 .docx를 업로드하며 finParsedIR1이 초기화되므로 .fin을 다시 올린다)
+    await page.setInputFiles('#fileInput1', { name: 'sample.fin', mimeType: 'application/octet-stream', buffer: finBuf });
+    await page.waitForFunction(() => typeof finParsedIR1 !== 'undefined' && !!finParsedIR1);
+    const confRes = await page.evaluate(async () => {
+        const origSaveAs = window.saveAs;
+        let captured = null;
+        window.saveAs = (blob) => { captured = blob; };
+        const TEXT = 'Confidential and Privileged/ Attorney-Client Work Product';
+        const loadZip = async (blob) => JSZip.loadAsync(new Uint8Array(await blob.arrayBuffer()));
+
+        // 패키지 안에서 실제로 머리글이 참조되고 문구가 들어갔는지 검사
+        const inspect = async (blob) => {
+            const z = await loadZip(blob);
+            const doc = await z.file('word/document.xml').async('string');
+            const rels = await z.file('word/_rels/document.xml.rels').async('string');
+            const ct = await z.file('[Content_Types].xml').async('string');
+            // sectPr가 참조하는 머리글 part를 따라가 문구 확인
+            const ids = [...doc.matchAll(/<w:headerReference[^>]*r:id="([^"]+)"/g)].map(m => m[1]);
+            let found = false, paras = 0;
+            for (const id of ids) {
+                const t = (rels.match(new RegExp(`Id="${id}"[^>]*Target="([^"]+)"`)) || [])[1];
+                if (!t) continue;
+                const f = z.file('word/' + t.replace(/^\.?\/?/, ''));
+                if (!f) continue;
+                const hdr = await f.async('string');
+                if (hdr.includes(TEXT)) { found = true; paras = (hdr.match(/<w:p[ >]/g) || []).length; }
+            }
+            return {
+                found, paras,
+                refCount: ids.length,
+                hasNs: doc.includes('xmlns:r='),
+                // 새 part를 쓴 경우 관계/Override가 함께 등록되어야 함
+                relOk: !doc.includes('rIdConfHdr') ||
+                    (rels.includes('Id="rIdConfHdr"') && ct.includes('PartName="/word/headerConf.xml"')),
+                // headerReference는 footerReference보다 앞에 와야 유효한 OOXML
+                orderOk: [...doc.matchAll(/<w:sectPr\b[^>]*>[\s\S]*?<\/w:sectPr>/g)].every(m => {
+                    const h = m[0].indexOf('<w:headerReference'), f = m[0].indexOf('<w:footerReference');
+                    return h < 0 || f < 0 || h < f;
+                })
+            };
+        };
+
+        const r = {};
+        const msgEl = document.getElementById('message2');
+        const sample = 'TITLE OF THE INVENTION\n\nThis is a sample paragraph for the header test.';
+
+        // (1) 기본 양식 신규 패키지 (탭2 워드파일 다운로드)
+        await generateDocxCommon(sample, 'conf', msgEl, { confidentialHeader: true });
+        r.basicOn = await inspect(captured);
+        await generateDocxCommon(sample, 'conf', msgEl, {});
+        r.basicOff = await inspect(captured);
+
+        // (2) US 특허출원 양식 (탭2/탭3 US양식 다운로드) — 기존 빈 머리글을 대체
+        await generateDocxUSPatent(sample, 'conf_us.docx', { confidentialHeader: true });
+        r.usOn = await inspect(captured);
+        await generateDocxUSPatent(sample, 'conf_us.docx', {});
+        r.usOff = await inspect(captured);
+
+        // (3) 탭3 국문본 기본 양식
+        await generateDocxBasic(sample, 'conf_kor.docx', { confidentialHeader: true });
+        r.korOn = await inspect(captured);
+
+        // (4) .fin ROPKS / KIPO (푸터만 있던 패키지에 머리글 추가)
+        if (typeof finParsedIR1 !== 'undefined' && finParsedIR1) {
+            r.ropksOn = await inspect(await buildFinDocxBlob(finParsedIR1, 'ropks', { confidentialHeader: true }));
+            r.ropksOff = await inspect(await buildFinDocxBlob(finParsedIR1, 'ropks'));
+            r.kipoOn = await inspect(await buildFinDocxBlob(finParsedIR1, 'kipo', { confidentialHeader: true }));
+        }
+
+        // (5) 기존 머리글이 있는 패키지(탭4 DOCX 비교의 수정본 재사용) — 기존 내용 보존
+        const z = new JSZip();
+        z.file('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>');
+        z.file('word/document.xml', '<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:body><w:sectPr><w:headerReference w:type="default" r:id="rIdOld"/></w:sectPr></w:body></w:document>');
+        z.file('word/_rels/document.xml.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+            '<Relationship Id="rIdOld" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header9.xml"/></Relationships>');
+        z.file('word/header9.xml', '<?xml version="1.0"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
+            '<w:p><w:r><w:t>기존 머리글</w:t></w:r></w:p></w:hdr>');
+        await applyConfidentialHeaderToDocxZip(z);
+        const merged = await z.file('word/header9.xml').async('string');
+        r.existing = {
+            kept: merged.includes('기존 머리글'),
+            added: merged.includes(TEXT),
+            first: merged.indexOf(TEXT) < merged.indexOf('기존 머리글'),
+            noNewPart: !(await z.file('word/document.xml').async('string')).includes('rIdConfHdr')
+        };
+
+        // 모든 체크박스가 존재하고 기본값이 uncheck인지 확인
+        r.boxes = ['confHeaderFin1', 'confHeader2', 'confHeaderEng3', 'confHeaderKor3', 'confHeaderColor3',
+                   'confHeaderMerge3', 'confHeaderText4', 'confHeaderDocx4', 'confHeaderMd5']
+            .map(id => { const el = document.getElementById(id); return el ? (el.checked ? 'CHECKED' : 'ok') : 'MISSING'; });
+
+        window.saveAs = origSaveAs;
+        return r;
+    });
+    {
+        const c = confRes;
+        const on = (x) => x && x.found && x.hasNs && x.relOk && x.orderOk && x.refCount > 0;
+        const off = (x) => x && !x.found && x.orderOk;
+        const ok = on(c.basicOn) && off(c.basicOff) &&
+            // US양식: 빈 머리글을 대체하므로 머리글은 한 줄 — 25행/페이지 유지
+            on(c.usOn) && c.usOn.paras === 1 && off(c.usOff) &&
+            on(c.korOn) && on(c.ropksOn) && off(c.ropksOff) && on(c.kipoOn) &&
+            c.existing.kept && c.existing.added && c.existing.first && c.existing.noNewPart &&
+            c.boxes.every(v => v === 'ok');
+        results['기밀 머리글 옵션 (전 DOCX 출력 경로)'] = ok ? 'PASS' : 'FAIL ' + JSON.stringify(c);
+    }
+
     console.log('=== 테스트 결과 ===');
     for (const [k, v] of Object.entries(results)) console.log(`${v.startsWith('PASS') ? '✅' : '❌'} ${k}: ${v}`);
     console.log('\n=== 콘솔 에러 ===');

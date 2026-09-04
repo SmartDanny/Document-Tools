@@ -373,7 +373,8 @@
             });
 
             const fileName = '텍스트비교결과';
-            await downloadTrackChangeDocx(bodyContent, fileName);
+            await downloadTrackChangeDocx(bodyContent, fileName,
+                { confidentialHeader: isConfidentialHeaderOn('confHeaderText4') });
         }
 
         // 텍스트 비교 - 양식표준화 (다른 탭과 동일한 공통 규칙을 문서1/문서2에 적용)
@@ -652,7 +653,8 @@
         }
 
         // 텍스트 비교용 최소 구성 Track Changes DOCX 다운로드 (기존 출력 포맷과 동일)
-        async function downloadTrackChangeDocx(bodyContent, fileName) {
+        // opts: { confidentialHeader } — 기밀 표시 머리글 추가 여부
+        async function downloadTrackChangeDocx(bodyContent, fileName, opts) {
             const newZip = new JSZip();
 
             newZip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -693,6 +695,9 @@ ${bodyContent}
 <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
 </w:body>
 </w:document>`);
+
+            // 기밀 표시 머리글 옵션 (utils.js)
+            if (opts && opts.confidentialHeader) await applyConfidentialHeaderToDocxZip(newZip);
 
             const blob = await newZip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
             saveAs(blob, fileName + '.docx');
@@ -1641,6 +1646,11 @@ ${bodyContent}
                 }
 
                 dataB.zip.file('word/document.xml', head + bodyContent + tailSect + '</w:body></w:document>');
+
+                // 기밀 표시 머리글 옵션 (utils.js)
+                // - US양식: overlayUSPackageParts가 넣은 빈 머리글을 기밀 머리글로 대체
+                // - 기본 양식: 수정본(B)의 기존 머리글 맨 앞에 삽입(내용 보존), 없으면 새로 추가
+                if (isConfidentialHeaderOn('confHeaderDocx4')) await applyConfidentialHeaderToDocxZip(dataB.zip);
 
                 // DOCX 파일 생성 및 다운로드
                 const fileName = document.getElementById('outputFileNameDocx4').value.trim() || (usFormat ? '비교결과_US' : '비교결과');

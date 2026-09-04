@@ -1,6 +1,6 @@
 # Document Tools (문서 도구 모음)
 
-[![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)](https://github.com/)
+[![Version](https://img.shields.io/badge/version-1.6.0-blue.svg)](https://github.com/)
 [![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-red.svg)](https://github.com/)
 
 특허 명세서 작성 및 편집을 위한 웹 기반 문서 처리 도구 모음입니다.
@@ -49,6 +49,17 @@
 - 실시간 미리보기 지원 (용지 방향·글꼴 크기 조절)
 - DOCX 저장: 미리보기 DOM을 순회해 제목/문단/목록/표/서식을 네이티브 OOXML로 생성하고, LaTeX 수식은 이미지로 임베드(모든 뷰어에서 동일하게 렌더링)
 
+### 6. 기밀 표시 머리글 (모든 탭 공통)
+- 모든 DOCX 출력 구역에 **[🔒 기밀 머리글 추가]** 체크박스 제공 (**기본값은 미적용**)
+- 체크 시 `Confidential and Privileged/ Attorney-Client Work Product` 문구가
+  **Tahoma 9pt, 진한 빨강(C00000), 오른쪽 정렬**로 **첫 페이지를 포함한 전 페이지** 머리글에 삽입됨
+- 적용 대상: 탭1 KIPO 출원서식/ROPKS, 탭2 워드파일/US양식, 탭3 영문본/국문본/한영혼합본/병합결과,
+  탭4 텍스트 비교/DOCX 비교/비교 US양식, 탭5 DOCX 저장
+- 머리글 단락에 `suppressLineNumbers`가 적용되어 US양식과 ROPKS의 **줄번호가 머리글까지 번지지 않으며**,
+  비어 있던 머리글은 대체하는 방식이라 **US양식의 25행/페이지가 그대로 유지**됨
+- 탭4 DOCX 비교는 수정본(B)의 패키지를 재사용하므로, **기존 머리글이 있으면 그 내용을 보존한 채
+  맨 앞에 문구만 덧붙임**. 같은 문서에 두 번 적용해도 문구가 중복되지 않음(멱등)
+
 ## 📦 설치 및 사용법
 
 ### 방법 1: 직접 실행
@@ -76,9 +87,9 @@ python -m http.server 8000
 document-tools/
 ├── index.html               # 메인 HTML (UI 마크업 + 스크립트 로드)
 ├── styles.css               # 스타일시트
-├── utils.js                 # 공통 유틸리티 (이스케이프, diff, DOCX 파싱/판별)
+├── utils.js                 # 공통 유틸리티 (이스케이프, diff, DOCX 파싱/판별, US양식·기밀 머리글 부품)
 ├── js/
-│   ├── app-core.js          # 공통 UI (탭 전환, 플로팅 탭 바, 우선권 모달)
+│   ├── app-core.js          # 공통 UI (탭 전환, 플로팅 탭 바, 우선권 모달, 기밀 머리글 옵션)
 │   ├── tab1-preprocess.js   # 탭1: 전처리 (DOCX/FIN → HTML·DOCX)
 │   ├── fin-parser.js        # .fin(KIPO 전자출원) 파싱 → IR(중간모델)
 │   ├── fin-docx.js          # IR → KIPO 출원서식 / 해외출원용 국문(ROPKS) DOCX
@@ -167,5 +178,5 @@ Copyright (c) 2026 Smart Danny. All rights reserved.
 ## 📞 문의
 
 - **Author**: Smart Danny
-- **Version**: 1.5.0
-- **Last Updated**: 2026-07-09
+- **Version**: 1.6.0
+- **Last Updated**: 2026-09-04

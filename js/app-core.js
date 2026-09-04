@@ -208,3 +208,11 @@
             return count;
         }
 
+
+        // ========== 기밀 표시 머리글 (Confidential Header) 공용 옵션 ==========
+        // 각 탭의 DOCX 출력 구역에 있는 체크박스 상태를 읽는다 (기본값 uncheck = 미적용).
+        // 실제 머리글 주입은 utils.js의 applyConfidentialHeaderToDocxZip()이 담당.
+        function isConfidentialHeaderOn(checkboxId) {
+            const el = document.getElementById(checkboxId);
+            return !!(el && el.checked);
+        }
