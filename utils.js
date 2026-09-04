@@ -1959,7 +1959,10 @@ function makeUSDocxFooterFirstXml() {
 // 모든 탭의 DOCX 출력이 '기밀 머리글 추가' 체크박스로 공유 (기본값 미적용)
 // - 서식: Tahoma 9pt, 진한 빨강(C00000), 오른쪽 정렬
 // - 첫 페이지를 포함한 전 페이지에 표시 (default/first/even 머리글 모두 지정)
-// - 줄번호가 머리글까지 매겨지지 않도록 suppressLineNumbers 적용
+// - 단락 서식 표시자(Word가 왼쪽 여백에 찍는 검은 사각형)를 남기지 않도록
+//   keepNext/keepLines/pageBreakBefore/suppressLineNumbers를 쓰지 않는다.
+//   줄번호(lnNumType)는 본문 스토리에만 매겨지고 머리글은 애초에 대상이 아니라
+//   suppressLineNumbers가 불필요하다.
 // ============================================
 
 const CONFIDENTIAL_HEADER_TEXT = 'Confidential and Privileged/ Attorney-Client Work Product';
@@ -1971,12 +1974,13 @@ const CONFIDENTIAL_HEADER_REL_TYPE = 'http://schemas.openxmlformats.org/officeDo
 /**
  * 기밀 머리글 단락 XML (<w:p>)
  * 단락 표식(rPr)에도 같은 글꼴/크기를 지정해 머리글 높이가 본문 글꼴(12pt) 기준으로 늘어나지 않게 한다.
+ * 단락 서식 표시자가 생기지 않도록 pPr에는 정렬/간격/글꼴만 둔다 (위 주석 참조).
  * @returns {string}
  */
 function makeConfidentialHeaderParagraphXml() {
     const rPr = '<w:rFonts w:ascii="Tahoma" w:eastAsia="Tahoma" w:hAnsi="Tahoma" w:cs="Tahoma"/>' +
         '<w:color w:val="C00000"/><w:sz w:val="18"/><w:szCs w:val="18"/>';
-    return '<w:p><w:pPr><w:suppressLineNumbers/><w:jc w:val="right"/>' +
+    return '<w:p><w:pPr><w:jc w:val="right"/>' +
         '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>' +
         `<w:rPr>${rPr}</w:rPr></w:pPr>` +
         `<w:r><w:rPr>${rPr}</w:rPr>` +

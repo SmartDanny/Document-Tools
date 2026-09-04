@@ -730,10 +730,13 @@ describe('US양식 DOCX 공통 부품', () => {
 const CONF_TEXT = 'Confidential and Privileged/ Attorney-Client Work Product';
 
 describe('기밀 표시 머리글 (Confidential Header)', () => {
-    test('머리글 단락: Tahoma 9pt, 진한 빨강(C00000), 오른쪽 정렬, 줄번호 제외', () => {
+    test('머리글 단락: Tahoma 9pt, 진한 빨강(C00000), 오른쪽 정렬', () => {
         const p = u.makeConfidentialHeaderParagraphXml();
         assert.ok(p.includes('<w:jc w:val="right"/>'));
-        assert.ok(p.includes('<w:suppressLineNumbers/>'));
+        // Word가 왼쪽 여백에 찍는 단락 서식 표시자(검은 사각형)를 만드는 네 속성은 쓰지 않는다
+        for (const flag of ['suppressLineNumbers', 'keepNext', 'keepLines', 'pageBreakBefore']) {
+            assert.ok(!p.includes(`<w:${flag}`), flag);
+        }
         assert.ok(p.includes('w:ascii="Tahoma"'));
         assert.ok(p.includes('<w:color w:val="C00000"/>'));
         assert.ok(p.includes('<w:sz w:val="18"/>'));      // 9pt
