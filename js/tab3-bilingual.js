@@ -433,7 +433,8 @@
                 return;
             }
             try {
-                await generateDocxFromText3(text, 'korean_extracted.docx');
+                await generateDocxFromText3(text, 'korean_extracted.docx',
+                    { confidentialHeader: isConfidentialHeaderOn('confHeaderKor3') });
                 showMessage(msg, '✅ 국문본 DOCX 파일이 다운로드되었습니다!', 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (e) {
@@ -450,7 +451,8 @@
                 return;
             }
             try {
-                await generateDocxBasic(text, 'english_extracted.docx');
+                await generateDocxBasic(text, 'english_extracted.docx',
+                    { confidentialHeader: isConfidentialHeaderOn('confHeaderEng3') });
                 showMessage(msg, '✅ 영문본 DOCX 파일이 다운로드되었습니다!', 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (e) {
@@ -474,7 +476,8 @@
                 updateEnglishDisplay3();
             }
             try {
-                await generateDocxUSPatent(text, 'english_extracted_US.docx');
+                await generateDocxUSPatent(text, 'english_extracted_US.docx',
+                    { confidentialHeader: isConfidentialHeaderOn('confHeaderEng3') });
                 showMessage(msg, '✅ US 특허출원 양식 DOCX 파일이 다운로드되었습니다!', 'success');
                 setTimeout(() => msg.classList.add('hidden'), 3000);
             } catch (e) {
@@ -699,6 +702,9 @@
 </w:body></w:document>`;
                 
                 zip.file('word/document.xml', documentXml);
+
+                // 기밀 표시 머리글 옵션 (utils.js)
+                if (isConfidentialHeaderOn('confHeaderColor3')) await applyConfidentialHeaderToDocxZip(zip);
 
                 const blob = await zip.generateAsync({ type: 'blob' });
                 saveAs(blob, 'mixed_korean_colored.docx');
@@ -1375,17 +1381,18 @@
         // 영문본 + 양식표준화 실행: US 특허출원 양식 (A4, Arial 12pt, SEQ 단락번호, 행번호, 페이지번호)
         // 영문본 + 양식표준화 미실행: 기본 양식 (국문본과 동일)
         // 국문본: 기본 양식 (Letter, 12pt, 기본 줄간격)
-        async function generateDocxFromText3(text, filename) {
+        // opts: { confidentialHeader } — 기밀 표시 머리글 추가 여부
+        async function generateDocxFromText3(text, filename, opts) {
             const isEnglish = filename.toLowerCase().includes('english');
             if (isEnglish && window.englishFormatStandardized) {
-                await generateDocxUSPatent(text, filename);
+                await generateDocxUSPatent(text, filename, opts);
             } else {
-                await generateDocxBasic(text, filename);
+                await generateDocxBasic(text, filename, opts);
             }
         }
 
         // 기존 기본 DOCX 생성 (국문본용)
-        async function generateDocxBasic(text, filename) {
+        async function generateDocxBasic(text, filename, opts) {
             const zip = new JSZip();
 
             zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1436,6 +1443,9 @@
 
             zip.file('word/document.xml', documentXml);
 
+            // 기밀 표시 머리글 옵션 (utils.js)
+            if (opts && opts.confidentialHeader) await applyConfidentialHeaderToDocxZip(zip);
+
             const blob = await zip.generateAsync({ type: 'blob' });
             saveAs(blob, filename);
         }
@@ -1444,7 +1454,7 @@
         // - A4, 여백(top=1440, bottom=1701, left/right=1701), 줄간격 2배, Arial 12pt
         // - SEQ 필드 단락번호 [0001]~ (4자리 고정, 단락 삭제/추가 시 재열기로 자동 갱신)
         // - 5행마다 행번호, 페이지번호 (푸터), docGrid
-        async function generateDocxUSPatent(text, filename) {
+        async function generateDocxUSPatent(text, filename, opts) {
             const zip = new JSZip();
 
             // === 부제목/청구항 판별 헬퍼 (utils.js의 공통 판별 함수 사용) ===
@@ -1648,6 +1658,9 @@ ${makeUSDocxSectPrXml({
             zip.file('word/footer1.xml', footerWithPageXml);
             zip.file('word/footer2.xml', footerWithPageXml);
             zip.file('word/footer3.xml', footerFirstPageXml);
+
+            // 기밀 표시 머리글 옵션 (utils.js) — 비어 있는 header1~3.xml을 기밀 머리글로 대체
+            if (opts && opts.confidentialHeader) await applyConfidentialHeaderToDocxZip(zip);
 
             const blob = await zip.generateAsync({ type: 'blob' });
             saveAs(blob, filename);

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
  * Document Tools - 특허 명세서 전처리 도구
- * Version: 1.5.0
- * Last Updated: 2026-07-09
+ * Version: 1.6.0
+ * Last Updated: 2026-09-04
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  * 이 소프트웨어는 저작권법의 보호를 받습니다.
@@ -14,7 +14,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>문서 도구 모음</title>
     <meta name="author" content="Smart Danny">
-    <meta name="version" content="1.5.0">
+    <meta name="version" content="1.6.0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <!-- Markdown to PDF용 라이브러리 -->
@@ -85,6 +85,14 @@
                             <input type="checkbox" id="finRopksIncludeCrossRef" disabled style="width:16px;height:16px;cursor:pointer;">
                             <span>📎 <strong>ROPKS DOCX에 Cross-reference 포함</strong>
                                 <span id="finRopksCrossRefHint" style="color:#888;">(2단계에서 삽입하면 선택할 수 있습니다)</span>
+                            </span>
+                        </label>
+                    </div>
+                    <div style="margin-bottom:12px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #dee2e6;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                            <input type="checkbox" id="confHeaderFin1" style="width:16px;height:16px;cursor:pointer;">
+                            <span>🔒 <strong>기밀 머리글 추가</strong>
+                                <span style="color:#888;">(Confidential and Privileged/ Attorney-Client Work Product)</span>
                             </span>
                         </label>
                     </div>
@@ -309,6 +317,14 @@
                     <input type="text" id="outputFileName2" placeholder="파일명">
                     <span>.docx</span>
                 </div>
+                <div style="margin-bottom:12px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #dee2e6;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                        <input type="checkbox" id="confHeader2" style="width:16px;height:16px;cursor:pointer;">
+                        <span>🔒 <strong>기밀 머리글 추가</strong>
+                            <span style="color:#888;">(Confidential and Privileged/ Attorney-Client Work Product)</span>
+                        </span>
+                    </label>
+                </div>
                 <div style="display:flex;gap:10px;margin-bottom:0;">
                     <button class="btn btn-primary" style="flex:1;" onclick="convertToDocx2()">📥 워드 파일 다운로드</button>
                     <button class="btn btn-primary" style="flex:1;background:#1565c0;" onclick="downloadUSFormat2()">🇺🇸 US양식 다운로드</button>
@@ -397,6 +413,14 @@
                             <div class="stat-card orange diff-nav-card" onclick="navigateStatElem('tab3_eng','sup')" title="클릭하여 위첨자로 이동"><div class="stat-number" id="englishSupCount3">0</div><div class="stat-label">위첨자</div><div class="stat-nav-indicator" id="engSupNavIndicator3"></div></div>
                             <div class="stat-card teal diff-nav-card" onclick="navigateStatElem('tab3_eng','table')" title="클릭하여 표로 이동"><div class="stat-number" id="englishTableCount3">0</div><div class="stat-label">표 개수</div><div class="stat-nav-indicator" id="engTableNavIndicator3"></div></div>
                         </div>
+                        <div style="margin-bottom:8px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #dee2e6;">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                                <input type="checkbox" id="confHeaderEng3" style="width:16px;height:16px;cursor:pointer;">
+                                <span>🔒 <strong>기밀 머리글 추가</strong>
+                                    <span style="color:#888;">(Confidential and Privileged/ Attorney-Client Work Product)</span>
+                                </span>
+                            </label>
+                        </div>
                         <div style="display:flex;gap:10px;margin-bottom:8px;">
                             <button class="btn btn-success" style="flex:1;" onclick="downloadEngDocx3()">📥 영문본 DOCX 다운로드</button>
                             <button class="btn btn-primary" style="flex:1;background:#1565c0;" onclick="downloadUSFormatEng3()">🇺🇸 US양식 다운로드</button>
@@ -434,6 +458,14 @@
                             <div class="stat-card blue diff-nav-card" onclick="navigateStatElem('tab3_kor','sub')" title="클릭하여 아래첨자로 이동"><div class="stat-number" id="koreanSubCount3">0</div><div class="stat-label">아래첨자</div><div class="stat-nav-indicator" id="korSubNavIndicator3"></div></div>
                             <div class="stat-card orange diff-nav-card" onclick="navigateStatElem('tab3_kor','sup')" title="클릭하여 위첨자로 이동"><div class="stat-number" id="koreanSupCount3">0</div><div class="stat-label">위첨자</div><div class="stat-nav-indicator" id="korSupNavIndicator3"></div></div>
                             <div class="stat-card teal diff-nav-card" onclick="navigateStatElem('tab3_kor','table')" title="클릭하여 표로 이동"><div class="stat-number" id="koreanTableCount3">0</div><div class="stat-label">표 개수</div><div class="stat-nav-indicator" id="korTableNavIndicator3"></div></div>
+                        </div>
+                        <div style="margin-bottom:10px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #dee2e6;">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                                <input type="checkbox" id="confHeaderKor3" style="width:16px;height:16px;cursor:pointer;">
+                                <span>🔒 <strong>기밀 머리글 추가</strong>
+                                    <span style="color:#888;">(Confidential and Privileged/ Attorney-Client Work Product)</span>
+                                </span>
+                            </label>
                         </div>
                         <div class="btn-group" style="margin-bottom:10px;display:flex;align-items:center;gap:10px;">
                             <button class="btn btn-primary" onclick="downloadKorDocx3()">📥 국문본 DOCX 다운로드</button>
@@ -493,6 +525,14 @@
                                     <div class="stat-card teal diff-nav-card" onclick="navigateStatElem('tab3_color_en','table')" title="클릭하여 영어 표로 이동" style="flex:1;min-width:80px;"><div class="stat-number" id="colorEnTableCount3">0</div><div class="stat-label">표 개수</div><div class="stat-nav-indicator" id="colorEnTableNavIndicator3"></div></div>
                                 </div>
                             </div>
+                        </div>
+                        <div style="margin-bottom:10px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #dee2e6;">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                                <input type="checkbox" id="confHeaderColor3" style="width:16px;height:16px;cursor:pointer;">
+                                <span>🔒 <strong>기밀 머리글 추가</strong>
+                                    <span style="color:#888;">(Confidential and Privileged/ Attorney-Client Work Product)</span>
+                                </span>
+                            </label>
                         </div>
                         <div class="btn-group" style="margin-bottom:10px;display:flex;align-items:center;gap:10px;">
                             <button class="btn btn-primary" onclick="downloadColorDocx3()">📥 한영혼합본 DOCX 다운로드</button>
@@ -578,6 +618,14 @@
                             <span>🖨️ <strong>인쇄 옵션:</strong> 단락번호([XXXX])를 삭제하여 출력</span>
                         </label>
                     </div>
+                    <div style="margin-bottom:12px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #dee2e6;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                            <input type="checkbox" id="confHeaderMerge3" style="width:16px;height:16px;cursor:pointer;">
+                            <span>🔒 <strong>기밀 머리글 추가</strong>
+                                <span style="color:#888;">(Confidential and Privileged/ Attorney-Client Work Product)</span>
+                            </span>
+                        </label>
+                    </div>
                     <div class="filename-input" style="margin-bottom:15px;">
                         <input type="text" id="mergeFileName3" placeholder="한영혼합본">
                         <span>.docx</span>
@@ -651,6 +699,14 @@
                     <div class="btn-group" style="margin-top:10px;">
                         <button class="btn btn-success" onclick="exportTextCompareDocx()">📥 변경내용 DOCX 다운로드</button>
                     </div>
+                    <div style="margin-bottom:12px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #dee2e6;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                            <input type="checkbox" id="confHeaderText4" style="width:16px;height:16px;cursor:pointer;">
+                            <span>🔒 <strong>기밀 머리글 추가</strong>
+                                <span style="color:#888;">(Confidential and Privileged/ Attorney-Client Work Product)</span>
+                            </span>
+                        </label>
+                    </div>
                     <div class="compare-container">
                         <div class="compare-panel">
                             <div class="compare-panel-header">문서 1 (원본)</div>
@@ -701,6 +757,14 @@
                         <input type="text" id="outputFileNameDocx4" placeholder="비교결과">
                         <span>.docx</span>
                     </div>
+                    <div style="margin-bottom:12px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #dee2e6;">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                            <input type="checkbox" id="confHeaderDocx4" style="width:16px;height:16px;cursor:pointer;">
+                            <span>🔒 <strong>기밀 머리글 추가</strong>
+                                <span style="color:#888;">(Confidential and Privileged/ Attorney-Client Work Product)</span>
+                            </span>
+                        </label>
+                    </div>
                     <div class="btn-group">
                         <button class="btn btn-primary" onclick="standardizeFormat4Docx()">📐 양식표준화</button>
                         <button class="btn btn-primary" onclick="compareDocxFiles()">🔍 DOCX 비교 및 다운로드</button>
@@ -743,6 +807,14 @@
                     <button onclick="resetMdExample()">📝 예제 복구</button>
                     <button onclick="downloadMdPDF()" style="background:#1e3a5f;color:#fff;font-weight:600;">📥 PDF 저장</button>
                     <button onclick="downloadMdDOCX()" style="background:#2b579a;color:#fff;font-weight:600;">📄 DOCX 저장</button>
+                </div>
+                <div style="margin-bottom:15px;padding:8px 12px;background:#f8f9fa;border-radius:6px;border:1px solid #dee2e6;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+                        <input type="checkbox" id="confHeaderMd5" style="width:16px;height:16px;cursor:pointer;">
+                        <span>🔒 <strong>기밀 머리글 추가</strong>
+                            <span style="color:#888;">(Confidential and Privileged/ Attorney-Client Work Product)</span>
+                        </span>
+                    </label>
                 </div>
                 <div class="note" style="margin-bottom:15px;">
                     <span class="note-icon">💡</span>
@@ -938,7 +1010,7 @@ def fibonacci(n):
 
     <!-- Footer -->
     <footer class="app-footer">
-        <span>Document Tools v1.5.0</span>
+        <span>Document Tools v1.6.0</span>
         <span class="footer-separator">|</span>
         <span>© 2026 Smart Danny. All rights reserved.</span>
     </footer>

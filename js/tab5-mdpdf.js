@@ -664,6 +664,9 @@ ${body}
                     zip.file(m.path, m.base64, { base64: true });
                 }
 
+                // 기밀 표시 머리글 옵션 (utils.js)
+                if (isConfidentialHeaderOn('confHeaderMd5')) await applyConfidentialHeaderToDocxZip(zip);
+
                 const blob = await zip.generateAsync({
                     type: 'blob',
                     mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

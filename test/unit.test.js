@@ -725,3 +725,153 @@ describe('US양식 DOCX 공통 부품', () => {
         assert.ok(u.makeUSDocxNumberingXml().includes('[00%1]'));
     });
 });
+
+// utils.js의 const 선언은 vm 전역 객체에 노출되지 않으므로 문구는 리터럴로 검증
+const CONF_TEXT = 'Confidential and Privileged/ Attorney-Client Work Product';
+
+describe('기밀 표시 머리글 (Confidential Header)', () => {
+    test('머리글 단락: Tahoma 9pt, 진한 빨강(C00000), 오른쪽 정렬', () => {
+        const p = u.makeConfidentialHeaderParagraphXml();
+        assert.ok(p.includes('<w:jc w:val="right"/>'));
+        // Word가 왼쪽 여백에 찍는 단락 서식 표시자(검은 사각형)를 만드는 네 속성은 쓰지 않는다
+        for (const flag of ['suppressLineNumbers', 'keepNext', 'keepLines', 'pageBreakBefore']) {
+            assert.ok(!p.includes(`<w:${flag}`), flag);
+        }
+        assert.ok(p.includes('w:ascii="Tahoma"'));
+        assert.ok(p.includes('<w:color w:val="C00000"/>'));
+        assert.ok(p.includes('<w:sz w:val="18"/>'));      // 9pt
+        assert.ok(!p.includes('<w:b/>'));                  // 볼드 없음
+        assert.ok(!p.includes('<w:highlight'));            // 형광펜 없음
+        assert.ok(p.includes('Confidential and Privileged/ Attorney-Client Work Product'));
+        // 단락 표식(rPr)에도 9pt 지정 — 본문 12pt 기준으로 머리글이 높아지지 않도록
+        assert.ok(/<w:pPr>[\s\S]*<w:rPr>[\s\S]*<w:sz w:val="18"\/>[\s\S]*<\/w:rPr><\/w:pPr>/.test(p));
+    });
+
+    test('머리글 part는 단락 하나만 포함', () => {
+        const h = u.makeConfidentialHeaderXml();
+        assert.ok(h.startsWith('<?xml'));
+        assert.ok(h.includes('<w:hdr'));
+        assert.equal((h.match(/<w:p>/g) || []).length, 1);
+    });
+
+    test('빈 머리글은 대체 (머리글이 두 줄이 되지 않도록)', () => {
+        const empty = u.makeUSDocxHeaderXml(); // 빈 단락만 있는 US양식 머리글
+        const out = u.prependConfidentialHeaderParagraph(empty);
+        assert.ok(out.includes(CONF_TEXT));
+        assert.equal((out.match(/<w:p[ >]/g) || []).length, 1); // 빈 단락은 남지 않음
+    });
+
+    test('내용이 있는 머리글은 맨 앞에 삽입 + 기존 내용 보존', () => {
+        const hdr = '<?xml version="1.0"?><w:hdr xmlns:w="w"><w:p><w:r><w:t>기존 머리글</w:t></w:r></w:p></w:hdr>';
+        const out = u.prependConfidentialHeaderParagraph(hdr);
+        assert.ok(out.includes('기존 머리글'));
+        assert.equal((out.match(/<w:p[ >]/g) || []).length, 2);
+        assert.ok(out.indexOf(CONF_TEXT) < out.indexOf('기존 머리글')); // 선두 삽입
+    });
+
+    test('멱등: 이미 적용된 머리글은 다시 삽입하지 않음', () => {
+        const once = u.prependConfidentialHeaderParagraph(u.makeUSDocxHeaderXml());
+        assert.equal(u.prependConfidentialHeaderParagraph(once), once);
+    });
+});
+
+// JSZip 최소 스텁 (unit 테스트는 외부 의존성 없이 실행)
+function makeZipStub(files) {
+    const store = Object.assign({}, files);
+    return {
+        store,
+        file(path, content) {
+            if (content === undefined) {
+                return Object.prototype.hasOwnProperty.call(store, path)
+                    ? { async: async () => store[path] } : null;
+            }
+            store[path] = content;
+        }
+    };
+}
+
+const MIN_RELS = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+    '</Relationships>';
+const MIN_CT = '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>';
+
+describe('applyConfidentialHeaderToDocxZip', () => {
+    test('머리글이 없는 신규 패키지: part/관계/Override/sectPr 참조 + xmlns:r 추가', async () => {
+        const zip = makeZipStub({
+            'word/document.xml': '<?xml version="1.0"?><w:document xmlns:w="w"><w:body><w:p/>' +
+                '<w:sectPr><w:pgSz w:w="12240" w:h="15840"/></w:sectPr></w:body></w:document>',
+            'word/_rels/document.xml.rels': MIN_RELS,
+            '[Content_Types].xml': MIN_CT
+        });
+        assert.equal(await u.applyConfidentialHeaderToDocxZip(zip), true);
+
+        const doc = zip.store['word/document.xml'];
+        assert.ok(doc.includes('xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'));
+        assert.ok(doc.includes('<w:headerReference w:type="default" r:id="rIdConfHdr"/>'));
+        // headerReference는 sectPr 선두 (footerReference보다 앞)
+        assert.ok(/<w:sectPr><w:headerReference/.test(doc));
+        assert.ok(zip.store['word/headerConf.xml'].includes(CONF_TEXT));
+        assert.ok(zip.store['word/_rels/document.xml.rels'].includes('Id="rIdConfHdr"'));
+        assert.ok(zip.store['[Content_Types].xml'].includes('PartName="/word/headerConf.xml"'));
+    });
+
+    test('빈 머리글이 이미 있는 US양식 패키지: 새 part 없이 기존 part를 대체', async () => {
+        const zip = makeZipStub({
+            'word/document.xml': '<?xml version="1.0"?><w:document xmlns:w="w" xmlns:r="r"><w:body>' +
+                '<w:sectPr><w:headerReference w:type="default" r:id="rId11"/>' +
+                '<w:footerReference w:type="default" r:id="rId13"/></w:sectPr></w:body></w:document>',
+            'word/_rels/document.xml.rels': MIN_RELS.replace('</Relationships>',
+                '<Relationship Id="rId11" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/></Relationships>'),
+            '[Content_Types].xml': MIN_CT,
+            'word/header2.xml': u.makeUSDocxHeaderXml()
+        });
+        await u.applyConfidentialHeaderToDocxZip(zip);
+
+        assert.ok(zip.store['word/header2.xml'].includes(CONF_TEXT));
+        assert.equal((zip.store['word/header2.xml'].match(/<w:p[ >]/g) || []).length, 1); // 한 줄 유지
+        assert.equal(zip.store['word/headerConf.xml'], undefined);                        // 새 part 불필요
+        assert.ok(!zip.store['word/document.xml'].includes('rIdConfHdr'));
+    });
+
+    test('첫 페이지 별도 지정(titlePg): first 머리글도 함께 지정', async () => {
+        const zip = makeZipStub({
+            'word/document.xml': '<?xml version="1.0"?><w:document xmlns:w="w" xmlns:r="r"><w:body>' +
+                '<w:sectPr><w:titlePg/></w:sectPr></w:body></w:document>',
+            'word/_rels/document.xml.rels': MIN_RELS,
+            '[Content_Types].xml': MIN_CT
+        });
+        await u.applyConfidentialHeaderToDocxZip(zip);
+        const doc = zip.store['word/document.xml'];
+        assert.ok(doc.includes('w:type="default" r:id="rIdConfHdr"'));
+        assert.ok(doc.includes('w:type="first" r:id="rIdConfHdr"'));
+    });
+
+    test('구역이 여럿이면 모든 sectPr에 적용', async () => {
+        const zip = makeZipStub({
+            'word/document.xml': '<?xml version="1.0"?><w:document xmlns:w="w"><w:body>' +
+                '<w:p><w:pPr><w:sectPr><w:pgSz w:w="1"/></w:sectPr></w:pPr></w:p>' +
+                '<w:sectPr><w:pgSz w:w="2"/></w:sectPr></w:body></w:document>',
+            'word/_rels/document.xml.rels': MIN_RELS,
+            '[Content_Types].xml': MIN_CT
+        });
+        await u.applyConfidentialHeaderToDocxZip(zip);
+        assert.equal((zip.store['word/document.xml'].match(/rIdConfHdr/g) || []).length, 2);
+    });
+
+    test('두 번 적용해도 머리글이 중복되지 않음 (멱등)', async () => {
+        const zip = makeZipStub({
+            'word/document.xml': '<?xml version="1.0"?><w:document xmlns:w="w"><w:body>' +
+                '<w:sectPr><w:pgSz w:w="1"/></w:sectPr></w:body></w:document>',
+            'word/_rels/document.xml.rels': MIN_RELS,
+            '[Content_Types].xml': MIN_CT
+        });
+        await u.applyConfidentialHeaderToDocxZip(zip);
+        const first = zip.store['word/document.xml'];
+        await u.applyConfidentialHeaderToDocxZip(zip);
+        assert.equal(zip.store['word/document.xml'], first);
+        assert.equal((zip.store['word/headerConf.xml'].match(new RegExp(CONF_TEXT, 'g')) || []).length, 1);
+        assert.equal((zip.store['word/_rels/document.xml.rels'].match(/rIdConfHdr/g) || []).length, 1);
+        assert.equal((zip.store['[Content_Types].xml'].match(/headerConf\.xml/g) || []).length, 1);
+    });
+});

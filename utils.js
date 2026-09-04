@@ -1,8 +1,8 @@
 /**
  * Document Tools - utils.js
  * 공통 유틸리티 함수 모음
- * Version: 1.5.0
- * Last Updated: 2026-07-09
+ * Version: 1.6.0
+ * Last Updated: 2026-09-04
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  * 이 소프트웨어는 저작권법의 보호를 받습니다.
@@ -1952,4 +1952,168 @@ function makeUSDocxFooterFirstXml() {
 <w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:p><w:pPr><w:pStyle w:val="a4"/></w:pPr></w:p>
 </w:ftr>`;
+}
+
+// ============================================
+// 기밀 표시 머리글 (Confidential Header) 공통 부품
+// 모든 탭의 DOCX 출력이 '기밀 머리글 추가' 체크박스로 공유 (기본값 미적용)
+// - 서식: Tahoma 9pt, 진한 빨강(C00000), 오른쪽 정렬
+// - 첫 페이지를 포함한 전 페이지에 표시 (default/first/even 머리글 모두 지정)
+// - 단락 서식 표시자(Word가 왼쪽 여백에 찍는 검은 사각형)를 남기지 않도록
+//   keepNext/keepLines/pageBreakBefore/suppressLineNumbers를 쓰지 않는다.
+//   줄번호(lnNumType)는 본문 스토리에만 매겨지고 머리글은 애초에 대상이 아니라
+//   suppressLineNumbers가 불필요하다.
+// ============================================
+
+const CONFIDENTIAL_HEADER_TEXT = 'Confidential and Privileged/ Attorney-Client Work Product';
+const CONFIDENTIAL_HEADER_RID = 'rIdConfHdr';
+const CONFIDENTIAL_HEADER_PART = 'headerConf.xml';
+const CONFIDENTIAL_HEADER_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml';
+const CONFIDENTIAL_HEADER_REL_TYPE = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/header';
+
+/**
+ * 기밀 머리글 단락 XML (<w:p>)
+ * 단락 표식(rPr)에도 같은 글꼴/크기를 지정해 머리글 높이가 본문 글꼴(12pt) 기준으로 늘어나지 않게 한다.
+ * 단락 서식 표시자가 생기지 않도록 pPr에는 정렬/간격/글꼴만 둔다 (위 주석 참조).
+ * @returns {string}
+ */
+function makeConfidentialHeaderParagraphXml() {
+    const rPr = '<w:rFonts w:ascii="Tahoma" w:eastAsia="Tahoma" w:hAnsi="Tahoma" w:cs="Tahoma"/>' +
+        '<w:color w:val="C00000"/><w:sz w:val="18"/><w:szCs w:val="18"/>';
+    return '<w:p><w:pPr><w:jc w:val="right"/>' +
+        '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>' +
+        `<w:rPr>${rPr}</w:rPr></w:pPr>` +
+        `<w:r><w:rPr>${rPr}</w:rPr>` +
+        `<w:t xml:space="preserve">${escapeXml(CONFIDENTIAL_HEADER_TEXT)}</w:t></w:r></w:p>`;
+}
+
+/**
+ * 기밀 머리글 part 전체 (<w:hdr>)
+ * @returns {string}
+ */
+function makeConfidentialHeaderXml() {
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+${makeConfidentialHeaderParagraphXml()}
+</w:hdr>`;
+}
+
+/**
+ * 기존 머리글 part(<w:hdr>) 문자열에 기밀 머리글 단락을 삽입 (멱등)
+ * - 내용이 없는 머리글(텍스트/필드/이미지 없음)은 통째로 대체 — 빈 단락이 남아 머리글 높이가
+ *   두 줄이 되면 US양식의 25행/페이지가 무너지므로 대체가 필요하다.
+ * - 내용이 있는 머리글은 맨 앞에 덧붙여 기존 내용(페이지번호 등)을 보존한다.
+ * @param {string} hdrXml - 기존 header part XML
+ * @returns {string}
+ */
+function prependConfidentialHeaderParagraph(hdrXml) {
+    if (!hdrXml || hdrXml.indexOf(CONFIDENTIAL_HEADER_TEXT) >= 0) return hdrXml; // 이미 적용됨
+    const p = makeConfidentialHeaderParagraphXml();
+    const inner = hdrXml.replace(/<w:hdr\b[^>]*>|<\/w:hdr>/g, '');
+    const hasContent = /<w:t[ >\/]|<w:fldChar|<w:instrText|<w:drawing|<w:pict|<w:tbl[ >]/.test(inner);
+    if (!hasContent) {
+        return hdrXml.replace(/(<w:hdr\b[^>]*>)[\s\S]*(<\/w:hdr>)/, `$1${p}$2`);
+    }
+    return hdrXml.replace(/(<w:hdr\b[^>]*>)/, `$1${p}`);
+}
+
+/**
+ * 조립이 끝난 DOCX zip에 기밀 머리글을 주입한다 (generateAsync 직전 호출).
+ * 신규 패키지와 기존 패키지(탭4 DOCX 비교의 수정본 재사용)를 모두 처리:
+ *  1) <w:document>에 xmlns:r 선언 보장 (headerReference가 r:id를 사용)
+ *  2) 본문의 모든 <w:sectPr>를 순회 — 기존 headerReference는 그 part에 단락 삽입,
+ *     없는 유형(default / 첫 페이지 지정 시 first / 홀짝 구분 시 even)은 새 part 참조 추가
+ *  3) 새 part가 필요하면 header part + document.xml.rels 관계 + [Content_Types] Override 추가
+ * @param {JSZip} zip - 조립된 DOCX 패키지
+ * @returns {Promise<boolean>} 적용 여부
+ */
+async function applyConfidentialHeaderToDocxZip(zip) {
+    const docFile = zip.file('word/document.xml');
+    if (!docFile) return false;
+    let docXml = await docFile.async('string');
+
+    // (1) r 네임스페이스 보장
+    if (docXml.indexOf('xmlns:r=') < 0) {
+        docXml = docXml.replace('<w:document',
+            '<w:document xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"');
+    }
+
+    // 기존 header 관계 (Id → Target)
+    const relsPath = 'word/_rels/document.xml.rels';
+    const relsFile = zip.file(relsPath);
+    let relsXml = relsFile ? await relsFile.async('string') : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+    const headerTargets = {};
+    const relRe = /<Relationship\b[^>]*>/g;
+    let rm;
+    while ((rm = relRe.exec(relsXml)) !== null) {
+        const tag = rm[0];
+        if (tag.indexOf('/relationships/header') < 0) continue;
+        const id = (tag.match(/Id="([^"]*)"/) || [])[1];
+        const target = (tag.match(/Target="([^"]*)"/) || [])[1];
+        if (id && target) headerTargets[id] = target.replace(/^\.?\/?/, '');
+    }
+
+    // 홀짝 페이지 머리글 구분 여부 (settings.xml)
+    let evenAndOdd = false;
+    const settingsFile = zip.file('word/settings.xml');
+    if (settingsFile) evenAndOdd = /<w:evenAndOddHeaders\b/.test(await settingsFile.async('string'));
+
+    // (2) 모든 sectPr 처리
+    const touchedIds = {};
+    let needNewPart = false;
+    docXml = docXml.replace(/<w:sectPr\b[^>]*>[\s\S]*?<\/w:sectPr>/g, (sect) => {
+        const types = {};
+        const hdrRe = /<w:headerReference\b[^>]*\/>/g;
+        let hm;
+        while ((hm = hdrRe.exec(sect)) !== null) {
+            const type = (hm[0].match(/w:type="([^"]*)"/) || [])[1] || 'default';
+            const id = (hm[0].match(/r:id="([^"]*)"/) || [])[1];
+            types[type] = true;
+            if (id && headerTargets[id]) touchedIds[id] = true;
+        }
+        // 전 페이지 표시에 필요한 유형 중 빠진 것만 새 part로 보충
+        const needed = ['default'];
+        if (/<w:titlePg\b/.test(sect)) needed.push('first');
+        if (evenAndOdd) needed.push('even');
+        const add = needed.filter(t => !types[t])
+            .map(t => `<w:headerReference w:type="${t}" r:id="${CONFIDENTIAL_HEADER_RID}"/>`).join('');
+        if (!add) return sect;
+        needNewPart = true;
+        // headerReference는 footerReference보다 앞에 와야 하므로 sectPr 선두에 삽입
+        return sect.replace(/(<w:sectPr\b[^>]*>)/, `$1${add}`);
+    });
+
+    // (3) 기존 머리글 part에 단락 삽입
+    for (const id of Object.keys(touchedIds)) {
+        const path = 'word/' + headerTargets[id];
+        const f = zip.file(path);
+        if (!f) continue;
+        zip.file(path, prependConfidentialHeaderParagraph(await f.async('string')));
+    }
+
+    // (4) 새 part / 관계 / Content_Types 등록
+    if (needNewPart) {
+        zip.file('word/' + CONFIDENTIAL_HEADER_PART, makeConfidentialHeaderXml());
+        if (relsXml.indexOf(`Id="${CONFIDENTIAL_HEADER_RID}"`) < 0) {
+            relsXml = relsXml.replace('</Relationships>',
+                `<Relationship Id="${CONFIDENTIAL_HEADER_RID}" Type="${CONFIDENTIAL_HEADER_REL_TYPE}" Target="${CONFIDENTIAL_HEADER_PART}"/></Relationships>`);
+        }
+        zip.file(relsPath, relsXml);
+
+        const ctFile = zip.file('[Content_Types].xml');
+        if (ctFile) {
+            let ct = await ctFile.async('string');
+            if (ct.indexOf(`PartName="/word/${CONFIDENTIAL_HEADER_PART}"`) < 0) {
+                ct = ct.replace('</Types>',
+                    `<Override PartName="/word/${CONFIDENTIAL_HEADER_PART}" ContentType="${CONFIDENTIAL_HEADER_CT}"/></Types>`);
+                zip.file('[Content_Types].xml', ct);
+            }
+        }
+    } else if (relsFile === null) {
+        zip.file(relsPath, relsXml);
+    }
+
+    zip.file('word/document.xml', docXml);
+    return true;
 }
