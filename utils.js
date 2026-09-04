@@ -1,7 +1,7 @@
 /**
  * Document Tools - utils.js
  * 공통 유틸리티 함수 모음
- * Version: 1.7.0
+ * Version: 1.7.2
  * Last Updated: 2026-09-04
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
@@ -1656,11 +1656,15 @@ function setupDropZone(el, onFile, options = {}) {
 // ============================================
 // US 특허출원 양식 DOCX 공통 부품
 // (탭2·탭3 'US양식 다운로드'와 탭4 '비교 및 US양식 다운로드'가 공유)
-// - A4, 여백(top=1440, bottom/left/right=1701), 고정 행 높이 548(25행/페이지)
+// - A4, 여백(top=1440, bottom/left/right=1701), 고정 행 높이 547(25행/페이지)
 // - Arial 12pt, SEQ 필드 단락번호, 5행마다 줄번호, 페이지번호 푸터, docGrid
 // ============================================
 
-const US_DOCX_LINE = 548; // 본문영역(16838-1440-1701=13697) / 25행
+// 본문영역 = 16838 - top 1440 - bottom 1701 = 13697 DXA
+// 25행이 들어가려면 행 높이 <= 13697/25 = 547.88 이므로 올림이 아니라 내림해야 한다.
+// 종전 548은 25행 합계가 13700으로 본문영역(13697)을 3 DXA 넘겨 24행만 표시됐다.
+// 547이면 25행 합계 13675로 22 DXA 여유가 남아 줄번호가 25까지 현출된다.
+const US_DOCX_LINE = 547;
 
 /**
  * US양식 단락 공통 spacing (고정 행 높이, 단락 뒤 0pt)
@@ -1672,6 +1676,11 @@ function makeUSDocxSpacingXml() {
 
 /**
  * US양식 sectPr — 헤더/푸터 관계 ID는 호출자가 지정
+ *
+ * 머리글 여백(w:header)이 1000인 이유: Word는 본문 시작 위치를
+ * max(위 여백, 머리글 여백 + 머리글 높이)로 잡는다. 기밀 머리글은 단락 뒤 공백까지
+ * 포함해 높이가 360 DXA(행 200 + 뒤 공백 160)이므로 1000 + 360 = 1360 <= 위 여백 1440.
+ * 즉 머리글을 켜도 본문이 아래로 밀리지 않아 25행/페이지가 그대로 유지된다.
  * (탭3 신규 패키지: rId10~15, 탭4 비교 결과: 기존 관계와 충돌하지 않는 전용 ID)
  * @param {Object} ids - {headerEven, headerDefault, headerFirst, footerEven, footerDefault, footerFirst}
  * @returns {string}
@@ -1685,7 +1694,7 @@ function makeUSDocxSectPrXml(ids) {
 <w:headerReference w:type="first" r:id="${ids.headerFirst}"/>
 <w:footerReference w:type="first" r:id="${ids.footerFirst}"/>
 <w:pgSz w:w="11906" w:h="16838"/>
-<w:pgMar w:top="1440" w:right="1701" w:bottom="1701" w:left="1701" w:header="1134" w:footer="1134" w:gutter="0"/>
+<w:pgMar w:top="1440" w:right="1701" w:bottom="1701" w:left="1701" w:header="1000" w:footer="1134" w:gutter="0"/>
 <w:lnNumType w:countBy="5"/>
 <w:cols w:space="720"/>
 <w:docGrid w:type="lines" w:linePitch="${US_DOCX_LINE}"/>
@@ -2004,7 +2013,8 @@ function makeUSClaimBodyPPrXml(spacingXml) {
 // ============================================
 // 기밀 표시 머리글 (Confidential Header) 공통 부품
 // 모든 탭의 DOCX 출력이 '기밀 머리글 추가' 체크박스로 공유 (기본값 미적용)
-// - 서식: Tahoma 9pt, 진한 빨강(C00000), 오른쪽 정렬
+// - 서식: Tahoma 9pt, 진한 빨강(C00000), 오른쪽 정렬, 단락 뒤 공백 8pt
+//   (Word '선 및 단락 간격 > 단락 뒤에 공백 추가'와 동일)
 // - 첫 페이지를 포함한 전 페이지에 표시 (default/first/even 머리글 모두 지정)
 // - 단락 서식 표시자(Word가 왼쪽 여백에 찍는 검은 사각형)를 남기지 않도록
 //   keepNext/keepLines/pageBreakBefore/suppressLineNumbers를 쓰지 않는다.
@@ -2013,6 +2023,11 @@ function makeUSClaimBodyPPrXml(spacingXml) {
 // ============================================
 
 const CONFIDENTIAL_HEADER_TEXT = 'Confidential and Privileged/ Attorney-Client Work Product';
+// Word '홈 > 선 및 단락 간격 > 단락 뒤에 공백 추가'와 같은 값 (8pt)
+const CONFIDENTIAL_HEADER_AFTER = 160;
+// 행 높이를 exact로 고정해 머리글 높이를 (행 200 + 뒤 공백 160) = 360 DXA로 확정한다.
+// 글꼴 렌더링에 따라 높이가 달라지면 US양식의 본문 시작 위치(=25행/페이지)가 흔들린다.
+const CONFIDENTIAL_HEADER_LINE = 200;
 const CONFIDENTIAL_HEADER_RID = 'rIdConfHdr';
 const CONFIDENTIAL_HEADER_PART = 'headerConf.xml';
 const CONFIDENTIAL_HEADER_CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml';
@@ -2028,7 +2043,8 @@ function makeConfidentialHeaderParagraphXml() {
     const rPr = '<w:rFonts w:ascii="Tahoma" w:eastAsia="Tahoma" w:hAnsi="Tahoma" w:cs="Tahoma"/>' +
         '<w:color w:val="C00000"/><w:sz w:val="18"/><w:szCs w:val="18"/>';
     return '<w:p><w:pPr><w:jc w:val="right"/>' +
-        '<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/>' +
+        `<w:spacing w:before="0" w:after="${CONFIDENTIAL_HEADER_AFTER}" ` +
+        `w:line="${CONFIDENTIAL_HEADER_LINE}" w:lineRule="exact"/>` +
         `<w:rPr>${rPr}</w:rPr></w:pPr>` +
         `<w:r><w:rPr>${rPr}</w:rPr>` +
         `<w:t xml:space="preserve">${escapeXml(CONFIDENTIAL_HEADER_TEXT)}</w:t></w:r></w:p>`;
