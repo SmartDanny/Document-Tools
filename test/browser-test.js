@@ -1136,6 +1136,106 @@ const server = http.createServer((req, res) => {
         results['기밀 머리글 옵션 (전 DOCX 출력 경로)'] = ok ? 'PASS' : 'FAIL ' + JSON.stringify(c);
     }
 
+    // 청구항 들여쓰기 + 청구항 사이 빈 줄 규칙 (양식표준화 · US양식 · DOCX 양식표준화 공통)
+    const claimRes = await page.evaluate(async () => {
+        const origSaveAs = window.saveAs;
+        let captured = null;
+        window.saveAs = (b) => { captured = b; };
+
+        // 청구항 내부 단락이 마침표로 끝나는 경우를 포함 (종전 규칙이 빈 줄을 넣던 지점)
+        const raw = [
+            'WHAT IS CLAIMED IS:',
+            '1. An adaptive motion generation apparatus, comprising:',
+            'a task-grounded trajectory referencing module configured to set an interaction point.',
+            'a pre-curve fitting module configured to set a trajectory; and',
+            'a post-curve calibration module configured to separate a trajectory.',
+            '2. The apparatus of claim 1, wherein the encoder is configured to encode data.',
+            'wherein the first unit and the fifth unit emit light of different colors.',
+            'ABSTRACT',
+            'An apparatus includes modules.'
+        ].join('\n');
+
+        const r = {};
+        const std = applyFormatStandardization(raw);
+        r.text = std.text;
+        // 멱등: 다시 돌려도 텍스트가 그대로여야 한다
+        r.idempotentText = applyFormatStandardization(std.text).text === std.text;
+
+        const claimLines = std.text.split('\n');
+        const ci = claimLines.findIndex(l => l.trim() === 'WHAT IS CLAIMED IS:');
+        const ai = claimLines.findIndex(l => l.trim() === 'ABSTRACT');
+        const section = claimLines.slice(ci + 1, ai);
+        // 청구항 구간의 빈 줄 위치: 다음 실질 라인이 항상 청구항 머리여야 한다
+        r.blanksOnlyBetweenClaims = section.every((l, i) => {
+            if (l.trim() !== '') return true;
+            const next = section.slice(i + 1).find(x => x.trim() !== '');
+            return next === undefined || /^\d+\./.test(next.trim());
+        });
+        // 각 청구항 머리 앞에는 빈 줄이 정확히 하나 (첫 청구항 포함)
+        r.oneBlankBeforeEachHead = section
+            .map((l, i) => ({ l, i }))
+            .filter(x => /^\d+\./.test(x.l.trim()))
+            .every(x => x.i > 0 && section[x.i - 1].trim() === '' &&
+                        (x.i < 2 || section[x.i - 2].trim() !== ''));
+
+        // US양식 DOCX: 머리는 탭 정지점만, 후속은 firstLine=800
+        await generateDocxUSPatent(std.text, 'claims.docx', {});
+        const z = await JSZip.loadAsync(new Uint8Array(await captured.arrayBuffer()));
+        const doc = await z.file('word/document.xml').async('string');
+        const paras = (doc.match(/<w:p>(?:(?!<\/w:p>)[\s\S])*?<\/w:p>/g) || []).map(p => ({
+            // <w:tabs>/<w:tab>이 아니라 <w:t> 만 매칭
+            txt: ((p.match(/<w:t(?:\s[^>]*)?>([^<]*)/) || [])[1] || '').trim(),
+            pPr: (p.match(/<w:pPr>[\s\S]*?<\/w:pPr>/) || [''])[0]
+        }));
+        const head = paras.filter(p => /^\d+\./.test(p.txt));
+        const bodyP = paras.filter(p => /^(a task-grounded|a pre-curve|a post-curve|wherein the first)/.test(p.txt));
+        r.headCount = head.length;
+        r.bodyCount = bodyP.length;
+        r.headOk = head.length === 2 && head.every(p =>
+            p.pPr.includes('<w:tab w:val="left" w:pos="800"/>') && !p.pPr.includes('<w:ind'));
+        r.bodyOk = bodyP.length === 4 && bodyP.every(p =>
+            p.pPr.includes('<w:ind w:firstLine="800"/>') && !p.pPr.includes('w:hanging'));
+        // 스키마 순서(tabs → spacing → ind) — 어기면 Word가 빈 문서로 표시한다
+        r.pPrOrderOk = paras.every(p => {
+            const idx = ['<w:tabs', '<w:spacing', '<w:ind'].map(t => p.pPr.indexOf(t)).filter(i => i >= 0);
+            return JSON.stringify(idx) === JSON.stringify([...idx].sort((a, b) => a - b));
+        });
+
+        // DOCX 양식표준화(DOM 버전): 같은 규칙 + 멱등
+        const mkDoc = (lines) => new DOMParser().parseFromString(
+            `<w:document xmlns:w="${DOCX_W_NS}"><w:body>` +
+            lines.map(t => t === null
+                ? '<w:p/>'
+                : `<w:p><w:r><w:t xml:space="preserve">${t.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</w:t></w:r></w:p>`).join('') +
+            '</w:body></w:document>', 'application/xml');
+        // 청구항 내부에 빈 단락이 끼어 있는 문서 (종전 규칙 산출물)
+        const d = mkDoc(['WHAT IS CLAIMED IS:', null, '1. An apparatus, comprising:',
+            'a module configured to set a point.', null, 'a module configured to fit a curve.',
+            '2. The apparatus of claim 1.', 'ABSTRACT']);
+        const n1 = applyFormatStandardizationToDoc(d);
+        const n2 = applyFormatStandardizationToDoc(d);
+        const ps = Array.from(d.getElementsByTagName('w:p'));
+        const texts = ps.map(p => (p.textContent || '').trim());
+        r.domFirst = n1;
+        r.domIdempotent = n2 === 0;
+        // 청구항 내부 빈 단락 제거됨 / 청구항2 앞에는 빈 단락 삽입됨
+        r.domTexts = texts;
+        r.domInnerBlankRemoved = !(texts[3] === 'a module configured to set a point.' && texts[4] === '');
+        r.domIndent = ps.filter(p => /^\d+\./.test((p.textContent || '').trim()))
+            .every(p => p.getElementsByTagName('w:tabs').length === 1 &&
+                        p.getElementsByTagName('w:ind').length === 0);
+
+        window.saveAs = origSaveAs;
+        return r;
+    });
+    {
+        const c = claimRes;
+        const ok = c.idempotentText && c.blanksOnlyBetweenClaims && c.oneBlankBeforeEachHead &&
+            c.headOk && c.bodyOk && c.pPrOrderOk &&
+            c.domIdempotent && c.domInnerBlankRemoved && c.domIndent;
+        results['청구항 들여쓰기 + 청구항 사이 빈 줄'] = ok ? 'PASS' : 'FAIL ' + JSON.stringify(c);
+    }
+
     console.log('=== 테스트 결과 ===');
     for (const [k, v] of Object.entries(results)) console.log(`${v.startsWith('PASS') ? '✅' : '❌'} ${k}: ${v}`);
     console.log('\n=== 콘솔 에러 ===');

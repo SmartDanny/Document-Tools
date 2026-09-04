@@ -472,6 +472,11 @@
             const resultLines = [];
             let inClaims = false;
             let changeCount = trailingSpaceRemoved;
+            // 청구항 구간의 빈 줄 처리 상태:
+            // 빈 줄은 즉시 내보내지 않고 보류했다가 다음 실질 라인의 종류를 보고 결정한다
+            // (청구항 사이 = 한 줄만 유지, 동일 청구항 내부 = 제거)
+            let pendingBlanks = 0;
+            let prevClaimLineIsKorean = false;
 
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i];
@@ -501,44 +506,75 @@
                 }
                 
                 // WHAT IS CLAIMED IS: 앞에 페이지 나누기, 다음에 빈줄 추가
+                // (이미 있으면 다시 넣지 않는다 — 반복 실행 시 페이지 나누기가 누적되지 않도록)
                 if (upperTrimmed === 'WHAT IS CLAIMED IS:' || upperTrimmed === 'WHAT IS CLAIMED IS') {
-                    resultLines.push('<pagebreak/>');
+                    const prevOut = resultLines.length ? resultLines[resultLines.length - 1].trim() : '';
+                    if (prevOut !== '<pagebreak/>') {
+                        resultLines.push('<pagebreak/>');
+                        changeCount++;
+                    }
                     resultLines.push(line);
-                    // WHAT IS CLAIMED IS: 다음에 빈줄 추가
+                    // WHAT IS CLAIMED IS: 다음에 빈줄 하나 (입력에 이미 있으면 변경으로 세지 않음)
                     resultLines.push('');
+                    if (!(i + 1 < lines.length && lines[i + 1].trim() === '')) changeCount++;
                     inClaims = true;
-                    changeCount++;
+                    pendingBlanks = 0;
+                    prevClaimLineIsKorean = false;
                     continue;
                 }
                 
                 // ABSTRACT 또는 ABSTRACT OF DISCLOSURE 앞에 페이지 나누기
                 if (upperTrimmed === 'ABSTRACT' || upperTrimmed === 'ABSTRACT OF DISCLOSURE') {
-                    resultLines.push('<pagebreak/>');
+                    const prevOut = resultLines.length ? resultLines[resultLines.length - 1].trim() : '';
+                    if (prevOut !== '<pagebreak/>') {
+                        resultLines.push('<pagebreak/>');
+                        changeCount++;
+                    }
                     resultLines.push(line);
                     inClaims = false; // 청구항 섹션 종료
-                    changeCount++;
+                    pendingBlanks = 0; // 청구항 끝의 남은 빈 줄은 페이지 나누기로 대체됨
                     continue;
                 }
                 
-                // WHAT IS CLAIMED IS: 이후, 영문 단락이 마침표로 끝나면 다음에 빈줄 추가
+                // WHAT IS CLAIMED IS: 이후 청구항 구간
+                // 빈 줄은 청구항과 청구항 사이에만 한 줄 두고, 동일 청구항 내부에는 넣지 않는다
+                // (종전에는 마침표로 끝나는 단락마다 빈 줄을 넣어, 마침표로 끝나는 청구항 내부
+                //  단락에서도 같은 청구항이 둘로 갈라져 보였다)
                 if (inClaims) {
-                    // 영문청구항 번호(X.)와 첫 단어 사이에 탭 삽입
+                    // 빈 줄은 보류 — 다음 실질 라인을 보고 유지/제거를 결정
+                    if (!trimmed) { pendingBlanks++; continue; }
+
                     const isKorean = /[가-힣]/.test(trimmed);
-                    if (!isKorean && /^\d+\./.test(trimmed)) {
+
+                    // 청구항 머리 단락(영문 "1." 로 시작): 앞에 빈 줄 한 줄 + 번호 뒤 탭 삽입
+                    if (isClaimHeadLine(trimmed)) {
+                        const lastLine = resultLines.length ? resultLines[resultLines.length - 1] : '';
+                        if (resultLines.length && lastLine.trim() !== '') {
+                            resultLines.push('');
+                            changeCount++;
+                        } else if (pendingBlanks > 1) {
+                            changeCount++; // 여러 줄이던 빈 줄을 한 줄로 축약
+                        }
+                        pendingBlanks = 0;
                         const modifiedLine = line.replace(/^(\s*)(\d+\.)\s*/, '$1$2\t');
                         if (modifiedLine !== line) changeCount++;
                         resultLines.push(modifiedLine);
-                    } else {
-                        resultLines.push(line);
+                        prevClaimLineIsKorean = isKorean;
+                        continue;
                     }
-                    // 영문 단락(한글이 없는)이고 마침표로 끝나는 경우에만 빈줄 추가
-                    if (!isKorean && /\.\s*$/.test(trimmed)) {
-                        // 다음 줄이 빈줄이 아니고, 마지막이 아닌 경우에만 빈줄 추가
-                        if (i + 1 < lines.length && lines[i + 1].trim() !== '') {
-                            resultLines.push('');
-                            changeCount++;
+
+                    // 동일 청구항 내부의 빈 줄은 제거 (영문 단락 사이에 한함 —
+                    //  국문이 섞인 한영혼합본에서는 라인 짝 구조를 건드리지 않도록 그대로 둔다)
+                    if (pendingBlanks > 0) {
+                        if (isKorean || prevClaimLineIsKorean) {
+                            for (let b = 0; b < pendingBlanks; b++) resultLines.push('');
+                        } else {
+                            changeCount += pendingBlanks;
                         }
+                        pendingBlanks = 0;
                     }
+                    resultLines.push(line);
+                    prevClaimLineIsKorean = isKorean;
                     continue;
                 }
                 

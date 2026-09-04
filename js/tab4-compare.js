@@ -813,6 +813,156 @@ ${bodyContent}
             return true;
         }
 
+        // w:pPr 자식 요소의 스키마 순서 (사용하는 범위만) —
+        // 이 순서를 어기면 Word가 문서를 열지 못하고 빈 문서로 표시된다
+        const PPR_CHILD_ORDER = ['w:pStyle', 'w:keepNext', 'w:keepLines', 'w:pageBreakBefore',
+            'w:framePr', 'w:widowControl', 'w:numPr', 'w:suppressLineNumbers', 'w:pBdr', 'w:shd',
+            'w:tabs', 'w:suppressAutoHyphens', 'w:kinsoku', 'w:wordWrap', 'w:overflowPunct',
+            'w:topLinePunct', 'w:autoSpaceDE', 'w:autoSpaceDN', 'w:bidi', 'w:adjustRightInd',
+            'w:snapToGrid', 'w:spacing', 'w:ind', 'w:contextualSpacing', 'w:mirrorIndents',
+            'w:suppressOverlap', 'w:jc', 'w:textDirection', 'w:textAlignment', 'w:textboxTightWrap',
+            'w:outlineLvl', 'w:divId', 'w:cnfStyle', 'w:rPr', 'w:sectPr', 'w:pPrChange'];
+
+        // 단락의 w:pPr 반환 (없으면 생성)
+        function getOrCreatePPr(p) {
+            for (const c of p.childNodes) if (c.nodeName === 'w:pPr') return c;
+            const pPr = p.ownerDocument.createElementNS(DOCX_W_NS, 'w:pPr');
+            p.insertBefore(pPr, p.firstChild);
+            return pPr;
+        }
+
+        // pPr에서 특정 자식 제거 (제거된 개수 반환)
+        function removePPrChild(pPr, name) {
+            let n = 0;
+            for (const c of Array.from(pPr.childNodes)) {
+                if (c.nodeName === name) { pPr.removeChild(c); n++; }
+            }
+            return n;
+        }
+
+        // pPr에 자식을 스키마 순서에 맞는 자리에 삽입 (기존 동명 요소는 교체)
+        // 이미 같은 내용이면 false를 반환해 멱등성을 지킨다
+        function setPPrChild(pPr, name, buildFn) {
+            const el = buildFn(pPr.ownerDocument);
+            const existing = [];
+            for (const c of pPr.childNodes) if (c.nodeName === name) existing.push(c);
+            if (existing.length === 1 && serializeXmlNode(existing[0]) === serializeXmlNode(el)) return false;
+            for (const c of existing) pPr.removeChild(c);
+            const rank = PPR_CHILD_ORDER.indexOf(name);
+            let ref = null;
+            for (const c of pPr.childNodes) {
+                const r = PPR_CHILD_ORDER.indexOf(c.nodeName);
+                if (r < 0 || r > rank) { ref = c; break; }
+            }
+            pPr.insertBefore(el, ref);
+            return true;
+        }
+
+        // 청구항 머리 단락: 명시적 탭 정지점만 두고 들여쓰기는 두지 않는다
+        // (번호는 왼쪽 여백, 탭이 US_CLAIM_TAB에 착지 — utils.js와 동일 규격)
+        function setClaimHeadIndent(p) {
+            const pPr = getOrCreatePPr(p);
+            let changed = setPPrChild(pPr, 'w:tabs', (doc) => {
+                const tabs = doc.createElementNS(DOCX_W_NS, 'w:tabs');
+                const tab = doc.createElementNS(DOCX_W_NS, 'w:tab');
+                tab.setAttributeNS(DOCX_W_NS, 'w:val', 'left');
+                tab.setAttributeNS(DOCX_W_NS, 'w:pos', String(US_CLAIM_TAB));
+                tabs.appendChild(tab);
+                return tabs;
+            });
+            if (removePPrChild(pPr, 'w:ind')) changed = true;
+            return changed;
+        }
+
+        // 청구항 후속 단락: 첫 줄만 본문 시작 위치로 들여쓴다 (접힌 줄은 왼쪽 여백)
+        function setClaimBodyIndent(p) {
+            const pPr = getOrCreatePPr(p);
+            return setPPrChild(pPr, 'w:ind', (doc) => {
+                const ind = doc.createElementNS(DOCX_W_NS, 'w:ind');
+                ind.setAttributeNS(DOCX_W_NS, 'w:firstLine', String(US_CLAIM_TAB));
+                return ind;
+            });
+        }
+
+        // 제거해도 안전한 빈 단락인지 (개정 표시가 붙은 단락은 보존)
+        function isRemovableEmptyParagraph(node) {
+            if (!node || node.nodeName !== 'w:p') return false;
+            if (getBlockText(node).trim() !== '') return false;
+            if (isPageBreakParagraph(node)) return false;
+            if (node.getElementsByTagName('w:ins').length) return false;
+            if (node.getElementsByTagName('w:del').length) return false;
+            return true;
+        }
+
+        // 청구항 구간 레이아웃 (텍스트 양식표준화와 동일 규칙)
+        // - 빈 줄은 청구항과 청구항 사이에만 한 줄, 동일 청구항 내부에는 두지 않는다
+        // - 머리 단락은 탭 정지점만, 후속 단락은 첫 줄 들여쓰기
+        // - 국문(한글 포함) 라인은 대상에서 제외 (한영혼합본의 라인 짝 구조 보존)
+        // 멱등: 이미 정리된 문서에는 변경 0건
+        function applyClaimLayoutToDoc(doc) {
+            const body = doc.getElementsByTagName('w:body')[0];
+            if (!body) return 0;
+            const blocks = [];
+            for (const c of body.childNodes) {
+                if (c.nodeName === 'w:p' || c.nodeName === 'w:tbl') blocks.push(c);
+            }
+
+            let start = -1, end = blocks.length;
+            for (let i = 0; i < blocks.length; i++) {
+                const upper = getBlockText(blocks[i]).trim().toUpperCase();
+                if (start < 0) {
+                    if (upper === 'WHAT IS CLAIMED IS:' || upper === 'WHAT IS CLAIMED IS') start = i + 1;
+                } else if (upper === 'ABSTRACT' || upper === 'ABSTRACT OF DISCLOSURE') {
+                    end = i;
+                    break;
+                }
+            }
+            if (start < 0) return 0;
+
+            let changeCount = 0;
+            let pendingBlanks = [];
+            let prevIsKorean = false;
+            let sawParagraph = false;
+
+            for (let i = start; i < end; i++) {
+                const node = blocks[i];
+                if (node.nodeName !== 'w:p') { pendingBlanks = []; prevIsKorean = false; sawParagraph = true; continue; }
+                const trimmed = getBlockText(node).trim();
+
+                if (!trimmed) {
+                    if (isRemovableEmptyParagraph(node)) pendingBlanks.push(node);
+                    continue;
+                }
+
+                const isKorean = /[가-힣]/.test(trimmed);
+
+                if (isClaimHeadLine(trimmed)) {
+                    // 청구항 사이에는 빈 단락 하나만
+                    if (pendingBlanks.length === 0) {
+                        if (sawParagraph) { body.insertBefore(makeEmptyParagraph(doc), node); changeCount++; }
+                    } else {
+                        for (let k = 1; k < pendingBlanks.length; k++) {
+                            body.removeChild(pendingBlanks[k]); changeCount++;
+                        }
+                    }
+                    pendingBlanks = [];
+                    if (setClaimHeadIndent(node)) changeCount++;
+                } else {
+                    // 동일 청구항 내부의 빈 단락 제거 (영문 단락 사이에 한함)
+                    if (pendingBlanks.length) {
+                        if (!isKorean && !prevIsKorean) {
+                            for (const b of pendingBlanks) { body.removeChild(b); changeCount++; }
+                        }
+                        pendingBlanks = [];
+                    }
+                    if (!isKorean && setClaimBodyIndent(node)) changeCount++;
+                }
+                prevIsKorean = isKorean;
+                sawParagraph = true;
+            }
+            return changeCount;
+        }
+
         // DOCX 문서에 양식표준화 규칙 적용 (텍스트 양식표준화와 동일 규칙/순서)
         // 멱등: 이미 표준화된 문서(버튼 선실행 또는 표준화된 파일 업로드)에는 변경 0건 —
         // US양식 비교가 표준화를 자동 적용해도 중복 삽입되지 않는다
@@ -878,18 +1028,15 @@ ${bodyContent}
                     continue;
                 }
 
-                // 청구항 구간: 번호 뒤 탭 삽입 + 마침표로 끝나는 영문 단락 다음 빈 단락 추가
-                if (inClaims) {
-                    const isKorean = /[가-힣]/.test(trimmed);
-                    if (!isKorean && /^\d+\./.test(trimmed) && insertClaimNumberTab(node, doc)) {
-                        changeCount++;
-                    }
-                    if (!isKorean && /\.\s*$/.test(trimmed) && i + 1 < blocks.length && isNonEmpty(blocks[i + 1])) {
-                        body.insertBefore(makeEmptyParagraph(doc), node.nextSibling);
-                        changeCount++;
-                    }
+                // 청구항 구간: 번호 뒤 탭 삽입
+                // (빈 줄 배치와 들여쓰기는 아래 applyClaimLayoutToDoc에서 일괄 처리)
+                if (inClaims && isClaimHeadLine(trimmed) && insertClaimNumberTab(node, doc)) {
+                    changeCount++;
                 }
             }
+
+            // 3단계: 청구항 구간 레이아웃 (들여쓰기 + 청구항 사이 빈 줄)
+            changeCount += applyClaimLayoutToDoc(doc);
             return changeCount;
         }
 
