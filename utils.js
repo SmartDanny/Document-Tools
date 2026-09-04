@@ -1,7 +1,7 @@
 /**
  * Document Tools - utils.js
  * 공통 유틸리티 함수 모음
- * Version: 1.6.0
+ * Version: 1.7.0
  * Last Updated: 2026-09-04
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
@@ -1952,6 +1952,53 @@ function makeUSDocxFooterFirstXml() {
 <w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
 <w:p><w:pPr><w:pStyle w:val="a4"/></w:pPr></w:p>
 </w:ftr>`;
+}
+
+// ============================================
+// 청구항 들여쓰기 (양식표준화 · US양식 공통)
+// 청구항 머리 단락(영문 "1." 로 시작)은 번호를 왼쪽 여백에 두고 탭으로 본문 시작 위치까지 이동하며,
+// 같은 청구항의 후속 단락은 첫 줄만 그 위치로 들여써 문장 시작을 맞춘다.
+// 접힌 줄은 양쪽 모두 왼쪽 여백으로 돌아간다(내어쓰기가 아니라 첫 줄 들여쓰기).
+// 국문(한글 포함) 라인은 번호 뒤 탭을 넣지 않으므로 대상에서 제외한다.
+//
+// 주의: w:pPr의 자식 요소는 스키마 순서(tabs → spacing → ind)를 지켜야 한다.
+//       순서가 어긋나면 Word가 문서를 열지 못하고 빈 문서로 표시된다.
+// ============================================
+
+/** 청구항 본문 시작 위치 (twips) — 번호 뒤 탭이 착지하는 지점이자 후속 단락의 첫 줄 들여쓰기 */
+const US_CLAIM_TAB = 800;
+
+/**
+ * 청구항 머리 단락(번호로 시작하는 영문 단락) 여부
+ * 국문 라인은 제외 — 양식표준화의 번호 뒤 탭 삽입 규칙과 대상이 같다.
+ * @param {string} line
+ * @returns {boolean}
+ */
+function isClaimHeadLine(line) {
+    const t = String(line == null ? '' : line).trim();
+    if (!t) return false;
+    if (/[가-힣]/.test(t)) return false;
+    return /^\d+\./.test(t);
+}
+
+/**
+ * 청구항 머리 단락 pPr 내용 (명시적 탭 정지점 + 들여쓰기 없음)
+ * 탭 정지점을 명시해 defaultTabStop 설정이나 번호 자릿수(1. / 10. / 100.)와 무관하게
+ * 항상 같은 위치에 본문이 시작된다.
+ * @param {string} [spacingXml] - 뒤에 이어붙일 w:spacing 조각 (스키마 순서상 tabs 다음)
+ * @returns {string}
+ */
+function makeUSClaimHeadPPrXml(spacingXml) {
+    return `<w:tabs><w:tab w:val="left" w:pos="${US_CLAIM_TAB}"/></w:tabs>${spacingXml || ''}`;
+}
+
+/**
+ * 청구항 후속 단락 pPr 내용 (첫 줄만 본문 시작 위치로 들여쓰기)
+ * @param {string} [spacingXml] - 앞에 놓일 w:spacing 조각 (스키마 순서상 ind 앞)
+ * @returns {string}
+ */
+function makeUSClaimBodyPPrXml(spacingXml) {
+    return `${spacingXml || ''}<w:ind w:firstLine="${US_CLAIM_TAB}"/>`;
 }
 
 // ============================================

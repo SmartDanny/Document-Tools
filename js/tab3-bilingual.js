@@ -1553,8 +1553,18 @@
                         bodyContent += `<w:p><w:pPr>${pPrSpacing}</w:pPr><w:r>${rPrBody}${convertRunToDocxArial(trimmed)}</w:r></w:p>`;
                     } else {
                         const claimText = stripTextParagraphNumber(trimmed);
-                        const cleanText = claimText.replace(/^\d+\.\t/, (m) => m);
-                        bodyContent += `<w:p><w:pPr>${pPrSpacing}<w:ind w:firstLine="799"/></w:pPr><w:r>${rPrBody}${convertRunToDocxArial(cleanText)}</w:r></w:p>`;
+                        // 청구항 들여쓰기 (utils.js) — 머리 단락은 번호를 여백에 두고 탭으로 본문 시작 위치까지,
+                        // 후속 단락은 첫 줄만 같은 위치로 들여써 문장 시작을 맞춘다.
+                        // 국문 라인은 번호 뒤 탭이 없어 대상에서 제외하고 기존 들여쓰기를 유지한다.
+                        let claimPPr;
+                        if (/[가-힣]/.test(trimmed)) {
+                            claimPPr = `${pPrSpacing}<w:ind w:firstLine="799"/>`;
+                        } else if (isClaimHeadLine(trimmed)) {
+                            claimPPr = makeUSClaimHeadPPrXml(pPrSpacing);
+                        } else {
+                            claimPPr = makeUSClaimBodyPPrXml(pPrSpacing);
+                        }
+                        bodyContent += `<w:p><w:pPr>${claimPPr}</w:pPr><w:r>${rPrBody}${convertRunToDocxArial(claimText)}</w:r></w:p>`;
                     }
                     continue;
                 }

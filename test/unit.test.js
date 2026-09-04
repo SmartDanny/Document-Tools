@@ -875,3 +875,38 @@ describe('applyConfidentialHeaderToDocxZip', () => {
         assert.equal((zip.store['[Content_Types].xml'].match(/headerConf\.xml/g) || []).length, 1);
     });
 });
+
+describe('청구항 들여쓰기 (US_CLAIM_TAB)', () => {
+    test('isClaimHeadLine: 영문 번호 단락만 머리로 판정 (국문 제외)', () => {
+        for (const s of ['1. A device comprising:', '10.\tThe device of claim 1', ' 2. Another']) {
+            assert.ok(u.isClaimHeadLine(s), s);
+        }
+        for (const s of ['a substrate;', '1. 표시장치를 포함하는', '【청구항 1】', '', null, 'WHAT IS CLAIMED IS:']) {
+            assert.ok(!u.isClaimHeadLine(s), String(s));
+        }
+    });
+
+    test('머리 단락: 명시적 탭 정지점만, 들여쓰기 없음', () => {
+        const x = u.makeUSClaimHeadPPrXml('<w:spacing w:after="0"/>');
+        assert.ok(x.includes('<w:tab w:val="left" w:pos="800"/>'));
+        assert.ok(!x.includes('<w:ind'));           // 번호는 왼쪽 여백에서 시작
+    });
+
+    test('후속 단락: 첫 줄만 들여쓰기 (내어쓰기 아님 — 접힌 줄은 여백)', () => {
+        const x = u.makeUSClaimBodyPPrXml('<w:spacing w:after="0"/>');
+        assert.ok(x.includes('<w:ind w:firstLine="800"/>'));
+        assert.ok(!x.includes('w:hanging'));
+        assert.ok(!x.includes('w:left='));
+    });
+
+    test('pPr 자식 요소가 스키마 순서(tabs → spacing → ind)를 지킴', () => {
+        // 순서를 어기면 Word가 문서를 열지 못하고 빈 문서로 표시된다
+        const spacing = u.makeUSDocxSpacingXml();
+        const order = (xml) => ['<w:tabs', '<w:spacing', '<w:ind']
+            .map(t => xml.indexOf(t)).filter(i => i >= 0);
+        for (const xml of [u.makeUSClaimHeadPPrXml(spacing), u.makeUSClaimBodyPPrXml(spacing)]) {
+            const idx = order(xml);
+            assert.deepEqual(idx, [...idx].sort((a, b) => a - b), xml);
+        }
+    });
+});
