@@ -1458,7 +1458,7 @@ ${bodyContent}
             return null;
         }
 
-        // 표 내부 단락 여부 (US양식 고정 행 높이는 표 밖 단락에만 적용)
+        // 표 내부 단락 여부 (US양식 줄간격은 표 밖 단락에만 적용)
         function usIsInsideTable(node) {
             for (let a = node.parentNode; a; a = a.parentNode) {
                 if (a.nodeName === 'w:tbl') return true;
@@ -1481,7 +1481,7 @@ ${bodyContent}
             }
         }
 
-        // 단락 pPr에 US양식 고정 행 높이(US_DOCX_LINE exact) 적용 (기존 spacing 교체)
+        // 단락 pPr에 US양식 줄간격 2줄(US_DOCX_LINE 배수) 적용 (기존 spacing 교체)
         function usSetParagraphSpacing(p) {
             const doc = p.ownerDocument;
             let pPr = null;
@@ -1496,7 +1496,7 @@ ${bodyContent}
             const spacing = doc.createElementNS(DOCX_W_NS, 'w:spacing');
             spacing.setAttributeNS(DOCX_W_NS, 'w:after', '0');
             spacing.setAttributeNS(DOCX_W_NS, 'w:line', String(US_DOCX_LINE));
-            spacing.setAttributeNS(DOCX_W_NS, 'w:lineRule', 'exact');
+            spacing.setAttributeNS(DOCX_W_NS, 'w:lineRule', US_DOCX_LINE_RULE);
             // 스키마 순서 근사: ind/jc/rPr/sectPr 앞에 삽입
             let ref = null;
             for (const c of pPr.childNodes) {
@@ -1583,7 +1583,7 @@ ${bodyContent}
             });
         }
 
-        // 변경추적 body XML에 US양식(고정 행 높이·Arial·SEQ 단락번호) 덧입히기
+        // 변경추적 body XML에 US양식(줄간격 2줄, Arial 및 SEQ 단락번호) 덧입히기
         function applyUSFormatToTrackedBodyXml(bodyXml, ctx) {
             const dom = new DOMParser().parseFromString(
                 `<w:body xmlns:w="${DOCX_W_NS}">${bodyXml}</w:body>`, 'application/xml');

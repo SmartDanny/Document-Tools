@@ -1656,22 +1656,25 @@ function setupDropZone(el, onFile, options = {}) {
 // ============================================
 // US 특허출원 양식 DOCX 공통 부품
 // (탭2·탭3 'US양식 다운로드'와 탭4 '비교 및 US양식 다운로드'가 공유)
-// - A4, 여백(top=1440, bottom/left/right=1701), 고정 행 높이 547(25행/페이지)
+// - A4, 여백(top=1440, bottom/left/right=1701), 줄간격 2줄(배수 2.0)
 // - Arial 12pt, SEQ 필드 단락번호, 5행마다 줄번호, 페이지번호 푸터, docGrid
 // ============================================
 
-// 본문영역 = 16838 - top 1440 - bottom 1701 = 13697 DXA
-// 25행이 들어가려면 행 높이 <= 13697/25 = 547.88 이므로 올림이 아니라 내림해야 한다.
-// 종전 548은 25행 합계가 13700으로 본문영역(13697)을 3 DXA 넘겨 24행만 표시됐다.
-// 547이면 25행 합계 13675로 22 DXA 여유가 남아 줄번호가 25까지 현출된다.
-const US_DOCX_LINE = 547;
+// 줄간격은 Word 단락 대화상자에 '2줄'로 표시되어야 한다(37 CFR 1.52(b)(2)(ii) 배행 요건).
+// Word에서 '2줄'은 배수 2.0이므로 w:line=480(=240*2) + w:lineRule="auto" 로 표기한다.
+// 종전에는 고정 행 높이 547 DXA(= 고정 27.35pt)를 써서 25행/페이지를 맞췄으나,
+// 대화상자에 '고정 27.35pt'로 표시되어 규정된 배행 표기와 어긋났다.
+// 배수 2.0이면 Arial 12pt 기준 한 행이 약 552 DXA(27.6pt)여서
+// 본문영역 13697 DXA(= 16838 - top 1440 - bottom 1701)에는 24행이 들어간다.
+const US_DOCX_LINE = 480;
+const US_DOCX_LINE_RULE = 'auto';
 
 /**
- * US양식 단락 공통 spacing (고정 행 높이, 단락 뒤 0pt)
+ * US양식 단락 공통 spacing (줄간격 2줄 = 배수 2.0, 단락 뒤 0pt)
  * @returns {string}
  */
 function makeUSDocxSpacingXml() {
-    return `<w:spacing w:after="0" w:line="${US_DOCX_LINE}" w:lineRule="exact"/>`;
+    return `<w:spacing w:after="0" w:line="${US_DOCX_LINE}" w:lineRule="${US_DOCX_LINE_RULE}"/>`;
 }
 
 /**
@@ -1680,7 +1683,11 @@ function makeUSDocxSpacingXml() {
  * 머리글 여백(w:header)이 1000인 이유: Word는 본문 시작 위치를
  * max(위 여백, 머리글 여백 + 머리글 높이)로 잡는다. 기밀 머리글은 단락 뒤 공백까지
  * 포함해 높이가 360 DXA(행 200 + 뒤 공백 160)이므로 1000 + 360 = 1360 <= 위 여백 1440.
- * 즉 머리글을 켜도 본문이 아래로 밀리지 않아 25행/페이지가 그대로 유지된다.
+ * 즉 머리글을 켜도 본문이 아래로 밀리지 않아 페이지당 행수가 그대로 유지된다.
+ *
+ * docGrid가 Word 기본값(type 생략 = "default", linePitch 360)인 이유: 줄 눈금
+ * (w:type="lines")을 쓰면 배수 줄간격 한 행이 눈금 두 칸을 차지해 행 간격이 두 배로
+ * 벌어진다. 줄간격은 단락 서식(배수 2.0)만으로 제어하고 눈금은 걸지 않는다.
  * (탭3 신규 패키지: rId10~15, 탭4 비교 결과: 기존 관계와 충돌하지 않는 전용 ID)
  * @param {Object} ids - {headerEven, headerDefault, headerFirst, footerEven, footerDefault, footerFirst}
  * @returns {string}
@@ -1697,7 +1704,7 @@ function makeUSDocxSectPrXml(ids) {
 <w:pgMar w:top="1440" w:right="1701" w:bottom="1701" w:left="1701" w:header="1000" w:footer="1134" w:gutter="0"/>
 <w:lnNumType w:countBy="5"/>
 <w:cols w:space="720"/>
-<w:docGrid w:type="lines" w:linePitch="${US_DOCX_LINE}"/>
+<w:docGrid w:linePitch="360"/>
 </w:sectPr>`;
 }
 
@@ -2026,7 +2033,7 @@ const CONFIDENTIAL_HEADER_TEXT = 'Confidential and Privileged/ Attorney-Client W
 // Word '홈 > 선 및 단락 간격 > 단락 뒤에 공백 추가'와 같은 값 (8pt)
 const CONFIDENTIAL_HEADER_AFTER = 160;
 // 행 높이를 exact로 고정해 머리글 높이를 (행 200 + 뒤 공백 160) = 360 DXA로 확정한다.
-// 글꼴 렌더링에 따라 높이가 달라지면 US양식의 본문 시작 위치(=25행/페이지)가 흔들린다.
+// 글꼴 렌더링에 따라 높이가 달라지면 US양식의 본문 시작 위치(=페이지당 행수)가 흔들린다.
 const CONFIDENTIAL_HEADER_LINE = 200;
 const CONFIDENTIAL_HEADER_RID = 'rIdConfHdr';
 const CONFIDENTIAL_HEADER_PART = 'headerConf.xml';
@@ -2064,7 +2071,7 @@ ${makeConfidentialHeaderParagraphXml()}
 /**
  * 기존 머리글 part(<w:hdr>) 문자열에 기밀 머리글 단락을 삽입 (멱등)
  * - 내용이 없는 머리글(텍스트/필드/이미지 없음)은 통째로 대체 — 빈 단락이 남아 머리글 높이가
- *   두 줄이 되면 US양식의 25행/페이지가 무너지므로 대체가 필요하다.
+ *   두 줄이 되면 US양식의 페이지당 행수가 무너지므로 대체가 필요하다.
  * - 내용이 있는 머리글은 맨 앞에 덧붙여 기존 내용(페이지번호 등)을 보존한다.
  * @param {string} hdrXml - 기존 header part XML
  * @returns {string}
