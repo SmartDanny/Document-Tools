@@ -198,11 +198,13 @@ function finStylesXml(format) {
 }
 
 // 페이지 하단 가운데 페이지 번호 footer (PAGE 필드, 아라비아 숫자)
-// 줄번호가 footer 영역까지 매겨지지 않도록 suppressLineNumbers 적용
+// 줄번호(lnNumType)는 본문 스토리에만 매겨지고 바닥글은 애초에 대상이 아니므로
+// suppressLineNumbers를 쓰지 않는다. 이 속성을 넣으면 Word가 페이지 번호 왼쪽 여백에
+// 단락 서식 표시자(검은 사각형)를 찍는다.
 const FIN_FOOTER_RID = 'rIdFooter1';
 function finFooterXml() {
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:p><w:pPr><w:suppressLineNumbers/><w:jc w:val="center"/></w:pPr><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>`;
+<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>1</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:ftr>`;
 }
 
 /**
