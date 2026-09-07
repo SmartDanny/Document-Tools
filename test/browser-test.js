@@ -663,6 +663,9 @@ const server = http.createServer((req, res) => {
         const ftrR = zr.file('word/footer1.xml') ? await zr.file('word/footer1.xml').async('string') : '';
         r.ropksFooter = !!zr.file('word/footer1.xml') && docR.includes('footerReference') &&
             ftrR.includes(' PAGE ') && ftrR.includes('fldChar') && ftrR.includes('w:jc w:val="center"');
+        // 바닥글에는 suppressLineNumbers를 쓰지 않는다(Word 단락 서식 표시자 = 검은 사각형 방지).
+        // 줄번호는 본문 스토리에만 매겨지므로 바닥글에는 불필요하다.
+        r.ropksFooterNoMark = !ftrR.includes('<w:suppressLineNumbers/>');
         // 20행/페이지: 본문 단락 고정 행높이(exact) + docGrid type=lines 미사용
         r.ropksLineGrid = /w:line="\d+" w:lineRule="exact"/.test(docR) && !/w:type="lines"/.test(docR);
         // 도면 섹션 줄번호 생략(suppressLineNumbers)
@@ -707,7 +710,7 @@ const server = http.createServer((req, res) => {
         finRes.ropksBatang && finRes.ropksLine && finRes.ropksUnderline &&
         finRes.ropksLineNo && finRes.ropksJustify && finRes.ropksPageBreak &&
         finRes.ropksNoUnicodeScript && finRes.ropksFooter &&
-        finRes.ropksLineGrid && finRes.ropksSuppressDrawing) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
+        finRes.ropksLineGrid && finRes.ropksSuppressDrawing && finRes.ropksFooterNoMark) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 ROPKS 파일명 규칙'] = (finRes.fnameEmpty === 'ROPKS_260709' &&
         finRes.fnameMgmt === 'OPP20123456ROPKS_260709' && finRes.mgmtField) ? 'PASS' : 'FAIL ' + JSON.stringify(finRes);
     results['탭1 .fin→KIPO 출원서식 DOCX'] = (finRes.kipoSize > 0 && finRes.kipoParts &&
