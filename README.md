@@ -1,6 +1,6 @@
 # Document Tools (문서 도구 모음)
 
-[![Version](https://img.shields.io/badge/version-1.7.2-blue.svg)](https://github.com/)
+[![Version](https://img.shields.io/badge/version-1.8.0-blue.svg)](https://github.com/)
 [![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-red.svg)](https://github.com/)
 
 특허 명세서 작성 및 편집을 위한 웹 기반 문서 처리 도구 모음입니다.
@@ -24,6 +24,20 @@
 - **`.fin`(KIPO 전자출원 파일) 지원**: `.fin`(zip → `.hlz` → KIPO KEAPS XML + 도면)을 분석해
   - **KIPO 출원서식 DOCX**로 변환 — 실제 KIPO 서식 역설계 반영: 명세서/청구범위/요약서/도면 4부(部) 구조(부 사이 페이지 나누기), 중앙 볼드 부 헤더, 국문 【】 부제, 제목 국문/영문 분리, `[NNNN]` 단락번호, **단락 양쪽맞춤**, **청구항 행마다 들여쓰기**, **페이지 하단 페이지 번호**, 도면 이미지 임베드 후 `[도 N]` 캡션, Malgun Gothic 10pt. 파일명: `<원본파일명>_출원명세서.docx`
   - **해외출원용 국문(ROPKS) DOCX**로 변환 — ROPKS 샘플 역설계 반영: 사무소표준US 부제(볼드+밑줄), 바탕체 12pt, 본문 첫줄 들여쓰기·**양쪽맞춤**, **줄번호(페이지마다 1부터, 도면 섹션 제외)**, **페이지당 20행(고정 행 높이)**, **페이지 하단 가운데 페이지 번호**(바닥글 단락에는 `suppressLineNumbers`를 쓰지 않아 Word가 페이지 번호 왼쪽 여백에 찍는 단락 서식 표시자(검은 사각형)가 생기지 않음 — 줄번호는 본문에만 매겨지므로 불필요), 지정 여백, 청구범위·요약서·도면(및 각 도면)의 **페이지 나누기**, 유니코드 첨자 자동 정규화. 파일명은 **해외관리번호** 입력에 따라 자동 지정 — `OPP20******US` 입력 시 국가코드 US를 떼고 `OPP20******ROPKS_(오늘6자리)`, 미입력 시 `ROPKS_(오늘6자리)`.docx. **KIPO 출원서식 DOCX와 ROPKS DOCX 생성 버튼은 1단계(업로드 단계)에 인접 배치**되어 업로드 직후 필요한 산출물을 곧바로 선택할 수 있다. Cross-reference는 번역용 국문 변환에 사용되는 것으로 ROPKS 생성의 전제 조건이 아니며, 2단계에서 삽입한 경우에 한해 1단계의 **[ROPKS DOCX에 Cross-reference 포함]** 체크박스로 포함 여부를 선택한다(삽입 직후 기본 포함)
+  - **보정명세서 지원**: `.fin`은 `xresult.inf`(매니페스트, EUC-KR) + 원출원 `.hlz` + 보정 `.dta`로 구성된다.
+    보정 `.dta`는 명세서 전문이 아니라 `<AmendBody elementName status attributeName attributeValue>` 단위의
+    **변경분(패치)**이며(`status="A"` 요소 전체 교체, `"D"` 삭제), 각 보정은 **직전 상태를 기준으로 누적**된다.
+    따라서 제N차 보정명세서는 원본에 1차부터 N차까지 순서대로 적용한 결과다. 보정 파일은 파일명으로 식별할 수 없어
+    (접두어 `(보정N)`이 없거나 원출원 `.hlz`와 확장자만 다른 같은 이름을 쓰기도 한다) **매니페스트의 파일명과 등재 순서**만 근거로 삼는다.
+    보정이 확인되면 업로드 직후 **변환할 명세서 선택** 모달이 뜨고(**기본 선택은 최신 보정**), 보정이 여러 번이면
+    몇 번째 보정명세서를 변환할지 고를 수 있다. 선택한 문서가 1단계 창, 변환 결과, 특수문자 검사 및 DOCX 생성 전체의 기준이 되며,
+    1단계의 **변환 대상** 표시줄에서 언제든 다시 고를 수 있다(이미 삽입한 Cross-reference는 대상을 바꿔도 유지).
+    삭제 보정된 청구항은 KIPO 관행대로 **번호를 유지한 채 본문만 `삭제`**로 표기하고 뒤 청구항을 재번호하지 않는다.
+    KIPO 출원서식 DOCX 파일명은 `<원본파일명>_출원명세서.docx` 또는 `<원본파일명>_제N차보정명세서.docx`로 갈린다.
+    ROPKS는 통상 출원명세서를 기준으로 하므로 파일명 규칙은 그대로이며, 보정명세서가 선택된 상태에서 ROPKS 생성을 누르면
+    출원명세서로 생성할지 선택한 보정명세서로 생성할지 한 번 확인한다
+  - **출원일 자동 입력**: 매니페스트에서 읽은 출원일이 2단계 **우선권출원 정보**의 출원연월일에 미리 입력된다(수정 가능).
+    출원번호는 `.fin`에 없으므로 직접 입력한다. 보정명세서를 선택해도 출원일은 **원출원일**이며 보정 일자와 섞지 않는다
   - 명세서 본문은 기존 HTML 변환 텍스트로도 함께 표시되어 부제표준화·단락번호 도구를 그대로 사용 가능
 
 ### 2. 후처리 단계 (HTML → DOCX)
@@ -126,7 +140,7 @@ document-tools/
 ├── js/
 │   ├── app-core.js          # 공통 UI (탭 전환, 플로팅 탭 바, 우선권 모달, 기밀 머리글 옵션)
 │   ├── tab1-preprocess.js   # 탭1: 전처리 (DOCX/FIN → HTML·DOCX)
-│   ├── fin-parser.js        # .fin(KIPO 전자출원) 파싱 → IR(중간모델)
+│   ├── fin-parser.js        # .fin(KIPO 전자출원) 파싱 → IR(중간모델), 보정(.dta) 누적 적용
 │   ├── fin-docx.js          # IR → KIPO 출원서식 / 해외출원용 국문(ROPKS) DOCX
 │   ├── tab2-postprocess.js  # 탭2: 후처리 (HTML → DOCX)
 │   ├── tab3-bilingual.js    # 탭3: 한영혼합본 추출/색변환/DOCX 생성
@@ -213,5 +227,5 @@ Copyright (c) 2026 Smart Danny. All rights reserved.
 ## 📞 문의
 
 - **Author**: Smart Danny
-- **Version**: 1.7.2
-- **Last Updated**: 2026-09-04
+- **Version**: 1.8.0
+- **Last Updated**: 2026-09-10

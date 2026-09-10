@@ -17,12 +17,24 @@
         let priorityList2 = [];
 
         function openPriorityModal1() {
-            document.getElementById('modalYear1').value = '';
-            document.getElementById('modalMonth1').value = '';
-            document.getElementById('modalDay1').value = '';
+            // .fin에서 확인된 출원일이 있으면 출원연월일을 미리 채운다 (사용자가 수정 가능).
+            // 보정명세서를 선택했더라도 출원일은 원출원일이며, 보정 일자와 섞지 않는다.
+            const filed = (typeof finFilingDate1 !== 'undefined' && finFilingDate1) ? finFilingDate1 : null;
+            document.getElementById('modalYear1').value = filed ? filed.year : '';
+            document.getElementById('modalMonth1').value = filed ? filed.month : '';
+            document.getElementById('modalDay1').value = filed ? filed.day : '';
             document.getElementById('modalNumber1').value = '';
+            const hint = document.getElementById('finFilingDateHint1');
+            if (hint) {
+                hint.textContent = filed
+                    ? `📄 .fin에서 확인된 출원일 ${filed.year}년 ${filed.month}월 ${filed.day}일을 입력했습니다. 출원번호를 입력해주세요.`
+                    : '';
+                hint.classList.toggle('hidden', !filed);
+            }
             document.getElementById('priorityModal1').classList.add('active');
-            setTimeout(() => document.getElementById('modalYear1').focus(), 100);
+            // 날짜가 채워진 경우에는 남은 입력란(출원번호)으로 바로 이동
+            const focusId = filed ? 'modalNumber1' : 'modalYear1';
+            setTimeout(() => document.getElementById(focusId).focus(), 100);
         }
         function closePriorityModal1() {
             document.getElementById('priorityModal1').classList.remove('active');
@@ -52,7 +64,7 @@
             }
             container.innerHTML = priorityList1.map((p, i) => `
                 <div class="priority-entry">
-                    <span class="priority-entry-info">${p.year}년 ${p.month}월 ${p.day}일 · ${p.appNum}</span>
+                    <span class="priority-entry-info">${p.year}년 ${p.month}월 ${p.day}일, ${p.appNum}</span>
                     <button class="priority-entry-delete" onclick="removePriority1(${i})" title="삭제">✕</button>
                 </div>
             `).join('');
@@ -94,7 +106,7 @@
             }
             container.innerHTML = priorityList2.map((p, i) => `
                 <div class="priority-entry">
-                    <span class="priority-entry-info">${p.year}년 ${p.month}월 ${p.day}일 · ${p.appNum}</span>
+                    <span class="priority-entry-info">${p.year}년 ${p.month}월 ${p.day}일, ${p.appNum}</span>
                     <button class="priority-entry-delete" onclick="removePriority2(${i})" title="삭제">✕</button>
                 </div>
             `).join('');

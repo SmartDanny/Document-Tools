@@ -35,6 +35,112 @@ async function buildSampleFin() {
     return fin.generateAsync({ type: 'nodebuffer' });
 }
 
+// ── 보정 포함 .fin 픽스처 ────────────────────────────────────────────────
+// 실제 KEAPS .fin은 파일명을 EUC-KR로 저장하고 UTF-8 플래그를 세우지 않으며
+// 유니코드 경로 extra field도 넣지 않는다. JSZip으로 만들면 이 조건을 재현할 수 없어
+// (압축 없이) 최소 zip을 직접 만들어 파일명 디코딩 경로까지 검증한다.
+const CRC_TABLE = (() => {
+    const t = new Int32Array(256);
+    for (let n = 0; n < 256; n++) {
+        let c = n;
+        for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+        t[n] = c;
+    }
+    return t;
+})();
+function crc32(buf) {
+    let c = -1;
+    for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ -1) >>> 0;
+}
+
+// entries: [{ nameBytes: Buffer, data: Buffer }] — 무압축(store) 저장
+function buildRawZip(entries) {
+    const local = [];
+    const central = [];
+    let offset = 0;
+    for (const e of entries) {
+        const crc = crc32(e.data);
+        const lfh = Buffer.alloc(30);
+        lfh.writeUInt32LE(0x04034b50, 0);
+        lfh.writeUInt16LE(20, 4);
+        lfh.writeUInt16LE(0, 6);  // 플래그: UTF-8 비트 없음
+        lfh.writeUInt16LE(0, 8);  // store
+        lfh.writeUInt32LE(crc, 14);
+        lfh.writeUInt32LE(e.data.length, 18);
+        lfh.writeUInt32LE(e.data.length, 22);
+        lfh.writeUInt16LE(e.nameBytes.length, 26);
+        local.push(lfh, e.nameBytes, e.data);
+
+        const cdh = Buffer.alloc(46);
+        cdh.writeUInt32LE(0x02014b50, 0);
+        cdh.writeUInt16LE(20, 4);
+        cdh.writeUInt16LE(20, 6);
+        cdh.writeUInt32LE(crc, 16);
+        cdh.writeUInt32LE(e.data.length, 20);
+        cdh.writeUInt32LE(e.data.length, 24);
+        cdh.writeUInt16LE(e.nameBytes.length, 28);
+        cdh.writeUInt32LE(offset, 42);
+        central.push(cdh, e.nameBytes);
+
+        offset += lfh.length + e.nameBytes.length + e.data.length;
+    }
+    const cd = Buffer.concat(central);
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(entries.length, 8);
+    eocd.writeUInt16LE(entries.length, 10);
+    eocd.writeUInt32LE(cd.length, 12);
+    eocd.writeUInt32LE(offset, 16);
+    return Buffer.concat([...local, cd, eocd]);
+}
+
+// 2회 보정된 .fin 픽스처
+//   1차: 청구항 1 교체 + 청구항 2 삭제   2차: 청구항 3 교체 + 본문 단락 0002 교체
+//   2차는 청구항 1과 2를 다시 언급하지 않는다 → 누적 적용이 맞아야 1차 결과가 남는다.
+async function buildAmendedFin() {
+    const base = `<?xml version="1.0" encoding="UTF-8"?>
+<KIPO keapsVersion="5.3" editorKind="K" pageCount="5" xmlns="http://www.kipo.go.kr"><PatentCAFDOC docflag="1.0" documentID="900"><description><invention-title>보정 시험 발명{AMEND TEST}</invention-title><technical-field><p num="0001">기술분야 단락.</p></technical-field><background-art><p num="0002">원본 배경 단락.</p></background-art><summary-of-invention><tech-solution><p num="0003">해결 수단 단락.</p></tech-solution></summary-of-invention><description-of-drawings><p num="0004">도 1은 예시이다.</p></description-of-drawings><description-of-embodiments><p num="0005">실시예 단락.</p></description-of-embodiments></description><claims><claim num="1"><claim-text>원본 청구항 1.</claim-text></claim><claim num="2"><claim-text>원본 청구항 2.</claim-text></claim><claim num="3"><claim-text>원본 청구항 3.</claim-text></claim></claims><abstract><summary><p num="0001a">요약 내용.</p></summary></abstract><drawings><figure num="1"><img id="i0001" he="50" wi="50" file="pat00001.png" img-format="png"/></figure></drawings></PatentCAFDOC></KIPO>`;
+    // 보정 XML에는 기본 네임스페이스가 없다 (실제 .dta와 동일)
+    const amd1 = `<?xml version="1.0" encoding="UTF-8"?>
+<KIPO keapsVersion="5.5" dtaVersion="002" editorKind="K"><AmendDOC docType="PatentCAFDOC" documentID="900" docflag="1.0"><Amendment><AmendBody elementName="claim" status="A" attributeName="num" attributeValue="1"><claim num="1"><claim-text>1차 보정 청구항 1.</claim-text></claim></AmendBody><AmendBody elementName="claim" status="D" attributeName="num" attributeValue="2"></AmendBody></Amendment></AmendDOC></KIPO>`;
+    const amd2 = `<?xml version="1.0" encoding="UTF-8"?>
+<KIPO keapsVersion="5.6" dtaVersion="003" editorKind="K"><AmendDOC docType="PatentCAFDOC" documentID="900" docflag="1.0"><Amendment><AmendBody elementName="p" status="A" attributeName="num" attributeValue="0002"><p num="0002">2차 보정 배경 단락.</p></AmendBody><AmendBody elementName="claim" status="A" attributeName="num" attributeValue="3"><claim num="3"><claim-text>2차 보정 청구항 3.</claim-text></claim></AmendBody></Amendment></AmendDOC></KIPO>`;
+    const png1x1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC';
+
+    const hlz = new JSZipNode();
+    hlz.file('AMD_200305.xml', base);
+    hlz.file('pat00001.png', png1x1, { base64: true });
+    const hlzBuf = await hlz.generateAsync({ type: 'nodebuffer' });
+
+    const dta = async (xmlName, xml) => {
+        const z = new JSZipNode();
+        z.file(xmlName, xml);
+        return z.generateAsync({ type: 'nodebuffer' });
+    };
+    // 1차 보정 파일명은 EUC-KR "(보정1)" 접두어 — 바이트로 직접 지정
+    const amd1Name = Buffer.concat([
+        Buffer.from([0x28, 0xba, 0xb8, 0xc1, 0xa4, 0x31, 0x29]), // (보정1)
+        Buffer.from('AMD_200305.dta', 'latin1')
+    ]);
+    // 2차 보정 파일명은 접두어 없음 (실제 샘플에도 이런 경우가 있다)
+    const amd2Name = Buffer.from('AMD_200305_2.dta', 'latin1');
+    const inf = Buffer.concat([
+        Buffer.from('[APPLICATION]\r\nAPPNAME=AMD_200305.hlz,2020-03-05,1\r\nAPPTIME=1583377200\r\n[AMENDMENT]\r\nAMDCNT=2\r\nAMD001=', 'latin1'),
+        amd1Name,
+        Buffer.from(',2025-01-05,1\r\nAMD002=', 'latin1'),
+        amd2Name,
+        Buffer.from(',2025-06-20,1\r\n', 'latin1')
+    ]);
+
+    return buildRawZip([
+        { nameBytes: Buffer.from('xresult.inf', 'latin1'), data: inf },
+        { nameBytes: Buffer.from('AMD_200305.hlz', 'latin1'), data: hlzBuf },
+        { nameBytes: amd1Name, data: await dta('AMD_200305.xml', amd1) },
+        { nameBytes: amd2Name, data: await dta('AMD_200305_2.xml', amd2) }
+    ]);
+}
+
 // 간단한 정적 서버
 const server = http.createServer((req, res) => {
     const file = path.join(ROOT, req.url === '/' ? 'index.html' : decodeURIComponent(req.url.split('?')[0]));
@@ -818,6 +924,112 @@ const server = http.createServer((req, res) => {
         finXrefRes.xrefStored && finXrefRes.crEnabled && finXrefRes.crOptOut &&
         finXrefRes.docxXref && finXrefRes.docxXrefBody)
         ? 'PASS' : 'FAIL ' + JSON.stringify(finXrefRes);
+
+    // 보정 포함 .fin: 매니페스트 기반 보정 인식 + 누적 적용 + 변환 대상 선택 + 출원일 자동 입력
+    const amendedBuf = await buildAmendedFin();
+    await page.setInputFiles('#fileInput1', { name: 'AMD_200305.fin', mimeType: 'application/octet-stream', buffer: amendedBuf });
+    await page.waitForFunction(
+        () => typeof finPackage1 !== 'undefined' && finPackage1 && finPackage1.docs.length === 3,
+        { timeout: 15000 }
+    ).catch(() => {});
+    const amendRes = await page.evaluate(async () => {
+        const r = {};
+        r.docCount = finPackage1 ? finPackage1.docs.length : 0;
+        r.warnings = finPackage1 ? finPackage1.warnings : ['패키지 없음'];
+        r.labels = finPackage1 ? finPackage1.docs.map(d => d.label) : [];
+        r.dates = finPackage1 ? finPackage1.docs.map(d => d.date) : [];
+        // 기본 선택 = 최신 보정
+        r.defaultIndex = finDocIndex1;
+        // 보정이 확인되면 선택 모달이 열린다
+        r.modalOpen = document.getElementById('finDocModal1').classList.contains('active');
+        r.choiceCount = document.querySelectorAll('input[name="finDocChoice1"]').length;
+        r.checkedChoice = (document.querySelector('input[name="finDocChoice1"]:checked') || {}).value;
+        closeFinDocModal1();
+        // 변환 대상 표시줄
+        r.versionRowShown = !document.getElementById('finDocVersionRow').classList.contains('hidden');
+        r.versionName = document.getElementById('finDocVersionName').textContent;
+        r.versionSum = document.getElementById('finDocVersionSum').textContent;
+
+        const textOf = (i) => finBuildKipoLineText(finPackage1.docs[i].ir, false);
+        // 출원명세서 = 원본 그대로
+        const t0 = textOf(0);
+        r.baseOk = t0.includes('원본 청구항 1.') && t0.includes('원본 청구항 2.') &&
+            t0.includes('원본 청구항 3.') && t0.includes('원본 배경 단락.') &&
+            !t0.includes('보정 청구항') && !t0.includes('보정 배경') && !t0.includes('삭제');
+        // 제1차 = 청구항 1 교체 + 청구항 2 삭제(번호 유지)
+        const t1 = textOf(1);
+        r.amd1Ok = t1.includes('1차 보정 청구항 1.') && !t1.includes('원본 청구항 1.') &&
+            /【청구항 2】\n삭제/.test(t1) && t1.includes('원본 청구항 3.') && t1.includes('원본 배경 단락.');
+        // 제2차 = 1차 결과 위에 누적 (청구항 1과 2는 1차 상태 유지)
+        const t2 = textOf(2);
+        r.amd2Cumulative = t2.includes('1차 보정 청구항 1.') && /【청구항 2】\n삭제/.test(t2);
+        r.amd2Own = t2.includes('2차 보정 청구항 3.') && t2.includes('2차 보정 배경 단락.') &&
+            !t2.includes('원본 배경 단락.');
+        // 청구항 번호는 재부여하지 않는다
+        r.claimNums = (t2.match(/【청구항 \d+】/g) || []).join(',');
+        // 화면(1단계 창)은 기본 선택(최신 보정) 기준
+        r.screenIsLatest = document.getElementById('textInput1').value.includes('2차 보정 청구항 3.');
+
+        // 보정 요약 문구
+        r.sum1 = finAmendSummary(finPackage1.docs[1].stat);
+        r.sum2 = finAmendSummary(finPackage1.docs[2].stat);
+
+        // 출원일 자동 입력 (보정 일자가 아니라 원출원일)
+        openPriorityModal1();
+        r.filingYear = document.getElementById('modalYear1').value;
+        r.filingMonth = document.getElementById('modalMonth1').value;
+        r.filingDay = document.getElementById('modalDay1').value;
+        r.filingHint = !document.getElementById('finFilingDateHint1').classList.contains('hidden');
+        closePriorityModal1();
+
+        // KIPO DOCX 파일명: 보정 차수 반영
+        const saved = window.saveAs;
+        let name = '';
+        window.saveAs = (blob, fn) => { name = fn; };
+        await downloadFinKipoDocx();
+        r.kipoNameAmend = name;
+        // 출원명세서로 바꿔 다시 생성
+        finDocIndex1 = 0;
+        renderFinDoc1();
+        r.screenIsBase = document.getElementById('textInput1').value.includes('원본 청구항 1.') &&
+            !document.getElementById('textInput1').value.includes('2차 보정');
+        r.versionNameAfter = document.getElementById('finDocVersionName').textContent;
+        await downloadFinKipoDocx();
+        r.kipoNameBase = name;
+        // ROPKS는 보정명세서 선택 시 확인을 거쳐 출원명세서로 생성할 수 있다
+        finDocIndex1 = 2;
+        renderFinDoc1();
+        const savedConfirm = window.confirm;
+        window.confirm = () => true; // [확인] = 출원명세서로 생성
+        await downloadFinRopksDocx();
+        r.ropksMsg = document.getElementById('finRopksMessage').textContent;
+        window.confirm = savedConfirm;
+        window.saveAs = saved;
+        return r;
+    });
+    results['탭1 .fin 보정 인식(매니페스트+EUC-KR 파일명)'] = (amendRes.docCount === 3 &&
+        amendRes.warnings.length === 0 &&
+        JSON.stringify(amendRes.labels) === JSON.stringify(['출원명세서', '제1차 보정명세서', '제2차 보정명세서']) &&
+        JSON.stringify(amendRes.dates) === JSON.stringify(['2020-03-05', '2025-01-05', '2025-06-20']))
+        ? 'PASS' : 'FAIL ' + JSON.stringify(amendRes);
+    results['탭1 .fin 보정 누적 적용'] = (amendRes.baseOk && amendRes.amd1Ok &&
+        amendRes.amd2Cumulative && amendRes.amd2Own &&
+        amendRes.claimNums === '【청구항 1】,【청구항 2】,【청구항 3】' &&
+        amendRes.sum1 === '청구항 1건 수정 및 청구항 1건 삭제' &&
+        amendRes.sum2 === '청구항 1건 수정 및 본문 1건 수정')
+        ? 'PASS' : 'FAIL ' + JSON.stringify(amendRes);
+    results['탭1 .fin 변환 대상 선택(기본=최신 보정)'] = (amendRes.defaultIndex === 2 &&
+        amendRes.modalOpen && amendRes.choiceCount === 3 && amendRes.checkedChoice === '2' &&
+        amendRes.versionRowShown && amendRes.versionName === '제2차 보정명세서' &&
+        amendRes.versionSum.includes('청구항 1건 수정') && amendRes.screenIsLatest &&
+        amendRes.screenIsBase && amendRes.versionNameAfter === '출원명세서')
+        ? 'PASS' : 'FAIL ' + JSON.stringify(amendRes);
+    results['탭1 .fin 보정 DOCX 파일명과 ROPKS 기준'] = (amendRes.kipoNameAmend === 'AMD_200305_제2차보정명세서.docx' &&
+        amendRes.kipoNameBase === 'AMD_200305_출원명세서.docx' &&
+        amendRes.ropksMsg.includes('출원명세서 기준'))
+        ? 'PASS' : 'FAIL ' + JSON.stringify(amendRes);
+    results['탭1 .fin 출원일 자동 입력'] = (amendRes.filingYear === '2020' && amendRes.filingMonth === '3' &&
+        amendRes.filingDay === '5' && amendRes.filingHint) ? 'PASS' : 'FAIL ' + JSON.stringify(amendRes);
 
     // .docx 흐름(처음부터 해외출원용 ROPKS/US 서식): Cross-reference 삽입 시 5단계 분석 결과 갱신
     const docxXrefRes = await page.evaluate(() => {
