@@ -1,7 +1,7 @@
 /**
  * Document Tools - styles.css
- * Version: 1.7.2
- * Last Updated: 2026-09-04
+ * Version: 1.8.0
+ * Last Updated: 2026-09-10
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  * 이 소프트웨어는 저작권법의 보호를 받습니다.
@@ -934,6 +934,50 @@ textarea.drag-over {
     box-sizing: border-box;
 }
 .priority-modal-num-input:focus { outline: none; border-color: var(--color-primary); }
+
+/* .fin에서 확인된 출원일 자동 입력 안내 (우선권 모달) */
+.fin-filing-hint {
+    margin-top: 8px;
+    padding: 7px 10px;
+    background: #eef6ff;
+    border: 1px solid #cfe3f7;
+    border-radius: 6px;
+    font-size: 0.85em;
+    color: #2c5d8f;
+}
+
+/* .fin 변환 대상(출원명세서 / 보정명세서) 표시줄 */
+.fin-doc-version {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: #fff;
+    border: 1px solid #cfe3f7;
+    border-radius: 6px;
+    font-size: 14px;
+}
+.fin-doc-version-head { color: var(--color-text-secondary); font-size: 0.9em; }
+.fin-doc-version-sum { color: #777; font-size: 0.85em; }
+.fin-doc-version-btn {
+    margin-left: auto;
+    padding: 4px 12px;
+    border: 1px solid var(--color-primary);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--color-primary);
+    font-size: 0.85em;
+    cursor: pointer;
+}
+.fin-doc-version-btn:hover { background: #e8f0f8; }
+
+/* .fin 변환 대상 선택 모달 */
+.fin-doc-choices { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.fin-doc-choices .radio-label { align-items: flex-start; }
+.fin-doc-choice-text { display: flex; flex-direction: column; gap: 2px; }
+.fin-doc-choice-sub { font-size: 0.85em; color: #777; }
 
 /* 단락번호 옵션 */
 .paragraph-number-option {

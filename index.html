@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
  * Document Tools - 특허 명세서 전처리 도구
- * Version: 1.7.2
- * Last Updated: 2026-09-04
+ * Version: 1.8.0
+ * Last Updated: 2026-09-10
  * 
  * Copyright (c) 2026 Smart Danny. All rights reserved.
  * 이 소프트웨어는 저작권법의 보호를 받습니다.
@@ -14,7 +14,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>문서 도구 모음</title>
     <meta name="author" content="Smart Danny">
-    <meta name="version" content="1.7.2">
+    <meta name="version" content="1.8.0">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <!-- Markdown to PDF용 라이브러리 -->
@@ -71,6 +71,12 @@
                 </div>
                 <div class="section hidden" id="finOutputSection" style="margin-top:15px;padding:15px;background:#f0f7ff;border-radius:8px;">
                     <div class="section-title" style="margin-bottom:10px;">📄 .fin 변환 결과물 생성 (KIPO / ROPKS)</div>
+                    <div class="fin-doc-version hidden" id="finDocVersionRow">
+                        <span class="fin-doc-version-head">📑 변환 대상</span>
+                        <strong id="finDocVersionName"></strong>
+                        <span class="fin-doc-version-sum" id="finDocVersionSum"></span>
+                        <button class="fin-doc-version-btn" onclick="openFinDocModal1()">변경</button>
+                    </div>
                     <div class="fin-drawings-info" id="finDrawingsInfo" style="margin-bottom:12px;color:#555;font-size:14px;"></div>
                     <div class="file-select-row" style="margin-bottom:12px;align-items:center;gap:8px;">
                         <label for="finMgmtNo1" style="font-size:14px;font-weight:600;white-space:nowrap;">해외관리번호</label>
@@ -102,7 +108,7 @@
                     </div>
                     <div class="note" style="margin-top:12px;">
                         <span class="note-icon">💡</span>
-                        <span>두 산출물 모두 업로드 직후 바로 생성할 수 있습니다. 1단계 창에는 <strong>.fin 원본(국문 부제)</strong>이, 아래 6단계 <strong>변환 결과</strong>에는 <strong>해외출원용 국문(ROPKS)</strong> 변환 텍스트가 표시됩니다. 2단계에서 Cross-reference를 삽입한 경우, 위 체크박스로 ROPKS DOCX 포함 여부를 선택합니다.</span>
+                        <span>두 산출물 모두 업로드 직후 바로 생성할 수 있습니다. 1단계 창에는 <strong>.fin 원본(국문 부제)</strong>이, 아래 6단계 <strong>변환 결과</strong>에는 <strong>해외출원용 국문(ROPKS)</strong> 변환 텍스트가 표시됩니다. 2단계에서 Cross-reference를 삽입한 경우, 위 체크박스로 ROPKS DOCX 포함 여부를 선택합니다. 보정이 확인된 .fin은 <strong>변환 대상</strong>에서 출원명세서와 보정명세서를 골라 생성합니다.</span>
                     </div>
                     <div id="finOutputMessage" class="message hidden"></div>
                     <div id="finRopksMessage" class="message hidden"></div>
@@ -946,6 +952,24 @@ def fibonacci(n):
         </div>
     </div>
     
+    <!-- .fin 변환 대상 명세서 선택 모달 (탭1) -->
+    <div class="modal-overlay" id="finDocModal1">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <span class="modal-icon">📑</span>
+                <div class="modal-title">변환할 명세서 선택</div>
+            </div>
+            <div class="modal-body">
+                <p id="finDocModalDesc"></p>
+                <div id="finDocChoices1" class="fin-doc-choices"></div>
+            </div>
+            <div class="modal-buttons" style="flex-direction:row;gap:10px;">
+                <button class="modal-btn modal-btn-primary" onclick="confirmFinDocSelection1()" style="flex:1;">선택</button>
+                <button class="modal-btn modal-btn-secondary" onclick="closeFinDocModal1()" style="flex:1;">취소</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 우선권출원 추가 모달 (탭1) -->
     <div class="modal-overlay" id="priorityModal1">
         <div class="modal-dialog">
@@ -965,6 +989,7 @@ def fibonacci(n):
                         <span class="priority-date-sep">일</span>
                     </div>
                 </div>
+                <div class="fin-filing-hint hidden" id="finFilingDateHint1"></div>
                 <div class="priority-modal-field" style="margin-top:15px;">
                     <label class="priority-modal-label">출원번호</label>
                     <input type="text" class="priority-modal-num-input" id="modalNumber1" placeholder="10-2024-0012345">
@@ -1010,7 +1035,7 @@ def fibonacci(n):
 
     <!-- Footer -->
     <footer class="app-footer">
-        <span>Document Tools v1.7.2</span>
+        <span>Document Tools v1.8.0</span>
         <span class="footer-separator">|</span>
         <span>© 2026 Smart Danny. All rights reserved.</span>
     </footer>

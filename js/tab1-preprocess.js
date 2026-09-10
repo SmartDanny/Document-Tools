@@ -9,6 +9,11 @@
         let finParsedIR1 = null;
         // 탭1 - 2단계에서 삽입된 Cross-reference 보관용 (ROPKS DOCX 생성 시 포함)
         let finCrossRef1 = null;
+        // 탭1 - .fin 패키지(출원명세서 + 각 차수 보정명세서)와 변환 대상 선택 상태
+        let finPackage1 = null;
+        let finDocIndex1 = 0;
+        // 탭1 - .fin에서 확인된 출원일 {year, month, day} (2단계 우선권 모달 자동 입력)
+        let finFilingDate1 = null;
 
         // 탭1 - ROPKS DOCX의 Cross-reference 포함 옵션(1단계 체크박스) 상태 갱신
         // Cross-reference는 번역용 국문 변환에 사용되는 것이므로 ROPKS 생성의 전제 조건은 아니며,
@@ -42,6 +47,7 @@
             // 기존 .docx 경로
             finParsedIR1 = null;
             finCrossRef1 = null;
+            resetFinPackageState1();
             document.getElementById('finOutputSection').classList.add('hidden');
             updateFinRopksCrossRefOption();
             await handleDocxUpload(file, 'fileName1', async (file) => {
@@ -53,44 +59,140 @@
             });
         }
 
-        // 탭1 - .fin 파일 처리: 파싱 → KIPO 라인텍스트(HTML 변환) + 산출물 버튼 활성화
+        // 탭1 - .fin 선택 상태 초기화 (.docx 업로드/전체 지우기)
+        function resetFinPackageState1() {
+            finPackage1 = null;
+            finDocIndex1 = 0;
+            finFilingDate1 = null;
+            const row = document.getElementById('finDocVersionRow');
+            if (row) row.classList.add('hidden');
+        }
+
+        // 탭1 - 현재 선택된 문서(출원명세서 또는 제N차 보정명세서).
+        // .docx 업로드 등으로 .fin 상태가 해제되면(finParsedIR1이 다른 IR) 선택 정보도 무효로 본다.
+        function currentFinDoc1() {
+            const entry = (finPackage1 && finPackage1.docs[finDocIndex1]) || null;
+            return (entry && entry.ir === finParsedIR1) ? entry : null;
+        }
+
+        // 탭1 - .fin 파일 처리: 패키지 파싱 → 변환 대상 선택 → 라인텍스트 + 산출물 버튼 활성화
         async function handleFinFile(file) {
             document.getElementById('fileName1').textContent = file.name;
             finCrossRef1 = null;
+            resetFinPackageState1();
             const msg = document.getElementById('finOutputMessage');
             if (msg) msg.classList.add('hidden');
             const ropksMsg = document.getElementById('finRopksMessage');
             if (ropksMsg) ropksMsg.classList.add('hidden');
             try {
-                const ir = await parseFinFile(file);
-                finParsedIR1 = ir;
-
-                // 1단계 창: .fin 원본 부제(국문 【】) 그대로 표시.
-                // 단, .fin의 [NNNN] 단락번호는 기본 제거 — ROPKS 변환 산출물에는 번호가 없고,
-                // 필요 시 4단계 '단락번호 추가'로 새로 부여한다. (KIPO 출원서식 DOCX는 IR 기반이라 번호 유지)
-                const kipoText = finBuildKipoLineText(ir, false);
-                // 변환결과(6단계): 해외출원용 국문(ROPKS) 기준
-                const ropksText = finBuildRopksLineText(ir);
-                document.getElementById('textInput1').value = kipoText;
-                // 분석 결과(5단계)는 변환결과(6단계) 텍스트 기준으로 집계
-                const subscriptCount = (ropksText.match(/<sub>/gi) || []).length;
-                const superscriptCount = (ropksText.match(/<sup>/gi) || []).length;
-                // 의심 문자 검사 (.fin: 정규화 전 원문 단락 기준, 단락번호로 위치 표기)
-                fileAnalysisResult.suspicious = { mode: 'para', items: findSuspiciousInParas(ir.rawParas) };
-                displayResult1({ text: kipoText, outputText: ropksText, subscriptCount, superscriptCount });
-
-                // .fin 산출물 섹션 표시 (KIPO/ROPKS 버튼 모두 1단계에 인접 배치)
-                document.getElementById('finOutputSection').classList.remove('hidden');
-                updateFinRopksCrossRefOption();
-                const drawn = ir.drawings.filter(d => d.base64).length;
-                document.getElementById('finDrawingsInfo').textContent =
-                    `분석 완료 — 도면 ${ir.drawings.length}개(이미지 ${drawn}개 임베드) · 청구항 ${ir.claims.length}개 · 표 ${ir.embodiments.filter(e => e.kind === 'table').length}개`;
+                const pkg = await parseFinPackage(file);
+                finPackage1 = pkg;
+                // 보정이 있으면 최신 보정명세서가 기본 선택
+                finDocIndex1 = pkg.docs.length - 1;
+                finFilingDate1 = finSplitDate(pkg.meta.filingDate);
+                renderFinDoc1();
+                if (pkg.warnings.length) alert('.fin 분석 안내\n\n' + pkg.warnings.join('\n'));
+                // 보정이 확인되면 어느 명세서를 변환할지 먼저 묻는다
+                if (pkg.docs.length > 1) openFinDocModal1();
             } catch (e) {
                 finParsedIR1 = null;
+                resetFinPackageState1();
                 document.getElementById('finOutputSection').classList.add('hidden');
                 updateFinRopksCrossRefOption();
                 alert('오류: ' + e.message);
             }
+        }
+
+        // 탭1 - 선택된 .fin 문서로 1단계 창, 변환결과 및 분석 결과를 다시 구성
+        function renderFinDoc1() {
+            const entry = finPackage1 && finPackage1.docs[finDocIndex1];
+            if (!entry) return;
+            const ir = entry.ir;
+            finParsedIR1 = ir;
+
+            // 1단계 창: .fin 원본 부제(국문 【】) 그대로 표시.
+            // 단, .fin의 [NNNN] 단락번호는 기본 제거 — ROPKS 변환 산출물에는 번호가 없고,
+            // 필요 시 4단계 '단락번호 추가'로 새로 부여한다. (KIPO 출원서식 DOCX는 IR 기반이라 번호 유지)
+            let kipoText = finBuildKipoLineText(ir, false);
+            // 변환결과(6단계): 해외출원용 국문(ROPKS) 기준
+            let ropksText = finBuildRopksLineText(ir);
+            // 변환 대상을 바꿔도 이미 삽입한 Cross-reference는 유지한다
+            if (finCrossRef1) {
+                const block = `${finCrossRef1.title}\n${finCrossRef1.text}`;
+                kipoText = insertCrossRefIntoText1(kipoText, block) || kipoText;
+                ropksText = insertCrossRefIntoText1(ropksText, block) || ropksText;
+            }
+            document.getElementById('textInput1').value = kipoText;
+            // 분석 결과(5단계)는 변환결과(6단계) 텍스트 기준으로 집계
+            const subscriptCount = (ropksText.match(/<sub>/gi) || []).length;
+            const superscriptCount = (ropksText.match(/<sup>/gi) || []).length;
+            // 의심 문자 검사 (.fin: 정규화 전 원문 단락 기준, 단락번호로 위치 표기)
+            fileAnalysisResult.suspicious = { mode: 'para', items: findSuspiciousInParas(ir.rawParas) };
+            displayResult1({ text: kipoText, outputText: ropksText, subscriptCount, superscriptCount });
+
+            // .fin 산출물 섹션 표시 (KIPO/ROPKS 버튼 모두 1단계에 인접 배치)
+            document.getElementById('finOutputSection').classList.remove('hidden');
+            updateFinRopksCrossRefOption();
+            updateFinDocVersionDisplay1();
+            const drawn = ir.drawings.filter(d => d.base64).length;
+            const amendNote = finPackage1.docs.length > 1 ? `, 보정 ${finPackage1.docs.length - 1}회` : '';
+            document.getElementById('finDrawingsInfo').textContent =
+                `분석 완료 — 도면 ${ir.drawings.length}개(이미지 ${drawn}개 임베드), 청구항 ${ir.claims.length}개,`
+                + ` 표 ${ir.embodiments.filter(e => e.kind === 'table').length}개${amendNote}`;
+        }
+
+        // 탭1 - 변환 대상 표시줄 갱신 (보정이 있는 .fin에서만 노출)
+        function updateFinDocVersionDisplay1() {
+            const row = document.getElementById('finDocVersionRow');
+            const entry = finPackage1 && finPackage1.docs[finDocIndex1];
+            if (!row) return;
+            if (!entry || !finPackage1 || finPackage1.docs.length < 2) {
+                row.classList.add('hidden');
+                return;
+            }
+            row.classList.remove('hidden');
+            document.getElementById('finDocVersionName').textContent = entry.label;
+            const sum = entry.kind === 'amendment' ? finAmendSummary(entry.stat) : '.fin 원본 그대로';
+            document.getElementById('finDocVersionSum').textContent = sum ? `(${sum})` : '';
+        }
+
+        // 탭1 - 변환 대상 선택 모달
+        function openFinDocModal1() {
+            if (!finPackage1 || finPackage1.docs.length < 2) return;
+            const esc = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            document.getElementById('finDocModalDesc').textContent =
+                `이 .fin에서 보정 ${finPackage1.docs.length - 1}회가 확인되었습니다.`
+                + ' docx로 변환할 명세서를 선택해주세요.';
+            document.getElementById('finDocChoices1').innerHTML = finPackage1.docs.map((d, i) => {
+                const sub = [];
+                if (d.kind === 'amendment') {
+                    const s = finAmendSummary(d.stat);
+                    if (s) sub.push(s);
+                } else {
+                    sub.push('.fin 원본 그대로');
+                }
+                if (d.date) sub.push(d.date);
+                return `<label class="radio-label">
+                    <input type="radio" name="finDocChoice1" value="${i}"${i === finDocIndex1 ? ' checked' : ''}>
+                    <span class="radio-text fin-doc-choice-text"><span>${esc(d.label)}</span>`
+                    + `<span class="fin-doc-choice-sub">${esc(sub.join(' / '))}</span></span>
+                </label>`;
+            }).join('');
+            document.getElementById('finDocModal1').classList.add('active');
+        }
+
+        function closeFinDocModal1() {
+            document.getElementById('finDocModal1').classList.remove('active');
+        }
+
+        function confirmFinDocSelection1() {
+            const sel = document.querySelector('input[name="finDocChoice1"]:checked');
+            closeFinDocModal1();
+            if (!sel) return;
+            const idx = parseInt(sel.value, 10);
+            if (isNaN(idx) || idx === finDocIndex1) return;
+            finDocIndex1 = idx;
+            renderFinDoc1();
         }
 
         // .fin → KIPO 출원서식 DOCX
@@ -113,24 +215,38 @@
             if (!finParsedIR1) { showMessage(msg, '❌ 먼저 .fin 파일을 업로드해주세요.', 'error'); return; }
             const label = format === 'ropks' ? '해외출원용 국문(ROPKS)' : 'KIPO 출원서식';
             try {
+                // 변환 대상: 선택된 문서(출원명세서 또는 제N차 보정명세서)
+                let entry = currentFinDoc1();
+                let ir = entry ? entry.ir : finParsedIR1;
+                // ROPKS는 통상 출원명세서를 기준으로 하므로, 보정명세서가 선택되어 있으면 한 번 확인한다
+                if (format === 'ropks' && entry && entry.kind === 'amendment') {
+                    const useApplication = confirm(
+                        'ROPKS(해외출원용 국문)는 통상 출원명세서를 기준으로 작성합니다.\n\n'
+                        + `현재 변환 대상: ${entry.label}\n\n`
+                        + '[확인] 출원명세서로 생성\n'
+                        + `[취소] ${entry.label}로 생성`);
+                    if (useApplication) entry = finPackage1.docs[0];
+                    ir = entry.ir;
+                }
                 // ROPKS: 2단계에서 Cross-reference를 삽입했고 1단계 체크박스가 켜져 있으면 DOCX에도 포함
                 const includeCR = format === 'ropks' && !!finCrossRef1 &&
                     !!(document.getElementById('finRopksIncludeCrossRef') || {}).checked;
                 const opts = {};
                 if (includeCR) opts.crossRef = finCrossRef1;
                 if (isConfidentialHeaderOn('confHeaderFin1')) opts.confidentialHeader = true;
-                const blob = await buildFinDocxBlob(finParsedIR1, format, opts);
+                const blob = await buildFinDocxBlob(ir, format, opts);
                 let fileName;
                 if (format === 'ropks') {
                     const mgmtNo = (document.getElementById('finMgmtNo1') || {}).value || '';
                     fileName = finRopksBaseName(mgmtNo, finTodayYYMMDD());
                 } else {
-                    const base = ((finParsedIR1.meta && finParsedIR1.meta.fileName) || 'document').replace(/\.fin$/i, '');
-                    fileName = base + '_출원명세서';
+                    const base = ((ir.meta && ir.meta.fileName) || 'document').replace(/\.fin$/i, '');
+                    fileName = base + (entry && entry.kind === 'amendment' ? `_제${entry.seq}차보정명세서` : '_출원명세서');
                 }
                 saveAs(blob, fileName + '.docx');
                 const included = includeCR ? ' Cross-reference가 포함되었습니다.' : '';
-                showMessage(msg, `✅ ${label} DOCX가 생성되었습니다! (${fileName}.docx)${included}`, 'success');
+                const from = (entry && finPackage1 && finPackage1.docs.length > 1) ? ` [${entry.label} 기준]` : '';
+                showMessage(msg, `✅ ${label} DOCX가 생성되었습니다!${from} (${fileName}.docx)${included}`, 'success');
                 setTimeout(() => msg.classList.add('hidden'), 4000);
             } catch (e) {
                 showMessage(msg, `❌ ${label} DOCX 생성 실패: ` + e.message, 'error');
@@ -401,6 +517,27 @@
             document.getElementById('output1Section').classList.remove('hidden');
         }
         
+        // Cross-reference 블록 삽입 위치: BACKGROUND(영문) 앞. 국문 KIPO 텍스트는 【기술분야】 앞
+        // (US 서식에서 Field는 BACKGROUND 하위 절이므로 【기술분야】 앞이 같은 위치),
+        // 【기술분야】가 없으면 【발명의 배경이 되는 기술】/【배경기술】 앞.
+        // @returns {?string} 삽입된 텍스트. 삽입 위치를 찾지 못하면 null
+        function insertCrossRefIntoText1(text, crossRefBlock) {
+            const patterns = [
+                (t) => t.toUpperCase().startsWith('BACKGROUND'),
+                (t) => /^【기술\s*분야】$/.test(t),
+                (t) => /^【(발명의 배경이 되는 기술|배경\s*기술)】$/.test(t)
+            ];
+            const lines = String(text).split('\n');
+            for (const match of patterns) {
+                const idx = lines.findIndex(l => match(l.trim()));
+                if (idx >= 0) {
+                    lines.splice(idx, 0, crossRefBlock); // 삽입 (빈줄 없이)
+                    return lines.join('\n');
+                }
+            }
+            return null;
+        }
+
         function insertCrossReference() {
             const msg = document.getElementById('crossRefMessage');
             msg.classList.add('hidden');
@@ -436,29 +573,7 @@
                 priorityText1 = `본 출원은 ${parts.join(' 및 ')}에 기초한 것으로서, 그 전체 내용이 참조로 여기에 포함된다.`;
             }
             const crossRef = `CROSS-REFERENCE TO RELATED APPLICATIONS\n${priorityText1}`;
-
-            // 삽입 위치: BACKGROUND(영문) 앞. 국문 KIPO 텍스트는 【기술분야】 앞
-            // (US 서식에서 Field는 BACKGROUND 하위 절이므로 【기술분야】 앞이 같은 위치),
-            // 【기술분야】가 없으면 【발명의 배경이 되는 기술】/【배경기술】 앞.
-            const findInsertIndex = (lines) => {
-                const patterns = [
-                    (t) => t.toUpperCase().startsWith('BACKGROUND'),
-                    (t) => /^【기술\s*분야】$/.test(t),
-                    (t) => /^【(발명의 배경이 되는 기술|배경\s*기술)】$/.test(t)
-                ];
-                for (const match of patterns) {
-                    const idx = lines.findIndex(l => match(l.trim()));
-                    if (idx >= 0) return idx;
-                }
-                return -1;
-            };
-            const insertInto = (text) => {
-                const lines = text.split('\n');
-                const idx = findInsertIndex(lines);
-                if (idx < 0) return null;
-                lines.splice(idx, 0, crossRef); // 삽입 (빈줄 없이)
-                return lines.join('\n');
-            };
+            const insertInto = (text) => insertCrossRefIntoText1(text, crossRef);
 
             const newInput = insertInto(currentText);
             if (newInput == null) {
@@ -1098,6 +1213,7 @@
             document.getElementById('fileInput1').value = '';
             finParsedIR1 = null;
             finCrossRef1 = null;
+            resetFinPackageState1();
             document.getElementById('finOutputSection').classList.add('hidden');
             document.getElementById('finOutputMessage').classList.add('hidden');
             document.getElementById('finRopksMessage').classList.add('hidden');

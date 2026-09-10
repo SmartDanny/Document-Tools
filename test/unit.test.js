@@ -961,3 +961,61 @@ describe('US양식 페이지 지오메트리 (줄간격 2줄, 기밀 머리글 �
             `머리글(${headerDist}+${lineH}+${after})이 위 여백 ${top}을 넘어 본문을 밀어낸다`);
     });
 });
+
+describe('.fin 패키지 매니페스트(xresult.inf)', () => {
+    const SAMPLE = '[APPLICATION]\r\n'
+        + 'APPNAME=DPP20205756IPPKS_210524.hlz,2021-05-24,1\r\n'
+        + 'APPTIME=1621838698\r\n'
+        + '[AMENDMENT]\r\n'
+        + 'AMDCNT=2\r\n'
+        + 'AMD001=DPP20205756IPPKS_210524.dta,2025-07-10,1\r\n'
+        + 'AMD002=DPP20205756IPPKS_210524_보정.dta,2026-03-18,1\r\n';
+
+    test('원출원 파일명, 출원일 및 보정 목록을 읽는다', () => {
+        const m = u.finParseManifest(SAMPLE);
+        assert.equal(m.appFile, 'DPP20205756IPPKS_210524.hlz');
+        assert.equal(m.filingDate, '2021-05-24');
+        assert.equal(m.amendments.length, 2);
+        assertSameJson(m.amendments, [
+            { seq: 1, file: 'DPP20205756IPPKS_210524.dta', date: '2025-07-10' },
+            { seq: 2, file: 'DPP20205756IPPKS_210524_보정.dta', date: '2026-03-18' }
+        ]);
+    });
+
+    test('AMDCNT은 보정 항목으로 오인하지 않는다', () => {
+        assert.ok(u.finParseManifest('[AMENDMENT]\nAMDCNT=2\n').amendments.length === 0);
+    });
+
+    test('보정 순서는 AMD 번호 기준 (기재 순서가 뒤바뀌어도 정렬)', () => {
+        const m = u.finParseManifest('AMD002=b.dta,2026-03-18,1\nAMD001=a.dta,2025-07-10,1\n');
+        assertSameJson(m.amendments.map(a => a.file), ['a.dta', 'b.dta']);
+    });
+
+    test('보정이 없는 .fin', () => {
+        const m = u.finParseManifest('[APPLICATION]\nAPPNAME=DOC.hlz,2022-04-13,1\n');
+        assert.equal(m.filingDate, '2022-04-13');
+        assert.equal(m.amendments.length, 0);
+    });
+
+    test('형식이 어긋난 날짜는 버린다', () => {
+        assert.equal(u.finParseManifest('APPNAME=DOC.hlz,2022/04/13,1\n').filingDate, '');
+        assert.equal(u.finParseManifest('APPNAME=DOC.hlz\n').filingDate, '');
+    });
+
+    test('finSplitDate는 월과 일의 앞 0을 떼어 국문 표기에 맞춘다', () => {
+        assertSameJson(u.finSplitDate('2022-04-13'), { year: '2022', month: '4', day: '13' });
+        assertSameJson(u.finSplitDate('2020-03-05'), { year: '2020', month: '3', day: '5' });
+        assert.equal(u.finSplitDate(''), null);
+        assert.equal(u.finSplitDate('2022-4-13'), null);
+    });
+
+    test('finAmendSummary는 항목을 쉼표와 및으로 잇는다', () => {
+        assert.equal(u.finAmendSummary({ claimAmended: 6, claimDeleted: 2 }),
+            '청구항 6건 수정 및 청구항 2건 삭제');
+        assert.equal(u.finAmendSummary({ claimAmended: 1, claimDeleted: 1, paraAmended: 1 }),
+            '청구항 1건 수정, 청구항 1건 삭제 및 본문 1건 수정');
+        assert.equal(u.finAmendSummary({ claimAmended: 3 }), '청구항 3건 수정');
+        assert.equal(u.finAmendSummary({}), '변경 없음');
+        assert.equal(u.finAmendSummary(null), '');
+    });
+});
