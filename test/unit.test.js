@@ -1122,6 +1122,13 @@ describe('한영혼합본 국문 식/표 블록 재분류', () => {
             ['korean', 'english', 'korean', 'korean', 'english', 'english', 'korean']);
     });
 
+    test('실제 한영혼합본 구조: [Table N] 없이 빈 줄을 사이에 두고 국문 표와 영문 표', () => {
+        const T = '<table border="1"><tr><td></td><td>C1</td><td>E 1</td></tr><tr><td>Strain</td><td>1</td><td>0.89</td></tr></table>';
+        assertSameJson(types(['Table 1 compares strain of Comparative Example 1 and Example 1.',
+            '[표 1]', T, '', T, ' [0138] 비교예 1에 따른 표시 장치이다.'].join('\n')),
+            ['english', 'korean', 'korean', 'empty', 'english', 'korean']);
+    });
+
     test('표가 하나뿐이면 국문과 영문이 함께 쓰는 표로 보고 그대로 둠', () => {
         assertSameJson(types(['[표 1]', KT, '[0010] 다음 단락이다.', 'Next paragraph.'].join('\n')),
             ['korean', 'english', 'korean', 'english']);
