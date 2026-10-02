@@ -54,6 +54,11 @@
             if (/[a-zA-Z]/.test(s)) { afterTitle = false; return 'english'; }
             afterTitle = false; return 'other';
         }
+        // 라인 분류: 상태 초기화 → detectType → 국문 식/표 블록 후처리 (utils.js)
+        function classifyLines3(text) {
+            afterClaims = false; afterTitle = false; beforeCross = true;
+            return applyBilingualBlockContext(text.split('\n').map((x, i) => ({id: i, text: x, type: detectType(x)})));
+        }
         function isTitle(s) {
             const up = (s.match(/[A-Z]/g)||[]).length, lo = (s.match(/[a-z]/g)||[]).length;
             if (afterTitle && up >= 2 && lo === 0 && /^[A-Z0-9\s\-:\/,]+$/.test(s)) return true;
@@ -134,9 +139,8 @@
         function analyzeText3() {
             const t = document.getElementById('inputText3').value;
             if (!t.trim()) { alert('텍스트를 입력해주세요.'); return; }
-            afterClaims = false; afterTitle = false; beforeCross = true;
             currentFilter3 = 'all';
-            lines3 = t.split('\n').map((x,i) => ({id:i, text:x, type:detectType(x)}));
+            lines3 = classifyLines3(t);
             if (!lines3.filter(l => l.type !== 'empty').length) { alert('유효한 내용이 없습니다.'); return; }
             displayPreview3(); updateStats3(); generateResults3();
             ['stats3Section','preview3Section','result3Section'].forEach(x => document.getElementById(x).classList.remove('hidden'));
@@ -516,8 +520,7 @@
             const t = document.getElementById('inputText3').value;
             if (!t.trim()) { alert('텍스트를 입력해주세요.'); return; }
             
-            afterClaims = false; afterTitle = false; beforeCross = true;
-            const colorLines = t.split('\n').map((x, i) => ({id: i, text: x, type: detectType(x)}));
+            const colorLines = classifyLines3(t);
             
             if (!colorLines.filter(l => l.type !== 'empty').length) { 
                 alert('유효한 내용이 없습니다.'); 
@@ -777,8 +780,7 @@
             
             window.originalText3 = result.text;
             // colorLines3도 다시 생성
-            afterClaims = false; afterTitle = false; beforeCross = true;
-            window.colorLines3 = result.text.split('\n').map((x, i) => ({id: i, text: x, type: detectType(x)}));
+            window.colorLines3 = classifyLines3(result.text);
             
             // 미리보기 갱신
             updateColorPreview3();
@@ -864,8 +866,7 @@
             window.originalText3 = resultLines.join('\n');
             
             // colorLines3도 다시 생성
-            afterClaims = false; afterTitle = false; beforeCross = true;
-            window.colorLines3 = window.originalText3.split('\n').map((x, i) => ({id: i, text: x, type: detectType(x)}));
+            window.colorLines3 = classifyLines3(window.originalText3);
             
             // 미리보기 갱신
             updateColorPreview3();
@@ -903,8 +904,7 @@
             window.originalText3 = resultLines.join('\n');
             
             // colorLines3도 다시 생성
-            afterClaims = false; afterTitle = false; beforeCross = true;
-            window.colorLines3 = window.originalText3.split('\n').map((x, i) => ({id: i, text: x, type: detectType(x)}));
+            window.colorLines3 = classifyLines3(window.originalText3);
             
             // 미리보기 갱신
             updateColorPreview3();

@@ -1019,3 +1019,131 @@ describe('.fin 패키지 매니페스트(xresult.inf)', () => {
         assert.equal(u.finAmendSummary(null), '');
     });
 });
+
+describe('한영혼합본 국문 식/표 블록 재분류', () => {
+    // tab3 detectType의 단순화 버전 (한글 유무로 korean/english 판정)
+    const classify = (text) => u.applyBilingualBlockContext(text.split('\n').map(x => ({
+        text: x,
+        type: !x.trim() ? 'empty' : /[가-힣]/.test(x) ? 'korean' : /[a-zA-Z]/.test(x) ? 'english' : 'other',
+    })));
+    const types = (text) => classify(text).map(l => l.type);
+
+    test('isKoreanBlockTitle', () => {
+        assert.ok(u.isKoreanBlockTitle('[화학식 1]'));
+        assert.ok(u.isKoreanBlockTitle('【수학식 2】'));
+        assert.ok(u.isKoreanBlockTitle('[반응식 1-1]'));
+        assert.ok(u.isKoreanBlockTitle('[표 3]'));
+        assert.ok(!u.isKoreanBlockTitle('[청구항 1]'));
+        assert.ok(!u.isKoreanBlockTitle('[기술분야]'));
+        assert.ok(!u.isKoreanBlockTitle('[Chemical Formula 1]'));
+    });
+
+    test('isFormulaLikeLine', () => {
+        assert.ok(u.isFormulaLikeLine('M<sub>n+1</sub>X<sub>n</sub>'));
+        assert.ok(u.isFormulaLikeLine('2H<sub>2</sub> + O<sub>2</sub> → 2H<sub>2</sub>O'));
+        assert.ok(u.isFormulaLikeLine('y = ax + b'));
+        assert.ok(!u.isFormulaLikeLine('MXene may include a compound represented by Chemical Formula 1 below.'));
+        assert.ok(!u.isFormulaLikeLine('wherein R1 is selected from hydrogen and alkyl groups'));
+        assert.ok(!u.isFormulaLikeLine('<table><tr><td>1</td></tr></table>'));
+        assert.ok(!u.isFormulaLikeLine('[Chemical Formula 1]'));
+        assert.ok(!u.isFormulaLikeLine(''));
+    });
+
+    test('실제 한영혼합본 구조: 국문 화학식 바로 뒤에 영문 단락', () => {
+        const text = [
+            '[0091] 맥신은 하기 화학식 1로 표시되는 화합물을 포함할 수 있다.',
+            '[화학식 1]',
+            'M<sub>n+1</sub>X<sub>n</sub>',
+            'MXene may include a compound represented by Chemical Formula 1 below.',
+            '[Chemical Formula 1]',
+            'M<sub>n+1</sub>X<sub>n</sub>',
+            '[0092] M은 전이금속일 수 있다.',
+            'M may be a transition metal.',
+        ].join('\n');
+        assertSameJson(types(text),
+            ['korean', 'korean', 'korean', 'english', 'english', 'english', 'korean', 'english']);
+        const lines = classify(text);
+        const en = lines.filter(l => l.type === 'english').map(l => l.text);
+        const kr = lines.filter(l => l.type === 'korean').map(l => l.text);
+        assert.equal(en.filter(t => t === 'M<sub>n+1</sub>X<sub>n</sub>').length, 1);
+        assert.equal(kr.filter(t => t === 'M<sub>n+1</sub>X<sub>n</sub>').length, 1);
+        assert.ok(!en.includes('[화학식 1]'));
+    });
+
+    test('여러 줄 화학식과 기호만 있는 줄도 각 타이틀의 언어로', () => {
+        assertSameJson(types('[수학식 1]\ny = ax + b\n123 + 456\n[Equation 1]\ny = ax + b\n123 + 456'),
+            ['korean', 'korean', 'korean', 'english', 'english', 'english']);
+        // 영문 타이틀이 없는 기호 줄은 그대로 other
+        assertSameJson(types('Some text here.\n123 + 456'), ['english', 'other']);
+    });
+
+    test('isEnglishBlockTitle', () => {
+        assert.ok(u.isEnglishBlockTitle('[Chemical Formula 1]'));
+        assert.ok(u.isEnglishBlockTitle('[Equation 2]'));
+        assert.ok(u.isEnglishBlockTitle('【Table 3】'));
+        assert.ok(u.isEnglishBlockTitle('[Reaction Scheme 1-1]'));
+        assert.ok(!u.isEnglishBlockTitle('[Claim 1]'));
+        assert.ok(!u.isEnglishBlockTitle('[화학식 1]'));
+    });
+
+    test('빈 줄, 한글 단락, 영문 문장에서 재분류 중단', () => {
+        assertSameJson(types('[화학식 1]\n\nCH4'), ['korean', 'empty', 'english']);
+        assertSameJson(types('[화학식 1]\nCH4\n여기서 R1은 수소이다.\nCH4'),
+            ['korean', 'korean', 'korean', 'english']);
+        assertSameJson(types('[화학식 1]\nCH4\nwherein the compound is used.\nCH4'),
+            ['korean', 'korean', 'english', 'english']);
+    });
+
+    test('식/표가 아닌 국문 타이틀은 대상 아님', () => {
+        assertSameJson(types('[기술분야]\nTECHNICAL FIELD'), ['korean', 'english']);
+    });
+
+    const KT = '<table border="1"><tr><td>1.5</td><td>20</td></tr></table>';
+    const ET = '<table border="1"><tr><td>1.5</td><td>20</td></tr></table>';
+
+    test('[표 N] 아래 국문 표와 영문 표가 바로 이어지면 앞 표가 국문', () => {
+        assertSameJson(types(['[표 1]', KT, ET, '[0010] 다음 단락이다.'].join('\n')),
+            ['korean', 'korean', 'english', 'korean']);
+    });
+
+    test('[표 N] 국문 표 뒤 [Table N] 영문 표 (영문 설명 단락이 끼어도 됨)', () => {
+        assertSameJson(types(['[표 1]', KT, '[Table 1]', ET].join('\n')),
+            ['korean', 'korean', 'english', 'english']);
+        assertSameJson(types(['[0009] 하기 표 1과 같다.', '[표 1]', KT,
+            'The results are shown in Table 1 below.', '[Table 1]', ET].join('\n')),
+            ['korean', 'korean', 'korean', 'english', 'english', 'english']);
+    });
+
+    test('실제 한영혼합본 구조: 한글 없는 국문 표 뒤 [Table N] 영문 표', () => {
+        const T = '<table border="1"><tr><td></td><td>C1</td><td>E 1</td></tr><tr><td>Strain</td><td>1</td><td>0.89</td></tr></table>';
+        assertSameJson(types(['[0137] 표 1은 비교예 1과 실시예 1의 변형률을 비교한 것이다.',
+            'Table 1 compares strain of Comparative Example 1 and Example 1.',
+            '[표 1]', T, '[Table 1]', T, ' [0138] 비교예 1에 따른 표시 장치이다.'].join('\n')),
+            ['korean', 'english', 'korean', 'korean', 'english', 'english', 'korean']);
+    });
+
+    test('실제 한영혼합본 구조: [Table N] 없이 빈 줄을 사이에 두고 국문 표와 영문 표', () => {
+        const T = '<table border="1"><tr><td></td><td>C1</td><td>E 1</td></tr><tr><td>Strain</td><td>1</td><td>0.89</td></tr></table>';
+        assertSameJson(types(['Table 1 compares strain of Comparative Example 1 and Example 1.',
+            '[표 1]', T, '', T, ' [0138] 비교예 1에 따른 표시 장치이다.'].join('\n')),
+            ['english', 'korean', 'korean', 'empty', 'english', 'korean']);
+    });
+
+    test('표가 하나뿐이면 국문과 영문이 함께 쓰는 표로 보고 그대로 둠', () => {
+        assertSameJson(types(['[표 1]', KT, '[0010] 다음 단락이다.', 'Next paragraph.'].join('\n')),
+            ['korean', 'english', 'korean', 'english']);
+        assertSameJson(types(['[표 1]', KT].join('\n')), ['korean', 'english']);
+    });
+
+    test('[Table N] 번호가 다르거나 표가 아닌 영문 타이틀이면 국문 표로 보지 않음', () => {
+        assertSameJson(types(['[표 1]', KT, '[Table 2]', ET].join('\n')),
+            ['korean', 'english', 'english', 'english']);
+        assertSameJson(types(['[표 1]', KT, '[Equation 1]', 'y = ax'].join('\n')),
+            ['korean', 'english', 'english', 'english']);
+    });
+
+    test('한글이 있는 표는 원래대로 국문', () => {
+        assertSameJson(types(['[표 1]', '<table><tr><td>실시예</td></tr></table>', ET].join('\n')),
+            ['korean', 'korean', 'english']);
+    });
+});
