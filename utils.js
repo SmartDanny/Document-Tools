@@ -659,6 +659,51 @@ function isGenericSubtitle(line, options = {}) {
     return false;
 }
 
+/**
+ * 국문 식/표 블록 타이틀 판별 ([화학식 1], 【수학식 2】, [반응식 1-1], [표 3] 등, [청구항 N] 제외)
+ * @param {string} line - 검사할 라인
+ * @returns {boolean}
+ */
+function isKoreanBlockTitle(line) {
+    return /^[【\[]\s*[가-힣 ]*(?:식|표)\s*[0-9A-Za-z\-]*\s*[】\]]$/.test(String(line || '').trim());
+}
+
+/**
+ * 화학식, 수식처럼 한글이 없고 문장이 아닌 라인인지 판별 (<sub>/<sup> 태그는 제거 후 검사)
+ * 마침표 등으로 끝나거나 3글자 이상 소문자 단어가 3개 이상이면 문장으로 본다.
+ * @param {string} line - 검사할 라인
+ * @returns {boolean}
+ */
+function isFormulaLikeLine(line) {
+    const raw = String(line || '').trim();
+    if (!raw || /<\/?table\b/i.test(raw)) return false;
+    const s = raw.replace(/<\/?(?:sub|sup)>/gi, '').trim();
+    if (!s || /[가-힣]/.test(s)) return false;
+    if (/^[【\[][^【\[\]】]+[】\]]$/.test(s)) return false;
+    if (/[.?!。]["']?$/.test(s)) return false;
+    return (s.match(/\b[a-z]{3,}\b/g) || []).length < 3;
+}
+
+/**
+ * 한영혼합본 라인 분류 후처리: 국문 식/표 타이틀 바로 아래의 화학식, 수식 라인은
+ * 한글이 없어 영문으로 분류되므로 타이틀을 따라 국문으로 재분류한다.
+ * 빈 줄, 한글 단락, 다음 타이틀, 영문 문장 단락이 나오면 재분류를 멈춘다.
+ * @param {Array<{text: string, type: string}>} lines - detectType으로 분류된 라인 (type을 직접 수정)
+ * @returns {Array} 같은 lines 배열
+ */
+function applyBilingualBlockContext(lines) {
+    let inKoreanBlock = false;
+    for (const line of lines) {
+        if (line.type === 'korean' && isKoreanBlockTitle(line.text)) { inKoreanBlock = true; continue; }
+        if (inKoreanBlock && (line.type === 'english' || line.type === 'other') && isFormulaLikeLine(line.text)) {
+            line.type = 'korean';
+            continue;
+        }
+        inKoreanBlock = false;
+    }
+    return lines;
+}
+
 // ============================================
 // DOCX 파싱 함수
 // ============================================

@@ -1019,3 +1019,72 @@ describe('.fin 패키지 매니페스트(xresult.inf)', () => {
         assert.equal(u.finAmendSummary(null), '');
     });
 });
+
+describe('한영혼합본 국문 식/표 블록 재분류', () => {
+    // tab3 detectType의 단순화 버전 (한글 유무로 korean/english 판정)
+    const classify = (text) => u.applyBilingualBlockContext(text.split('\n').map(x => ({
+        text: x,
+        type: !x.trim() ? 'empty' : /[가-힣]/.test(x) ? 'korean' : /[a-zA-Z]/.test(x) ? 'english' : 'other',
+    })));
+    const types = (text) => classify(text).map(l => l.type);
+
+    test('isKoreanBlockTitle', () => {
+        assert.ok(u.isKoreanBlockTitle('[화학식 1]'));
+        assert.ok(u.isKoreanBlockTitle('【수학식 2】'));
+        assert.ok(u.isKoreanBlockTitle('[반응식 1-1]'));
+        assert.ok(u.isKoreanBlockTitle('[표 3]'));
+        assert.ok(!u.isKoreanBlockTitle('[청구항 1]'));
+        assert.ok(!u.isKoreanBlockTitle('[기술분야]'));
+        assert.ok(!u.isKoreanBlockTitle('[Chemical Formula 1]'));
+    });
+
+    test('isFormulaLikeLine', () => {
+        assert.ok(u.isFormulaLikeLine('M<sub>n+1</sub>X<sub>n</sub>'));
+        assert.ok(u.isFormulaLikeLine('2H<sub>2</sub> + O<sub>2</sub> → 2H<sub>2</sub>O'));
+        assert.ok(u.isFormulaLikeLine('y = ax + b'));
+        assert.ok(!u.isFormulaLikeLine('MXene may include a compound represented by Chemical Formula 1 below.'));
+        assert.ok(!u.isFormulaLikeLine('wherein R1 is selected from hydrogen and alkyl groups'));
+        assert.ok(!u.isFormulaLikeLine('<table><tr><td>1</td></tr></table>'));
+        assert.ok(!u.isFormulaLikeLine('[Chemical Formula 1]'));
+        assert.ok(!u.isFormulaLikeLine(''));
+    });
+
+    test('실제 한영혼합본 구조: 국문 화학식 바로 뒤에 영문 단락', () => {
+        const text = [
+            '[0091] 맥신은 하기 화학식 1로 표시되는 화합물을 포함할 수 있다.',
+            '[화학식 1]',
+            'M<sub>n+1</sub>X<sub>n</sub>',
+            'MXene may include a compound represented by Chemical Formula 1 below.',
+            '[Chemical Formula 1]',
+            'M<sub>n+1</sub>X<sub>n</sub>',
+            '[0092] M은 전이금속일 수 있다.',
+            'M may be a transition metal.',
+        ].join('\n');
+        assertSameJson(types(text),
+            ['korean', 'korean', 'korean', 'english', 'english', 'english', 'korean', 'english']);
+        const lines = classify(text);
+        const en = lines.filter(l => l.type === 'english').map(l => l.text);
+        const kr = lines.filter(l => l.type === 'korean').map(l => l.text);
+        assert.equal(en.filter(t => t === 'M<sub>n+1</sub>X<sub>n</sub>').length, 1);
+        assert.equal(kr.filter(t => t === 'M<sub>n+1</sub>X<sub>n</sub>').length, 1);
+        assert.ok(!en.includes('[화학식 1]'));
+    });
+
+    test('여러 줄 화학식과 기호만 있는 줄도 국문으로', () => {
+        assertSameJson(types('[수학식 1]\ny = ax + b\n123 + 456\n[Equation 1]\ny = ax + b\n123 + 456'),
+            ['korean', 'korean', 'korean', 'english', 'english', 'other']);
+    });
+
+    test('빈 줄, 한글 단락, 영문 문장에서 재분류 중단', () => {
+        assertSameJson(types('[화학식 1]\n\nCH4'), ['korean', 'empty', 'english']);
+        assertSameJson(types('[화학식 1]\nCH4\n여기서 R1은 수소이다.\nCH4'),
+            ['korean', 'korean', 'korean', 'english']);
+        assertSameJson(types('[화학식 1]\nCH4\nwherein the compound is used.\nCH4'),
+            ['korean', 'korean', 'english', 'english']);
+    });
+
+    test('식/표가 아닌 국문 타이틀과 표 태그는 대상 아님', () => {
+        assertSameJson(types('[기술분야]\nTECHNICAL FIELD'), ['korean', 'english']);
+        assertSameJson(types('[표 1]\n<table><tr><td>1</td></tr></table>'), ['korean', 'english']);
+    });
+});
