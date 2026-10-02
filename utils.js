@@ -685,21 +685,85 @@ function isFormulaLikeLine(line) {
 }
 
 /**
- * 한영혼합본 라인 분류 후처리: 국문 식/표 타이틀 바로 아래의 화학식, 수식 라인은
- * 한글이 없어 영문으로 분류되므로 타이틀을 따라 국문으로 재분류한다.
- * 빈 줄, 한글 단락, 다음 타이틀, 영문 문장 단락이 나오면 재분류를 멈춘다.
- * @param {Array<{text: string, type: string}>} lines - detectType으로 분류된 라인 (type을 직접 수정)
+ * 영문 식/표 블록 타이틀 판별 ([Chemical Formula 1], [Equation 2], 【Table 3】 등)
+ * @param {string} line - 검사할 라인
+ * @returns {boolean}
+ */
+function isEnglishBlockTitle(line) {
+    return /^[【\[]\s*[A-Za-z ]*(?:Formula|Equation|Expression|Scheme|Table)\s*[0-9A-Za-z\-]*\s*[】\]]$/i.test(String(line || '').trim());
+}
+
+// 블록 타이틀의 번호 부분 ('[표 1-1]' → '1-1', 번호가 없으면 '')
+function blockTitleNumber(line) {
+    const m = String(line || '').trim().match(/([0-9][0-9A-Za-z\-]*)\s*[】\]]$/);
+    return m ? m[1] : '';
+}
+
+function isTableLine(line) {
+    return /^<table\b/i.test(String(line || '').trim());
+}
+
+/**
+ * 국문 [표 N] 바로 아래의 표가 국문 표인지 판별한다. 그 뒤에 영문 표가 따로 있을 때만 국문 표로 본다.
+ *   (A) [표 N] → 국문 표 → 영문 표
+ *   (B) [표 N] → 국문 표 → (영문 설명 단락) → [Table N] → 영문 표
+ * 표가 하나뿐이면 국문과 영문이 함께 쓰는 표일 수 있으므로 국문 표로 보지 않는다.
+ * @param {Array<{text: string, type: string}>} lines
+ * @param {number} tableIdx - 국문 [표 N] 바로 아래 표 라인의 인덱스
+ * @param {string} num - [표 N]의 번호
+ * @returns {boolean}
+ */
+function hasSeparateEnglishTable(lines, tableIdx, num) {
+    let prose = 0;
+    for (let j = tableIdx + 1; j < lines.length; j++) {
+        const { text, type } = lines[j];
+        if (type === 'empty') continue;
+        if (isTableLine(text)) return prose === 0;
+        if (isEnglishBlockTitle(text)) {
+            return /table/i.test(text) && (!num || !blockTitleNumber(text) || blockTitleNumber(text) === num);
+        }
+        if (type === 'english' && !isFormulaLikeLine(text) && ++prose <= 3) continue;
+        return false;
+    }
+    return false;
+}
+
+/**
+ * 한영혼합본 라인 분류 후처리 (lines의 type을 직접 수정)
+ * - 국문 식 타이틀([화학식 1] 등) 바로 아래의 화학식, 수식 라인은 한글이 없어 영문으로
+ *   분류되므로 국문으로 재분류한다.
+ * - 영문 식 타이틀([Equation 1] 등) 바로 아래의 숫자와 기호만 있는 라인(other)은 영문으로 재분류한다.
+ * - 빈 줄, 한글 단락, 다음 타이틀, 문장 단락이 나오면 재분류를 멈춘다.
+ * - 국문 [표 N] 바로 아래 표는 뒤에 영문 표가 따로 있을 때만 국문으로 재분류한다.
+ * @param {Array<{text: string, type: string}>} lines - detectType으로 분류된 라인
  * @returns {Array} 같은 lines 배열
  */
 function applyBilingualBlockContext(lines) {
-    let inKoreanBlock = false;
-    for (const line of lines) {
-        if (line.type === 'korean' && isKoreanBlockTitle(line.text)) { inKoreanBlock = true; continue; }
-        if (inKoreanBlock && (line.type === 'english' || line.type === 'other') && isFormulaLikeLine(line.text)) {
+    let block = null; // 'korean' | 'english' | null
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (line.type === 'korean' && isKoreanBlockTitle(line.text)) {
+            block = 'korean';
+            if (/^[【\[]\s*표/.test(line.text.trim())) {
+                let k = i + 1;
+                while (k < lines.length && lines[k].type === 'empty') k++;
+                if (k < lines.length && isTableLine(lines[k].text) && lines[k].type !== 'korean'
+                    && hasSeparateEnglishTable(lines, k, blockTitleNumber(line.text))) {
+                    lines[k].type = 'korean';
+                }
+            }
+            continue;
+        }
+        if (line.type === 'english' && isEnglishBlockTitle(line.text)) { block = 'english'; continue; }
+        if (block === 'korean' && (line.type === 'english' || line.type === 'other') && isFormulaLikeLine(line.text)) {
             line.type = 'korean';
             continue;
         }
-        inKoreanBlock = false;
+        if (block === 'english' && (line.type === 'english' || line.type === 'other') && isFormulaLikeLine(line.text)) {
+            line.type = 'english';
+            continue;
+        }
+        block = null;
     }
     return lines;
 }
